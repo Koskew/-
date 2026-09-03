@@ -38,6 +38,8 @@ class Cfg:
     rr_min: float = 3.0
     buf_pct: float = 0.1
     buf_mode: str = 'pct_price'    # 'pct_price' (как сейчас) | 'pct_range' (доля диапазона бара)
+    pivot_mode: str = 'pine'       # 'pine' (>= слева, > справа) | 'engine' (> с обеих сторон, как fp() в engine_v3)
+    horizon: int = 0               # 0 = держать до исхода (Pine); 1500 = как resolve() в engine_v4
     buf_k: float = 0.10            # для 'pct_range': буфер = k * (high-low)
     use_ws: bool = True
     ws_r: float = 3.0
@@ -67,14 +69,16 @@ def shape_flags(o, h, l, c, cfg):
     return m, m.any(axis=1)
 
 
-def pivot_bars(x, left, right):
-    """Пивоты по правилу Pine ta.pivothigh: >= слева, > справа.
-    Возвращает массив, где элемент i — True, если бар i является пивотом."""
+def pivot_bars(x, left, right, mode='pine'):
+    """Пивоты. mode='pine' — правило ta.pivothigh: >= слева, > справа.
+    mode='engine' — правило fp() из engine_v3: строго > с обеих сторон."""
     n = len(x)
     out = np.zeros(n, bool)
     for i in range(left, n - right):
         v = x[i]
-        if all(v >= x[j] for j in range(i - left, i)) and all(v > x[j] for j in range(i + 1, i + right + 1)):
+        left_ok = all(v > x[j] for j in range(i - left, i)) if mode == 'engine' \
+            else all(v >= x[j] for j in range(i - left, i))
+        if left_ok and all(v > x[j] for j in range(i + 1, i + right + 1)):
             out[i] = True
     return out
 
@@ -120,8 +124,9 @@ def run(df, cfg=None):
     _, trig = shape_flags(o, h, l, c, cfg)
     sz_pct = np.where(c > 0, (h - l) / c * 100.0, 0.0)
 
-    ph2, pl2 = pivot_bars(h, 2, 2), pivot_bars(-l, 2, 2)
-    ph5, pl5 = pivot_bars(h, 5, 5), pivot_bars(-l, 5, 5)
+    pm = cfg.pivot_mode
+    ph2, pl2 = pivot_bars(h, 2, 2, pm), pivot_bars(-l, 2, 2, pm)
+    ph5, pl5 = pivot_bars(h, 5, 5, pm), pivot_bars(-l, 5, 5, pm)
 
     # очередь быстрых меток: (label, price, side, confirm_bar), максимум 5
     q = []
@@ -200,6 +205,9 @@ def run(df, cfg=None):
         # ── 5. закрытие позиций (до решения — как в Pine) ──────────────────
         for p in list(pos):
             if i <= p['bar']:
+                continue
+            if cfg.horizon and i - p['bar'] >= cfg.horizon:
+                pos.remove(p)          # engine_v4: не разрешилось за HORIZON — сделка отброшена
                 continue
             hit_sl = (l[i] <= p['sl']) if p['long'] else (h[i] >= p['sl'])
             hit_tp = (h[i] >= p['tp']) if p['long'] else (l[i] <= p['tp'])
