@@ -1,0 +1,47 @@
+//@version=5
+indicator("Триггер + Алерт", overlay=true)
+
+tol = input.float(4.0, "Допуск ±%", minval=1.0, maxval=15.0)
+
+// ═══ ТРИГГЕРНЫЕ СВЕЧИ ═══
+range_    = high - low
+body_     = math.abs(close - open)
+upper_    = open > close ? high - open  : high - close
+lower_    = open > close ? close - low  : open  - low
+body_pct  = range_ > 0 ? body_  / range_ * 100 : 0.0
+upper_pct = range_ > 0 ? upper_ / range_ * 100 : 0.0
+lower_pct = range_ > 0 ? lower_ / range_ * 100 : 0.0
+
+tb = array.from(12.6,14.7,17.0,32.0,20.2,4.1,23.0,27.9,30.7,35.2,24.5,41.9,26.0,25.9,11.6,23.3,49.3,14.0,18.3,25.4,27.9,45.7,29.2,40.6,41.9,10.4,41.5,23.6,32.2,18.8,35.5,32.2,54.2,10.8,47.3,16.0,21.6,19.8,9.9,27.5)
+tu = array.from(33.7,37.3,37.7,27.8,29.4,40.4,35.7,35.3,41.0,35.7,28.4,22.0,39.6,37.4,46.0,31.5,21.5,27.5,47.3,35.6,26.2,24.8,36.3,36.7,26.8,35.6,20.7,34.5,36.4,46.2,38.6,33.6,21.6,44.1,22.9,45.2,42.8,45.2,41.5,30.7)
+tl = array.from(53.7,48.0,45.3,40.2,50.4,55.5,41.3,36.8,28.3,29.1,71.6,36.0,34.5,36.7,42.5,45.2,29.2,58.5,34.4,39.0,46.0,29.5,34.5,22.6,31.3,54.0,37.9,41.9,31.4,34.9,25.8,34.2,24.2,45.1,29.8,38.8,35.5,35.0,48.6,41.8)
+
+shape_ok = false
+for i = 0 to 39
+    if math.abs(body_pct  - array.get(tb, i)) <= tol and
+       math.abs(upper_pct - array.get(tu, i)) <= tol and
+       math.abs(lower_pct - array.get(tl, i)) <= tol
+        shape_ok := true
+        break
+
+plotshape(shape_ok, title="Триггер", location=location.belowbar, style=shape.circle, color=color.new(color.yellow, 0), size=size.tiny)
+
+// ═══ ПИВОТЫ HL / LH ═══
+ph = ta.pivothigh(high, 2, 2)
+pl = ta.pivotlow(low, 2, 2)
+
+ph_value = high[2]
+pl_value = low[2]
+
+vw1 = ta.valuewhen(not na(ph), ph_value, 1)
+vw2 = ta.valuewhen(not na(ph), ph_value, 0)
+lowerhigh = na(ph) ? na : vw1 > vw2 ? ph : na
+
+vw3 = ta.valuewhen(not na(pl), pl_value, 1)
+vw4 = ta.valuewhen(not na(pl), pl_value, 0)
+higherlow = na(pl) ? na : vw3 < vw4 ? pl : na
+
+// ═══ АЛЕРТЫ ═══
+alertcondition(shape_ok, title="🟡 Триггер", message="Жёлтая точка на {{ticker}} {{interval}} — проверь чеклист!")
+alertcondition(not na(higherlow), title="📗 HL сформирован", message="HL на {{ticker}} {{interval}} — возможный лонг")
+alertcondition(not na(lowerhigh), title="📕 LH сформирован", message="LH на {{ticker}} {{interval}} — возможный шорт")
