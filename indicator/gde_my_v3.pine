@@ -24,6 +24,8 @@ drawZZ   = input.bool(true,  "Зиг-заг по коленам", group=gB)
 drawNum  = input.bool(true,  "Номера точек счёта", group=gB)
 drawKLab = input.bool(false, "Метки на коленах (пересчитанные)", group=gB, tooltip="Метка колена сравнивается с предыдущим КОЛЕНОМ. Расходится с сырой примерно в 27% случаев — там, где между двумя коленами схлопнулась серия.")
 drawRaw  = input.bool(false, "Сырые метки пивотов 5/5", group=gB, tooltip="Как в старом индикаторе: сравнение с предыдущим ПИВОТОМ, без схлопывания.")
+drawMud  = input.bool(true,  "Помечать мутные колена", group=gB, tooltip="Колено, собранное из двух и более меток: первая метка появилась, была перебита, цена сделала второй экстремум. Это и есть манипуляция. Около 20% колен.")
+cMud     = input.color(#ff9800, "Цвет пометки мутного", group=gB)
 winBars  = input.int(700, "Рисовать за последние N баров", minval=100, group=gB)
 
 gC = "Слом тренда"
@@ -58,6 +60,8 @@ var bool[]   KH = array.new_bool()
 var string[] KL = array.new_string()
 var int[]    KT = array.new_int()
 var int[]    KN = array.new_int()
+var int[]    KM = array.new_int()      // сколько сырых меток слилось в колено
+var float[]  KA = array.new_float()    // цена первой, поглощённой метки
 
 f_isUp(_l) => _l == "HH" or _l == "HL"
 
@@ -158,6 +162,9 @@ f_pushKnee(_price, _bar, _hi) =>
     bool fresh = not same
     int shifted = 0
     if same
+        array.set(KM, n - 1, array.get(KM, n - 1) + 1)
+        if na(array.get(KA, n - 1))
+            array.set(KA, n - 1, array.get(KP, n - 1))
         better = _hi ? _price > array.get(KP, n - 1) : _price < array.get(KP, n - 1)
         if better
             array.set(KP, n - 1, _price)
@@ -167,11 +174,15 @@ f_pushKnee(_price, _bar, _hi) =>
         array.push(KB, _bar)
         array.push(KH, _hi)
         array.push(KT, tr)
+        array.push(KM, 1)
+        array.push(KA, na)
         if array.size(KP) > MAXK
             array.shift(KP)
             array.shift(KB)
             array.shift(KH)
             array.shift(KT)
+            array.shift(KM)
+            array.shift(KA)
             shifted := 1
     d1 = f_relabel()
     d2 = f_recount()
@@ -389,6 +400,14 @@ if barstate.islast
                 if drawKLab
                     hh2 = array.get(KH, i)
                     array.push(LBS, label.new(x2, array.get(KP, i), array.get(KL, i), style=label.style_none, textcolor=color.new(cc, 20), size=size.tiny, yloc=hh2 ? yloc.abovebar : yloc.belowbar))
+                if drawMud
+                    mc = array.get(KM, i)
+                    if mc >= 2
+                        ap = array.get(KA, i)
+                        if not na(ap)
+                            array.push(LNS, line.new(x1, ap, x2, ap, color=color.new(cMud, 20), width=1, style=line.style_dotted))
+                        hh3 = array.get(KH, i)
+                        array.push(LBS, label.new(x2, array.get(KP, i), "мутное " + str.tostring(mc), style=hh3 ? label.style_label_down : label.style_label_up, color=color.new(cMud, 80), textcolor=cMud, size=size.tiny))
 
     if drawLvl and not na(lvl) and tr != 0
         x0 = na(trFrom) ? bar_index - 50 : trFrom
@@ -417,7 +436,7 @@ f_chain(_k) =>
 
 tpp = posT == "верх-право" ? position.top_right : posT == "верх-лево" ? position.top_left : posT == "низ-право" ? position.bottom_right : position.bottom_left
 tss = sizeT == "tiny" ? size.tiny : sizeT == "small" ? size.small : size.normal
-var table T = table.new(tpp, 2, 9, bgcolor=color.new(#000000, 10), border_width=1, border_color=color.new(color.gray, 75))
+var table T = table.new(tpp, 2, 10, bgcolor=color.new(#000000, 10), border_width=1, border_color=color.new(color.gray, 75))
 
 f_cell(_r, _k, _v, _c) =>
     table.cell(T, 0, _r, _k, text_color=color.new(color.silver, 25), text_halign=text.align_left, text_size=tss)
@@ -443,6 +462,17 @@ if showT and barstate.islast
     bxt = not boxOn ? "выключен" : bxActive ? "ДА  " + str.tostring(bxBot, format.mintick) + " — " + str.tostring(bxTop, format.mintick) : na(bxTop) ? "нет" : "набирается " + str.tostring(bxInside) + " из " + str.tostring(boxN)
     a6 = f_cell(6, "боковик", bxt, bxActive ? cBoxB : color.gray)
 
+    nk = array.size(KM)
+    lastMud = nk > 0 ? array.get(KM, nk - 1) : 1
+    mud5 = 0
+    if nk > 0
+        i5 = math.max(0, nk - 5)
+        for q = i5 to nk - 1
+            if array.get(KM, q) >= 2
+                mud5 += 1
+    mudTxt = lastMud >= 2 ? "последнее колено МУТНОЕ, слилось " + str.tostring(lastMud) + " меток" : "последнее чистое  |  мутных в пятёрке: " + str.tostring(mud5)
+    a7 = f_cell(7, "чистота", mudTxt, lastMud >= 2 ? cMud : color.new(color.silver, 30))
+
     pt = pTr == 0 ? "—" : (pTr == 1 ? "восходящий" : "нисходящий") + ", слом на " + str.tostring(pDeath, format.mintick) + ", " + str.tostring(bar_index - pDeathBar) + " бар назад"
-    a7 = f_cell(7, "прошлый тренд", pt, color.new(color.silver, 30))
-    a8 = f_cell(8, "пауза", inTrans ? str.tostring(math.min(marks, 2)) + " из 2 меток — ждём" : "—", inTrans ? color.new(color.orange, 0) : color.gray)
+    a8 = f_cell(8, "прошлый тренд", pt, color.new(color.silver, 30))
+    a9 = f_cell(9, "пауза", inTrans ? str.tostring(math.min(marks, 2)) + " из 2 меток — ждём" : "—", inTrans ? color.new(color.orange, 0) : color.gray)
