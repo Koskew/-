@@ -1,0 +1,448 @@
+//@version=5
+// ═══════════════════════════════════════════════════════════════════
+// ГДЕ МЫ v3
+//
+// Против v2:
+//   • тренд имеет ДВА состояния — восходящий и нисходящий. Между смертью
+//     и подтверждением нового идёт ПЕРЕХОД, но цвет держится старый,
+//     чтобы зиг-заг всегда был зелёным или красным.
+//   • слом требует ГЛУБИНЫ: тело должно уйти за уровень не меньше чем на
+//     заданную долю последнего ИМПУЛЬСНОГО колена. Мелкий прокол не убивает.
+//   • защита от повторного слома об один и тот же уровень.
+//   • БОКОВИК — отдельный слой поверх трендов. Рамка из свежей пары HH и LL,
+//     пришедших в любом порядке, замораживается; коробка живёт, пока цена
+//     не закрылась за границей. В счёте и в тренде не участвует.
+//   • метки 5/5 в настройках: отдельно сырые, отдельно на коленах.
+// ═══════════════════════════════════════════════════════════════════
+indicator("ГДЕ МЫ v3", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=100, max_bars_back=3000)
+
+gA = "Слой"
+useSlow = input.bool(true, "5/5 (иначе 2/2)", group=gA)
+
+gB = "Структура"
+drawZZ   = input.bool(true,  "Зиг-заг по коленам", group=gB)
+drawNum  = input.bool(true,  "Номера точек счёта", group=gB)
+drawKLab = input.bool(false, "Метки на коленах (пересчитанные)", group=gB, tooltip="Метка колена сравнивается с предыдущим КОЛЕНОМ. Расходится с сырой примерно в 27% случаев — там, где между двумя коленами схлопнулась серия.")
+drawRaw  = input.bool(false, "Сырые метки пивотов 5/5", group=gB, tooltip="Как в старом индикаторе: сравнение с предыдущим ПИВОТОМ, без схлопывания.")
+winBars  = input.int(700, "Рисовать за последние N баров", minval=100, group=gB)
+
+gC = "Слом тренда"
+fibDepth = input.float(0.33, "Глубина слома, доля импульсного колена", 0.0, 1.0, 0.01, group=gC, tooltip="0 = любой пробой телом убивает тренд. 0.33 = нужно уйти за уровень на треть последнего импульсного колена.")
+drawLvl  = input.bool(true, "Уровень, который держит тренд", group=gC)
+drawMSB  = input.bool(true, "Отметка слома", group=gC)
+
+gD = "Боковик"
+boxOn   = input.bool(true, "Искать боковик", group=gD)
+boxN    = input.int(6, "Колен внутри рамки", minval=2, maxval=15, group=gD, tooltip="Сколько колен подряд должны остаться внутри, чтобы это стало боковиком. 6 даёт около 29% времени на золоте, 4 — около 63%.")
+boxM    = input.int(3, "Свежесть пары HH/LL, колен", minval=1, maxval=8, group=gD)
+
+gE = "Цвета"
+cUp   = input.color(#00b050, "Восходящий", group=gE)
+cDn   = input.color(#e0342c, "Нисходящий", group=gE)
+cBox  = input.color(color.new(#9c27b0, 88), "Заливка боковика", group=gE)
+cBoxB = input.color(#9c27b0, "Рамка боковика", group=gE)
+zzW   = input.int(2, "Толщина зиг-зага", minval=1, maxval=4, group=gE)
+
+gF = "Таблица"
+showT = input.bool(true, "Таблица", group=gF)
+posT  = input.string("верх-право", "Позиция", options=["верх-право","верх-лево","низ-право","низ-лево"], group=gF)
+sizeT = input.string("small", "Размер", options=["tiny","small","normal"], group=gF)
+
+MAXK = 80
+LB = useSlow ? 5 : 2
+
+// ══════════════ КОЛЕНА ══════════════
+var float[]  KP = array.new_float()
+var int[]    KB = array.new_int()
+var bool[]   KH = array.new_bool()
+var string[] KL = array.new_string()
+var int[]    KT = array.new_int()
+var int[]    KN = array.new_int()
+
+f_isUp(_l) => _l == "HH" or _l == "HL"
+
+f_lab(_i) =>
+    hi = array.get(KH, _i)
+    float prev = na
+    j = _i - 1
+    while j >= 0
+        if array.get(KH, j) == hi
+            prev := array.get(KP, j)
+            break
+        j -= 1
+    cur = array.get(KP, _i)
+    na(prev) ? "?" : hi ? (cur > prev ? "HH" : "LH") : (cur > prev ? "HL" : "LL")
+
+f_relabel() =>
+    array.clear(KL)
+    n = array.size(KP)
+    if n > 0
+        for i = 0 to n - 1
+            array.push(KL, f_lab(i))
+    n
+
+f_recount() =>
+    n = array.size(KL)
+    array.clear(KN)
+    if n > 0
+        for i = 0 to n - 1
+            array.push(KN, -1)
+    if n >= 2
+        int o = 0
+        int d = f_isUp(array.get(KL, 1)) ? 1 : -1
+        int guard = 0
+        bool go = true
+        while go and guard < 500
+            guard += 1
+            int pts = 0
+            i = o + 1
+            while i < n and pts < 5
+                lb = array.get(KL, i)
+                ok = d > 0 ? f_isUp(lb) : not f_isUp(lb)
+                if not ok
+                    break
+                pts += 1
+                i += 1
+            for k = 0 to pts
+                if o + k < n
+                    array.set(KN, o + k, k)
+            e = o + pts
+            x = e + 1
+            if x >= n
+                go := false
+            else
+                nd = pts == 5 ? d : (f_isUp(array.get(KL, x)) ? 1 : -1)
+                needHi = nd < 0
+                j = x
+                while j >= 0
+                    if array.get(KH, j) == needHi
+                        break
+                    j -= 1
+                if j <= o
+                    j := x
+                o := j
+                d := nd
+    n
+
+// ══════════════ СОСТОЯНИЕ ══════════════
+var int   tr      = 0        // +1 / -1, ноль только до первого тренда
+var float lvl     = na
+var int   trFrom  = na
+var bool  inTrans = false    // между сломом и подтверждением
+var int   pTr     = 0
+var float pDeath  = na
+var int   pDeathBar = na
+var int   marks   = 0
+var float impAmp  = 0.0
+var float lastDeathLvl = na
+
+var float[] DXP = array.new_float()
+var int[]   DXB = array.new_int()
+var int[]   DXT = array.new_int()
+
+// боковик
+var float bxTop = na
+var float bxBot = na
+var int   bxStart = na
+var int   bxInside = 0
+var bool  bxActive = false
+var box[] BOXES = array.new<box>()
+var int   iHH = na
+var int   iLL = na
+
+f_pushKnee(_price, _bar, _hi) =>
+    n = array.size(KP)
+    bool same = false
+    if n > 0
+        same := array.get(KH, n - 1) == _hi
+    bool fresh = not same
+    int shifted = 0
+    if same
+        better = _hi ? _price > array.get(KP, n - 1) : _price < array.get(KP, n - 1)
+        if better
+            array.set(KP, n - 1, _price)
+            array.set(KB, n - 1, _bar)
+    else
+        array.push(KP, _price)
+        array.push(KB, _bar)
+        array.push(KH, _hi)
+        array.push(KT, tr)
+        if array.size(KP) > MAXK
+            array.shift(KP)
+            array.shift(KB)
+            array.shift(KH)
+            array.shift(KT)
+            shifted := 1
+    d1 = f_relabel()
+    d2 = f_recount()
+    [fresh, shifted]
+
+pvH = ta.pivothigh(high, LB, LB)
+pvL = ta.pivotlow (low,  LB, LB)
+bLo = math.min(open, close)
+bHi = math.max(open, close)
+
+if barstate.isconfirmed
+    // ── 1. слом тренда с фильтром глубины ──
+    need = impAmp * fibDepth
+    bool died = false
+    if tr == 1
+        if not na(lvl)
+            if bLo < lvl - need
+                died := true
+    if tr == -1
+        if not na(lvl)
+            if bHi > lvl + need
+                died := true
+    // защита от повторного слома об тот же уровень
+    if died
+        if not na(lastDeathLvl)
+            if math.abs(lvl - lastDeathLvl) < syminfo.mintick
+                died := false
+    if died
+        pTr := tr
+        pDeath := lvl
+        pDeathBar := bar_index
+        lastDeathLvl := lvl
+        array.push(DXP, lvl)
+        array.push(DXB, bar_index)
+        array.push(DXT, tr)
+        inTrans := true
+        marks := 0
+        lvl := na
+
+    // ── 2. новые колена ──
+    bool fresh = false
+    if not na(pvH)
+        [f1, s1] = f_pushKnee(high[LB], bar_index - LB, true)
+        if f1
+            fresh := true
+        if s1 > 0
+            iHH := na(iHH) ? na : iHH <= 0 ? na : iHH - 1
+            iLL := na(iLL) ? na : iLL <= 0 ? na : iLL - 1
+    if not na(pvL)
+        [f2, s2] = f_pushKnee(low[LB], bar_index - LB, false)
+        if f2
+            fresh := true
+        if s2 > 0
+            iHH := na(iHH) ? na : iHH <= 0 ? na : iHH - 1
+            iLL := na(iLL) ? na : iLL <= 0 ? na : iLL - 1
+    if fresh
+        marks += 1
+
+    n = array.size(KL)
+    if n >= 2
+        l1 = array.get(KL, n - 1)
+        l2 = array.get(KL, n - 2)
+        p1 = array.get(KP, n - 1)
+        p2 = array.get(KP, n - 2)
+
+        // ── 3. импульсное колено: ход по направлению тренда ──
+        if fresh and tr != 0
+            movedUp = p1 > p2
+            if (tr == 1 and movedUp) or (tr == -1 and not movedUp)
+                impAmp := math.abs(p1 - p2)
+
+        // ── 4. рождение или подтверждение тренда ──
+        if fresh
+            bool up2 = f_isUp(l1) and f_isUp(l2)
+            bool dn2 = (not f_isUp(l1)) and (not f_isUp(l2))
+            if tr == 0
+                if up2
+                    tr := 1
+                    trFrom := bar_index
+                    impAmp := math.abs(p1 - p2)
+                if dn2
+                    tr := -1
+                    trFrom := bar_index
+                    impAmp := math.abs(p1 - p2)
+            else if inTrans
+                if marks >= 2
+                    if up2
+                        tr := 1
+                        trFrom := bar_index
+                        inTrans := false
+                        lastDeathLvl := na
+                        impAmp := math.abs(p1 - p2)
+                    if dn2
+                        tr := -1
+                        trFrom := bar_index
+                        inTrans := false
+                        lastDeathLvl := na
+                        impAmp := math.abs(p1 - p2)
+
+        // ── 5. уровень тренда ──
+        if tr == 1
+            if l1 == "HL"
+                lvl := p1
+            if na(lvl)
+                j = n - 1
+                while j >= 0
+                    if array.get(KL, j) == "HL"
+                        lvl := array.get(KP, j)
+                        break
+                    j -= 1
+        if tr == -1
+            if l1 == "LH"
+                lvl := p1
+            if na(lvl)
+                j = n - 1
+                while j >= 0
+                    if array.get(KL, j) == "LH"
+                        lvl := array.get(KP, j)
+                        break
+                    j -= 1
+        if array.size(KT) > 0
+            array.set(KT, array.size(KT) - 1, tr)
+
+        // ── 6. БОКОВИК: отдельный слой ──
+        if boxOn and fresh
+            if l1 == "HH"
+                iHH := n - 1
+            if l1 == "LL"
+                iLL := n - 1
+            if not bxActive
+                bool pairOk = false
+                if not na(iHH)
+                    if not na(iLL)
+                        if iHH >= 0 and iLL >= 0 and iHH < n and iLL < n
+                            if (n - 1 - iHH) <= boxM
+                                if (n - 1 - iLL) <= boxM
+                                    if array.get(KP, iHH) > array.get(KP, iLL)
+                                        pairOk := true
+                if pairOk
+                    nt = array.get(KP, iHH)
+                    nb2 = array.get(KP, iLL)
+                    if na(bxTop)
+                        bxTop := nt
+                        bxBot := nb2
+                        bxStart := array.get(KB, math.min(iHH, iLL))
+                        bxInside := 0
+                    else if nt != bxTop or nb2 != bxBot
+                        bxTop := nt
+                        bxBot := nb2
+                        bxStart := array.get(KB, math.min(iHH, iLL))
+                        bxInside := 0
+                if not na(bxTop)
+                    if p1 <= bxTop and p1 >= bxBot
+                        bxInside += 1
+                        if bxInside >= boxN
+                            bxActive := true
+                            array.push(BOXES, box.new(bxStart, bxTop, bar_index + 5, bxBot, bgcolor=cBox, border_color=cBoxB, border_width=1))
+                    else
+                        bxTop := na
+                        bxBot := na
+                        bxInside := 0
+    // смерть боковика
+    if bxActive
+        if close > bxTop or close < bxBot
+            bxActive := false
+            bxTop := na
+            bxBot := na
+            bxInside := 0
+        else if array.size(BOXES) > 0
+            box.set_right(array.get(BOXES, array.size(BOXES) - 1), bar_index + 5)
+
+// ══════════════ СЫРЫЕ МЕТКИ ══════════════
+pvv = high[LB]
+plv = low[LB]
+w1 = ta.valuewhen(not na(pvH), pvv, 1)
+w2 = ta.valuewhen(not na(pvH), pvv, 0)
+rHH = na(pvH) ? na : w1 < w2 ? pvH : na
+rLH = na(pvH) ? na : w1 > w2 ? pvH : na
+w3 = ta.valuewhen(not na(pvL), plv, 1)
+w4 = ta.valuewhen(not na(pvL), plv, 0)
+rHL = na(pvL) ? na : w3 < w4 ? pvL : na
+rLL = na(pvL) ? na : w3 > w4 ? pvL : na
+plotshape(drawRaw and not na(rHH) ? rHH : na, "сырая HH", shape.triangledown, location.abovebar, color.new(cUp, 40), text="HH", textcolor=color.new(cUp, 20), size=size.tiny, offset=-LB)
+plotshape(drawRaw and not na(rLH) ? rLH : na, "сырая LH", shape.triangledown, location.abovebar, color.new(cDn, 40), text="LH", textcolor=color.new(cDn, 20), size=size.tiny, offset=-LB)
+plotshape(drawRaw and not na(rHL) ? rHL : na, "сырая HL", shape.triangleup,   location.belowbar, color.new(cUp, 40), text="HL", textcolor=color.new(cUp, 20), size=size.tiny, offset=-LB)
+plotshape(drawRaw and not na(rLL) ? rLL : na, "сырая LL", shape.triangleup,   location.belowbar, color.new(cDn, 40), text="LL", textcolor=color.new(cDn, 20), size=size.tiny, offset=-LB)
+
+// ══════════════ ОТРИСОВКА ══════════════
+var line[]  LNS = array.new<line>()
+var label[] LBS = array.new<label>()
+f_col(_t) => _t == 1 ? cUp : cDn
+
+if barstate.islast
+    while array.size(LNS) > 0
+        line.delete(array.pop(LNS))
+    while array.size(LBS) > 0
+        label.delete(array.pop(LBS))
+
+    n = array.size(KP)
+    if n >= 2
+        for i = 1 to n - 1
+            x1 = array.get(KB, i - 1)
+            x2 = array.get(KB, i)
+            if last_bar_index - x1 <= winBars
+                t2 = array.get(KT, i)
+                cc = t2 == 0 ? color.gray : f_col(t2)
+                if drawZZ
+                    if array.get(KT, i - 1) == t2
+                        array.push(LNS, line.new(x1, array.get(KP, i - 1), x2, array.get(KP, i), color=cc, width=zzW))
+                if drawNum
+                    num = array.get(KN, i)
+                    if num >= 0
+                        hh = array.get(KH, i)
+                        array.push(LBS, label.new(x2, array.get(KP, i), "(" + str.tostring(num) + ")", style=hh ? label.style_label_down : label.style_label_up, color=color.new(color.black, 100), textcolor=cc, size=size.small))
+                if drawKLab
+                    hh2 = array.get(KH, i)
+                    array.push(LBS, label.new(x2, array.get(KP, i), array.get(KL, i), style=label.style_none, textcolor=color.new(cc, 20), size=size.tiny, yloc=hh2 ? yloc.abovebar : yloc.belowbar))
+
+    if drawLvl and not na(lvl) and tr != 0
+        x0 = na(trFrom) ? bar_index - 50 : trFrom
+        array.push(LNS, line.new(x0, lvl, bar_index + 8, lvl, color=color.new(f_col(tr), 25), width=2, style=line.style_dashed))
+        array.push(LBS, label.new(bar_index + 8, lvl, (tr == 1 ? "HL " : "LH ") + str.tostring(lvl, format.mintick), style=label.style_label_left, color=color.new(f_col(tr), 85), textcolor=f_col(tr), size=size.small))
+
+    if drawMSB and array.size(DXB) > 0
+        i0 = math.max(0, array.size(DXB) - 10)
+        for i = i0 to array.size(DXB) - 1
+            db = array.get(DXB, i)
+            if last_bar_index - db <= winBars
+                dp = array.get(DXP, i)
+                dt = array.get(DXT, i)
+                array.push(LNS, line.new(db - 20, dp, db, dp, color=dt == 1 ? cDn : cUp, width=2))
+                array.push(LBS, label.new(db, dp, "слом", style=dt == 1 ? label.style_label_down : label.style_label_up, color=color.new(color.black, 100), textcolor=dt == 1 ? cDn : cUp, size=size.tiny))
+
+// ══════════════ ТАБЛИЦА ══════════════
+f_chain(_k) =>
+    n = array.size(KL)
+    m = math.min(_k, n)
+    s = ""
+    if m > 0
+        for j = n - m to n - 1
+            s := s + (j > n - m ? ">" : "") + array.get(KL, j)
+    s
+
+tpp = posT == "верх-право" ? position.top_right : posT == "верх-лево" ? position.top_left : posT == "низ-право" ? position.bottom_right : position.bottom_left
+tss = sizeT == "tiny" ? size.tiny : sizeT == "small" ? size.small : size.normal
+var table T = table.new(tpp, 2, 9, bgcolor=color.new(#000000, 10), border_width=1, border_color=color.new(color.gray, 75))
+
+f_cell(_r, _k, _v, _c) =>
+    table.cell(T, 0, _r, _k, text_color=color.new(color.silver, 25), text_halign=text.align_left, text_size=tss)
+    table.cell(T, 1, _r, _v, text_color=_c, text_halign=text.align_left, text_size=tss)
+    _r
+
+if showT and barstate.islast
+    lay = useSlow ? "5/5" : "2/2"
+    table.cell(T, 0, 0, "━━  ГДЕ МЫ · " + lay + "  ━━", text_color=color.new(color.silver, 5), bgcolor=color.new(#1a1a2e, 0), text_halign=text.align_center, text_size=size.tiny)
+    table.cell(T, 1, 0, "", bgcolor=color.new(#1a1a2e, 0), text_size=size.tiny)
+    table.merge_cells(T, 0, 0, 1, 0)
+
+    nm = tr == 1 ? "ВОСХОДЯЩИЙ" : tr == -1 ? "НИСХОДЯЩИЙ" : "не определён"
+    st = inTrans ? "ПЕРЕХОД, был " + (pTr == 1 ? "восходящий" : "нисходящий") : nm + (na(trFrom) ? "" : ", " + str.tostring(bar_index - trFrom) + " бар")
+    a1 = f_cell(1, "тренд", st, inTrans ? color.new(color.orange, 0) : tr == 0 ? color.gray : f_col(tr))
+    a2 = f_cell(2, "держится на", na(lvl) ? "—" : (tr == 1 ? "HL " : "LH ") + str.tostring(lvl, format.mintick) + "   запас до слома " + str.tostring(impAmp * fibDepth, format.mintick), color.white)
+
+    cn = array.size(KN) > 0 ? array.get(KN, array.size(KN) - 1) : -1
+    a3 = f_cell(3, "счёт", cn < 0 ? "вне счёта" : "точка (" + str.tostring(cn) + ") из 5", color.new(color.aqua, 0))
+    a4 = f_cell(4, "колено", cn <= 0 ? "—" : (cn % 2 == 1 ? "импульсное" : "корректирующее") + " (" + str.tostring(cn) + ")", color.new(color.aqua, 0))
+    a5 = f_cell(5, "цепочка", f_chain(5), tr == 0 ? color.gray : f_col(tr))
+
+    bxt = not boxOn ? "выключен" : bxActive ? "ДА  " + str.tostring(bxBot, format.mintick) + " — " + str.tostring(bxTop, format.mintick) : na(bxTop) ? "нет" : "набирается " + str.tostring(bxInside) + " из " + str.tostring(boxN)
+    a6 = f_cell(6, "боковик", bxt, bxActive ? cBoxB : color.gray)
+
+    pt = pTr == 0 ? "—" : (pTr == 1 ? "восходящий" : "нисходящий") + ", слом на " + str.tostring(pDeath, format.mintick) + ", " + str.tostring(bar_index - pDeathBar) + " бар назад"
+    a7 = f_cell(7, "прошлый тренд", pt, color.new(color.silver, 30))
+    a8 = f_cell(8, "пауза", inTrans ? str.tostring(math.min(marks, 2)) + " из 2 меток — ждём" : "—", inTrans ? color.new(color.orange, 0) : color.gray)
