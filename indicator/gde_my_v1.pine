@@ -1,0 +1,369 @@
+//@version=5
+// ═══════════════════════════════════════════════════════════════════
+// ГДЕ МЫ v1 — структура и счёт точек по спецификации ТРЕНД-ПРАВИЛА.md
+//
+//   1. пивоты 5/5 и 2/2
+//   2. серии однонаправленных меток схлопываются в экстремум → КОЛЕНА
+//   3. метки пересчитываются заново, по предыдущему колену
+//   4. счёт точек: вверх = HH и HL подряд, вниз = LH и LL; до (5), затем сброс
+//   5. тренд жив, пока последний HL (восх) или LH (нисх) не пробит ТЕЛОМ
+//   6. после смерти (0) нового счёта = экстремум умершего тренда
+//
+// Ставить рядом с основным индикатором. Ничего не решает и не торгует.
+// ═══════════════════════════════════════════════════════════════════
+indicator("ГДЕ МЫ v1", overlay=true, max_lines_count=500, max_labels_count=500, max_bars_back=3000)
+
+g1 = "Отрисовка"
+draw55 = input.bool(true,  "Зиг-заг по коленам 5/5", group=g1)
+draw22 = input.bool(false, "Зиг-заг по коленам 2/2", group=g1)
+num55  = input.bool(true,  "Номера точек счёта 5/5", group=g1)
+num22  = input.bool(false, "Номера точек счёта 2/2", group=g1)
+zzbars = input.int(1500, "Рисовать за последние N баров", minval=100, group=g1)
+c55    = input.color(color.new(#2962ff, 0),  "Цвет 5/5", inline="c", group=g1)
+c22    = input.color(color.new(#9598a1, 20), "Цвет 2/2", inline="c", group=g1)
+
+g2 = "Таблица"
+show_tbl = input.bool(true, "Показывать таблицу ГДЕ МЫ", group=g2)
+tbl_pos  = input.string("верх-право", "Позиция", options=["верх-право","верх-лево","низ-право","низ-лево"], group=g2)
+tbl_size = input.string("small", "Размер текста", options=["tiny","small","normal"], group=g2)
+
+MAXK = 60
+
+// ══════════════ ХРАНИЛИЩА КОЛЕН ══════════════
+var float[]  P5 = array.new_float()
+var int[]    B5 = array.new_int()
+var bool[]   S5 = array.new_bool()
+var string[] L5 = array.new_string()
+
+var float[]  P2 = array.new_float()
+var int[]    B2 = array.new_int()
+var bool[]   S2 = array.new_bool()
+var string[] L2 = array.new_string()
+
+// ══════════════ СОСТОЯНИЕ СЛОЁВ ══════════════
+var int   st5   = 0
+var float lv5   = na
+var int   z5    = na
+var int   pts5  = 0
+var int   dir5  = 0
+var int   pst5  = 0
+var float pdp5  = na
+var int   pdb5  = na
+var int   ppts5 = 0
+var int   msince5 = 0
+
+var int   st2   = 0
+var float lv2   = na
+var int   z2    = na
+var int   pts2  = 0
+var int   dir2  = 0
+var int   pst2  = 0
+var float pdp2  = na
+var int   pdb2  = na
+var int   ppts2 = 0
+var int   msince2 = 0
+
+// ══════════════ ФУНКЦИИ ══════════════
+f_lab(_p, _s, _i) =>
+    hi = array.get(_s, _i)
+    float prev = na
+    j = _i - 1
+    while j >= 0
+        if array.get(_s, j) == hi
+            prev := array.get(_p, j)
+            break
+        j -= 1
+    cur = array.get(_p, _i)
+    na(prev) ? "?" : hi ? (cur > prev ? "HH" : "LH") : (cur > prev ? "HL" : "LL")
+
+f_relabel(_p, _s, _l) =>
+    array.clear(_l)
+    if array.size(_p) > 0
+        for i = 0 to array.size(_p) - 1
+            array.push(_l, f_lab(_p, _s, i))
+    array.size(_l)
+
+// добавить пивот. Та же сторона — схлопнуть в экстремум, иначе новое колено.
+// true = появилось НОВОЕ колено
+f_push(_p, _b, _s, _l, _price, _bar, _hi) =>
+    n = array.size(_p)
+    bool fresh = true
+    if n > 0 and array.get(_s, n - 1) == _hi
+        fresh := false
+        better = _hi ? _price > array.get(_p, n - 1) : _price < array.get(_p, n - 1)
+        if better
+            array.set(_p, n - 1, _price)
+            array.set(_b, n - 1, _bar)
+    else
+        array.push(_p, _price)
+        array.push(_b, _bar)
+        array.push(_s, _hi)
+        if array.size(_p) > MAXK
+            array.shift(_p)
+            array.shift(_b)
+            array.shift(_s)
+    dummy = f_relabel(_p, _s, _l)
+    fresh
+
+// счёт от нулевого колена вперёд; на (5) сброс — точка (5) становится (0)
+f_count(_l, _z, _dir) =>
+    n = array.size(_l)
+    int zz = _z
+    int pp = 0
+    if not na(zz) and _dir != 0 and n > 0
+        bool again = true
+        while again
+            again := false
+            pp := 0
+            i = zz + 1
+            while i < n and pp < 5
+                lb = array.get(_l, i)
+                ok = _dir > 0 ? (lb == "HH" or lb == "HL") : (lb == "LH" or lb == "LL")
+                if not ok
+                    break
+                pp += 1
+                i += 1
+            if pp == 5 and zz + 5 < n - 1
+                zz := zz + 5
+                again := true
+    [zz, pp]
+
+f_level(_p, _l, _dir) =>
+    float r = na
+    if _dir != 0 and array.size(_l) > 0
+        want = _dir > 0 ? "HL" : "LH"
+        i = array.size(_l) - 1
+        while i >= 0
+            if array.get(_l, i) == want
+                r := array.get(_p, i)
+                break
+            i -= 1
+    r
+
+f_lastIdx(_l, _lab) =>
+    int r = na
+    i = array.size(_l) - 1
+    while i >= 0
+        if array.get(_l, i) == _lab
+            r := i
+            break
+        i -= 1
+    r
+
+f_isUp(_lab) =>
+    _lab == "HH" or _lab == "HL"
+
+// ══════════════ ПИВОТЫ ══════════════
+ph5 = ta.pivothigh(high, 5, 5)
+pl5 = ta.pivotlow (low,  5, 5)
+ph2 = ta.pivothigh(high, 2, 2)
+pl2 = ta.pivotlow (low,  2, 2)
+
+body_lo = math.min(open, close)
+body_hi = math.max(open, close)
+
+if barstate.isconfirmed
+    // ─────────── слой 5/5 ───────────
+    bool fresh5 = false
+    if not na(ph5)
+        r = f_push(P5, B5, S5, L5, high[5], bar_index - 5, true)
+        if r
+            fresh5 := true
+    if not na(pl5)
+        r = f_push(P5, B5, S5, L5, low[5], bar_index - 5, false)
+        if r
+            fresh5 := true
+    if fresh5
+        msince5 += 1
+
+    if na(z5) and array.size(L5) >= 2
+        z5   := 0
+        dir5 := f_isUp(array.get(L5, 1)) ? 1 : -1
+
+    [a1, a2] = f_count(L5, z5, dir5)
+    z5   := a1
+    pts5 := a2
+
+    if pts5 == 0 and array.size(L5) >= 2
+        z5   := array.size(L5) - 2
+        dir5 := f_isUp(array.get(L5, array.size(L5) - 1)) ? 1 : -1
+        [a3, a4] = f_count(L5, z5, dir5)
+        z5   := a3
+        pts5 := a4
+
+    st5 := pts5 >= 2 ? dir5 : 0
+    lv5 := f_level(P5, L5, st5)
+
+    if st5 == 1 and not na(lv5) and body_lo < lv5
+        pst5    := 1
+        pdp5    := lv5
+        pdb5    := bar_index
+        ppts5   := pts5
+        msince5 := 0
+        ix = f_lastIdx(L5, "HH")
+        if not na(ix)
+            z5   := ix
+            dir5 := -1
+        st5 := 0
+    else if st5 == -1 and not na(lv5) and body_hi > lv5
+        pst5    := -1
+        pdp5    := lv5
+        pdb5    := bar_index
+        ppts5   := pts5
+        msince5 := 0
+        ix = f_lastIdx(L5, "LL")
+        if not na(ix)
+            z5   := ix
+            dir5 := 1
+        st5 := 0
+
+    // ─────────── слой 2/2 ───────────
+    bool fresh2 = false
+    if not na(ph2)
+        r = f_push(P2, B2, S2, L2, high[2], bar_index - 2, true)
+        if r
+            fresh2 := true
+    if not na(pl2)
+        r = f_push(P2, B2, S2, L2, low[2], bar_index - 2, false)
+        if r
+            fresh2 := true
+    if fresh2
+        msince2 += 1
+
+    if na(z2) and array.size(L2) >= 2
+        z2   := 0
+        dir2 := f_isUp(array.get(L2, 1)) ? 1 : -1
+
+    [b1, b2] = f_count(L2, z2, dir2)
+    z2   := b1
+    pts2 := b2
+
+    if pts2 == 0 and array.size(L2) >= 2
+        z2   := array.size(L2) - 2
+        dir2 := f_isUp(array.get(L2, array.size(L2) - 1)) ? 1 : -1
+        [b3, b4] = f_count(L2, z2, dir2)
+        z2   := b3
+        pts2 := b4
+
+    st2 := pts2 >= 2 ? dir2 : 0
+    lv2 := f_level(P2, L2, st2)
+
+    if st2 == 1 and not na(lv2) and body_lo < lv2
+        pst2    := 1
+        pdp2    := lv2
+        pdb2    := bar_index
+        ppts2   := pts2
+        msince2 := 0
+        ix = f_lastIdx(L2, "HH")
+        if not na(ix)
+            z2   := ix
+            dir2 := -1
+        st2 := 0
+    else if st2 == -1 and not na(lv2) and body_hi > lv2
+        pst2    := -1
+        pdp2    := lv2
+        pdb2    := bar_index
+        ppts2   := pts2
+        msince2 := 0
+        ix = f_lastIdx(L2, "LL")
+        if not na(ix)
+            z2   := ix
+            dir2 := 1
+        st2 := 0
+
+// ══════════════ ОТРИСОВКА ══════════════
+var line[]  LN = array.new<line>()
+var label[] LB = array.new<label>()
+
+f_draw(_p, _b, _l, _z, _pts, _col, _w, _nums) =>
+    n = array.size(_p)
+    if n >= 2
+        i0 = math.max(1, n - 30)
+        for i = i0 to n - 1
+            x1 = array.get(_b, i - 1)
+            if last_bar_index - x1 <= zzbars
+                array.push(LN, line.new(x1, array.get(_p, i - 1), array.get(_b, i), array.get(_p, i), color=_col, width=_w))
+        if _nums and not na(_z)
+            for k = 0 to _pts
+                idx = _z + k
+                if idx >= 0 and idx < n
+                    xb = array.get(_b, idx)
+                    if last_bar_index - xb <= zzbars
+                        isHi = array.get(_l, idx) == "HH" or array.get(_l, idx) == "LH"
+                        array.push(LB, label.new(xb, array.get(_p, idx), "(" + str.tostring(k) + ")", style=isHi ? label.style_label_down : label.style_label_up, color=color.new(color.black, 100), textcolor=_col, size=size.small))
+    n
+
+if barstate.islast
+    while array.size(LN) > 0
+        line.delete(array.pop(LN))
+    while array.size(LB) > 0
+        label.delete(array.pop(LB))
+    if draw22
+        d2 = f_draw(P2, B2, L2, z2, pts2, c22, 1, num22)
+    if draw55
+        d5 = f_draw(P5, B5, L5, z5, pts5, c55, 2, num55)
+
+// ══════════════ ТАБЛИЦА ══════════════
+f_chain(_l, _n) =>
+    n = array.size(_l)
+    m = math.min(_n, n)
+    s = ""
+    if m > 0
+        for j = n - m to n - 1
+            s := s + (j > n - m ? ">" : "") + array.get(_l, j)
+    s
+
+f_stname(_st) =>
+    _st == 1 ? "ВОСХОДЯЩИЙ" : _st == -1 ? "НИСХОДЯЩИЙ" : "БОКОВИК / переход"
+
+f_leg(_pts) =>
+    _pts == 0 ? "—" : (_pts % 2 == 1 ? "импульсное" : "корректирующее") + ", пришли в (" + str.tostring(_pts) + ")"
+
+tp_ = tbl_pos == "верх-право" ? position.top_right : tbl_pos == "верх-лево" ? position.top_left : tbl_pos == "низ-право" ? position.bottom_right : position.bottom_left
+ts_ = tbl_size == "tiny" ? size.tiny : tbl_size == "small" ? size.small : size.normal
+var table T = table.new(tp_, 2, 15, bgcolor=color.new(#000000, 12), border_width=1, border_color=color.new(color.gray, 70))
+
+f_hdr(_row, _txt) =>
+    table.cell(T, 0, _row, _txt, text_color=color.new(color.silver, 10), bgcolor=color.new(#1a1a2e, 0), text_halign=text.align_center, text_size=size.tiny)
+    table.cell(T, 1, _row, "", bgcolor=color.new(#1a1a2e, 0), text_size=size.tiny)
+    table.merge_cells(T, 0, _row, 1, _row)
+    _row
+
+f_row(_row, _k, _v, _col) =>
+    table.cell(T, 0, _row, _k, text_color=color.new(color.silver, 25), text_halign=text.align_left, text_size=ts_)
+    table.cell(T, 1, _row, _v, text_color=_col, text_halign=text.align_left, text_size=ts_)
+    _row
+
+if show_tbl and barstate.islast
+    h0 = f_hdr(0, "━━  ГДЕ МЫ  ━━")
+
+    pname = pst5 == 1 ? "ВОСХОДЯЩИЙ" : pst5 == -1 ? "НИСХОДЯЩИЙ" : "нет данных"
+    pinfo = pst5 == 0 ? "нет данных" : pname + ", умер на " + str.tostring(pdp5, format.mintick) + ", " + str.tostring(bar_index - pdb5) + " бар назад  |  счёт дошёл до (" + str.tostring(ppts5) + ")"
+    r1 = f_row(1, "ПРОШЛЫЙ 5/5", pinfo, color.new(color.silver, 20))
+
+    ptxt = pst5 == 0 ? "—" : str.tostring(math.min(msince5, 2)) + " из 2 медленных меток" + (msince5 >= 2 ? "  — выдержана" : "  — ждём")
+    r2 = f_row(2, "пауза после смерти", ptxt, msince5 >= 2 ? color.lime : color.new(color.orange, 0))
+
+    h1 = f_hdr(3, "──  5/5  ──")
+    col5 = st5 == 1 ? color.lime : st5 == -1 ? color.new(color.red, 0) : color.new(color.orange, 0)
+    r4 = f_row(4, "состояние", f_stname(st5) + ", точка (" + str.tostring(pts5) + ") из 5", col5)
+    r5 = f_row(5, "держится на", na(lv5) ? "—" : (st5 == 1 ? "HL " : "LH ") + str.tostring(lv5, format.mintick) + "  — жив, пока не пробит телом", color.white)
+    r6 = f_row(6, "колено", f_leg(pts5), color.new(color.aqua, 0))
+    r7 = f_row(7, "цепочка", f_chain(L5, 5), color.new(#00c853, 0))
+
+    h2 = f_hdr(8, "──  2/2  ──")
+    col2 = st2 == 1 ? color.lime : st2 == -1 ? color.new(color.red, 0) : color.new(color.orange, 0)
+    r9  = f_row(9,  "состояние", f_stname(st2) + ", точка (" + str.tostring(pts2) + ") из 5", col2)
+    r10 = f_row(10, "держится на", na(lv2) ? "—" : (st2 == 1 ? "HL " : "LH ") + str.tostring(lv2, format.mintick), color.white)
+    r11 = f_row(11, "колено", f_leg(pts2), color.new(color.aqua, 0))
+    r12 = f_row(12, "цепочка", f_chain(L2, 5), color.new(color.yellow, 0))
+
+    h3 = f_hdr(13, "──  ВЫВОД  ──")
+    danger = msince5 < 2 and pst5 != 0 and st2 == pst5 and st2 != 0
+    same   = st5 != 0 and st5 == st2
+    opp    = st5 != 0 and st2 != 0 and st5 != st2
+    vtxt = danger ? "старший недавно сменился, а младший смотрит по УМЕРШЕМУ — опасная связка" : same ? "слои согласны" : opp ? "слои против друг друга — у младшего идёт коррекция старшего" : "нет устойчивой картины"
+    vcol = danger ? color.new(color.red, 0) : same ? color.lime : color.new(color.orange, 0)
+    table.cell(T, 0, 14, vtxt, text_color=vcol, text_halign=text.align_left, text_size=ts_)
+    table.cell(T, 1, 14, "", text_size=ts_)
+    table.merge_cells(T, 0, 14, 1, 14)
