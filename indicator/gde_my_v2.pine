@@ -1,0 +1,335 @@
+//@version=5
+// ═══════════════════════════════════════════════════════════════════
+// ГДЕ МЫ v2
+//
+// Против v1 исправлено и добавлено:
+//   • счёт точек: новый ноль = последнее колено нужной стороны.
+//     Для счёта вверх ноль это ВПАДИНА, для счёта вниз — ВЕРШИНА.
+//     После полного счёта до (5) ноль через одно колено, после обрыва —
+//     на последней точке. Правило воспроизводит обе ручные разметки.
+//   • зиг-заг РЕЖЕТСЯ на сегменты по трендам и красится:
+//     зелёный — восходящий, красный — нисходящий, фиолетовый — боковик.
+//   • на графике видно смерть тренда: уровень, который держал, и крест
+//     на баре, где он пробит телом.
+// ═══════════════════════════════════════════════════════════════════
+indicator("ГДЕ МЫ v2", overlay=true, max_lines_count=500, max_labels_count=500, max_bars_back=3000)
+
+gA = "Что рисовать"
+useSlow  = input.bool(true,  "Слой 5/5 (иначе 2/2)", group=gA, tooltip="Один слой за раз — так читается. Для второго поставь копию индикатора.")
+drawZZ   = input.bool(true,  "Зиг-заг по коленам", group=gA)
+drawNum  = input.bool(true,  "Номера точек счёта", group=gA)
+drawLvl  = input.bool(true,  "Уровень, который держит тренд", group=gA)
+drawDead = input.bool(true,  "Отметки смерти тренда", group=gA)
+drawLab  = input.bool(false, "Метки HH/LH/HL/LL на коленах", group=gA)
+winBars  = input.int(700, "Рисовать за последние N баров", minval=100, group=gA)
+
+gB = "Цвета"
+cUp   = input.color(#00b050, "Восходящий", group=gB)
+cDn   = input.color(#e0342c, "Нисходящий", group=gB)
+cFlat = input.color(#9c27b0, "Боковик",    group=gB)
+zzW   = input.int(2, "Толщина зиг-зага", minval=1, maxval=4, group=gB)
+
+gC = "Таблица"
+showT = input.bool(true, "Таблица ГДЕ МЫ", group=gC)
+posT  = input.string("верх-право", "Позиция", options=["верх-право","верх-лево","низ-право","низ-лево"], group=gC)
+sizeT = input.string("small", "Размер текста", options=["tiny","small","normal"], group=gC)
+
+MAXK = 80
+
+LB = useSlow ? 5 : 2
+RB = useSlow ? 5 : 2
+
+// ══════════════ КОЛЕНА ══════════════
+var float[]  KP = array.new_float()    // цена
+var int[]    KB = array.new_int()      // бар
+var bool[]   KH = array.new_bool()     // true = вершина
+var string[] KL = array.new_string()   // метка
+var int[]    KT = array.new_int()      // тренд на момент колена
+var int[]    KN = array.new_int()      // номер точки счёта, -1 если вне счёта
+
+// ══════════════ ТРЕНД ══════════════
+var int   tr     = 0
+var float lvl    = na
+var int   trFrom = na
+var int   pTr    = 0
+var float pDeath = na
+var int   pDeathBar = na
+var int   marks  = 0
+
+var float[] DX = array.new_float()   // цены смертей — для отметок
+var int[]   DB = array.new_int()
+var int[]   DT = array.new_int()
+
+f_isUp(_l) => _l == "HH" or _l == "HL"
+
+f_lab(_i) =>
+    hi = array.get(KH, _i)
+    float prev = na
+    j = _i - 1
+    while j >= 0
+        if array.get(KH, j) == hi
+            prev := array.get(KP, j)
+            break
+        j -= 1
+    cur = array.get(KP, _i)
+    na(prev) ? "?" : hi ? (cur > prev ? "HH" : "LH") : (cur > prev ? "HL" : "LL")
+
+f_relabel() =>
+    array.clear(KL)
+    n = array.size(KP)
+    if n > 0
+        for i = 0 to n - 1
+            array.push(KL, f_lab(i))
+    n
+
+// пересчёт счёта по всем коленам. Новый ноль = последнее колено нужной стороны.
+f_recount() =>
+    n = array.size(KL)
+    array.clear(KN)
+    if n > 0
+        for i = 0 to n - 1
+            array.push(KN, -1)
+    if n >= 2
+        int o = 0
+        int d = f_isUp(array.get(KL, 1)) ? 1 : -1
+        int guard = 0
+        bool go = true
+        while go and guard < 500
+            guard += 1
+            int pts = 0
+            i = o + 1
+            while i < n and pts < 5
+                lb = array.get(KL, i)
+                ok = d > 0 ? f_isUp(lb) : not f_isUp(lb)
+                if not ok
+                    break
+                pts += 1
+                i += 1
+            for k = 0 to pts
+                if o + k < n
+                    array.set(KN, o + k, k)
+            e = o + pts
+            x = e + 1
+            if x >= n
+                go := false
+            else
+                nd = pts == 5 ? d : (f_isUp(array.get(KL, x)) ? 1 : -1)
+                needHi = nd < 0          // счёт вверх → ноль это впадина
+                j = x
+                while j >= 0
+                    if array.get(KH, j) == needHi
+                        break
+                    j -= 1
+                if j <= o
+                    j := x
+                o := j
+                d := nd
+    n
+
+f_pushKnee(_price, _bar, _hi) =>
+    n = array.size(KP)
+    bool same = false
+    if n > 0
+        same := array.get(KH, n - 1) == _hi
+    bool fresh = not same
+    if same
+        better = _hi ? _price > array.get(KP, n - 1) : _price < array.get(KP, n - 1)
+        if better
+            array.set(KP, n - 1, _price)
+            array.set(KB, n - 1, _bar)
+    else
+        array.push(KP, _price)
+        array.push(KB, _bar)
+        array.push(KH, _hi)
+        array.push(KT, tr)
+        if array.size(KP) > MAXK
+            array.shift(KP)
+            array.shift(KB)
+            array.shift(KH)
+            array.shift(KT)
+    d1 = f_relabel()
+    d2 = f_recount()
+    fresh
+
+// ══════════════ ОСНОВНОЙ ЦИКЛ ══════════════
+pvH = ta.pivothigh(high, LB, RB)
+pvL = ta.pivotlow (low,  LB, RB)
+bLo = math.min(open, close)
+bHi = math.max(open, close)
+
+if barstate.isconfirmed
+    // 1. смерть тренда — до всего остального
+    if tr == 1
+        if not na(lvl)
+            if bLo < lvl
+                pTr := 1
+                pDeath := lvl
+                pDeathBar := bar_index
+                array.push(DX, lvl)
+                array.push(DB, bar_index)
+                array.push(DT, 1)
+                tr := 0
+                lvl := na
+                marks := 0
+    else if tr == -1
+        if not na(lvl)
+            if bHi > lvl
+                pTr := -1
+                pDeath := lvl
+                pDeathBar := bar_index
+                array.push(DX, lvl)
+                array.push(DB, bar_index)
+                array.push(DT, -1)
+                tr := 0
+                lvl := na
+                marks := 0
+
+    // 2. новые колена
+    bool fresh = false
+    if not na(pvH)
+        r1 = f_pushKnee(high[RB], bar_index - RB, true)
+        if r1
+            fresh := true
+    if not na(pvL)
+        r2 = f_pushKnee(low[RB], bar_index - RB, false)
+        if r2
+            fresh := true
+    if fresh
+        marks += 1
+
+    // 3. рождение и уровень тренда
+    n = array.size(KL)
+    if n >= 2
+        l1 = array.get(KL, n - 1)
+        l2 = array.get(KL, n - 2)
+        if tr == 0
+            if fresh
+                bool up2 = f_isUp(l1) and f_isUp(l2)
+                bool dn2 = (not f_isUp(l1)) and (not f_isUp(l2))
+                if up2
+                    tr := 1
+                    trFrom := bar_index
+                if dn2
+                    tr := -1
+                    trFrom := bar_index
+        if tr == 1
+            if l1 == "HL"
+                lvl := array.get(KP, n - 1)
+            if na(lvl)
+                j = n - 1
+                while j >= 0
+                    if array.get(KL, j) == "HL"
+                        lvl := array.get(KP, j)
+                        break
+                    j -= 1
+        if tr == -1
+            if l1 == "LH"
+                lvl := array.get(KP, n - 1)
+            if na(lvl)
+                j = n - 1
+                while j >= 0
+                    if array.get(KL, j) == "LH"
+                        lvl := array.get(KP, j)
+                        break
+                    j -= 1
+        // тренд на последнем колене — актуализируем
+        if array.size(KT) > 0
+            array.set(KT, array.size(KT) - 1, tr)
+
+// ══════════════ ОТРИСОВКА ══════════════
+var line[]  LNS = array.new<line>()
+var label[] LBS = array.new<label>()
+
+f_col(_t) => _t == 1 ? cUp : _t == -1 ? cDn : cFlat
+
+if barstate.islast
+    while array.size(LNS) > 0
+        line.delete(array.pop(LNS))
+    while array.size(LBS) > 0
+        label.delete(array.pop(LBS))
+
+    n = array.size(KP)
+    if n >= 2
+        for i = 1 to n - 1
+            x1 = array.get(KB, i - 1)
+            x2 = array.get(KB, i)
+            if last_bar_index - x1 <= winBars
+                t1 = array.get(KT, i - 1)
+                t2 = array.get(KT, i)
+                // РАЗРЫВ на переходе: колено рисуем только внутри одного тренда
+                if drawZZ
+                    if t1 == t2
+                        array.push(LNS, line.new(x1, array.get(KP, i - 1), x2, array.get(KP, i), color=f_col(t2), width=zzW))
+                if drawNum
+                    num = array.get(KN, i)
+                    if num >= 0
+                        hi = array.get(KH, i)
+                        array.push(LBS, label.new(x2, array.get(KP, i), "(" + str.tostring(num) + ")", style=hi ? label.style_label_down : label.style_label_up, color=color.new(color.black, 100), textcolor=f_col(t2), size=size.small))
+                if drawLab
+                    hi2 = array.get(KH, i)
+                    array.push(LBS, label.new(x2, array.get(KP, i), array.get(KL, i), style=label.style_none, textcolor=color.new(f_col(t2), 30), size=size.tiny, yloc=hi2 ? yloc.abovebar : yloc.belowbar))
+
+    // уровень, который держит тренд
+    if drawLvl and not na(lvl) and tr != 0
+        array.push(LNS, line.new(na(trFrom) ? bar_index - 50 : trFrom, lvl, bar_index + 10, lvl, color=color.new(f_col(tr), 30), width=2, style=line.style_dashed))
+        array.push(LBS, label.new(bar_index + 10, lvl, (tr == 1 ? "HL " : "LH ") + str.tostring(lvl, format.mintick), style=label.style_label_left, color=color.new(f_col(tr), 80), textcolor=f_col(tr), size=size.small))
+
+    // смерти тренда
+    if drawDead and array.size(DB) > 0
+        i0 = math.max(0, array.size(DB) - 12)
+        for i = i0 to array.size(DB) - 1
+            db = array.get(DB, i)
+            if last_bar_index - db <= winBars
+                dp = array.get(DX, i)
+                dt = array.get(DT, i)
+                array.push(LBS, label.new(db, dp, "✕ слом", style=dt == 1 ? label.style_label_down : label.style_label_up, color=color.new(color.black, 70), textcolor=dt == 1 ? cDn : cUp, size=size.tiny))
+
+// ══════════════ ТАБЛИЦА ══════════════
+f_chain(_k) =>
+    n = array.size(KL)
+    m = math.min(_k, n)
+    s = ""
+    if m > 0
+        for j = n - m to n - 1
+            s := s + (j > n - m ? ">" : "") + array.get(KL, j)
+    s
+
+f_curNum() =>
+    n = array.size(KN)
+    r = -1
+    if n > 0
+        r := array.get(KN, n - 1)
+    r
+
+tpp = posT == "верх-право" ? position.top_right : posT == "верх-лево" ? position.top_left : posT == "низ-право" ? position.bottom_right : position.bottom_left
+tss = sizeT == "tiny" ? size.tiny : sizeT == "small" ? size.small : size.normal
+var table T = table.new(tpp, 2, 9, bgcolor=color.new(#000000, 10), border_width=1, border_color=color.new(color.gray, 75))
+
+f_cell(_r, _k, _v, _c) =>
+    table.cell(T, 0, _r, _k, text_color=color.new(color.silver, 25), text_halign=text.align_left, text_size=tss)
+    table.cell(T, 1, _r, _v, text_color=_c, text_halign=text.align_left, text_size=tss)
+    _r
+
+if showT and barstate.islast
+    lay = useSlow ? "5/5" : "2/2"
+    table.cell(T, 0, 0, "━━  ГДЕ МЫ · " + lay + "  ━━", text_color=color.new(color.silver, 5), bgcolor=color.new(#1a1a2e, 0), text_halign=text.align_center, text_size=size.tiny)
+    table.cell(T, 1, 0, "", bgcolor=color.new(#1a1a2e, 0), text_size=size.tiny)
+    table.merge_cells(T, 0, 0, 1, 0)
+
+    stName = tr == 1 ? "ВОСХОДЯЩИЙ" : tr == -1 ? "НИСХОДЯЩИЙ" : "БОКОВИК"
+    c1 = f_cell(1, "тренд", stName + (na(trFrom) ? "" : ", " + str.tostring(bar_index - trFrom) + " бар"), f_col(tr))
+    c2 = f_cell(2, "держится на", na(lvl) ? "—" : (tr == 1 ? "HL " : "LH ") + str.tostring(lvl, format.mintick) + "  — жив, пока не пробит телом", color.white)
+
+    cn = f_curNum()
+    legTxt = cn <= 0 ? "—" : (cn % 2 == 1 ? "импульсное" : "корректирующее") + ", пришли в (" + str.tostring(cn) + ") из 5"
+    c3 = f_cell(3, "счёт", cn < 0 ? "вне счёта" : "точка (" + str.tostring(cn) + ") из 5", color.new(color.aqua, 0))
+    c4 = f_cell(4, "колено", legTxt, color.new(color.aqua, 0))
+    c5 = f_cell(5, "цепочка", f_chain(5), f_col(tr))
+
+    pName = pTr == 1 ? "ВОСХОДЯЩИЙ" : pTr == -1 ? "НИСХОДЯЩИЙ" : "нет данных"
+    pTxt = pTr == 0 ? "нет данных" : pName + ", слом на " + str.tostring(pDeath, format.mintick) + ", " + str.tostring(bar_index - pDeathBar) + " бар назад"
+    c6 = f_cell(6, "прошлый тренд", pTxt, color.new(color.silver, 30))
+    c7 = f_cell(7, "пауза после слома", pTr == 0 ? "—" : str.tostring(math.min(marks, 2)) + " из 2 меток" + (marks >= 2 ? "  — выдержана" : "  — ждём"), marks >= 2 ? cUp : color.new(color.orange, 0))
+
+    hint = tr == 0 ? "структура не даёт чистой пары — жди" : cn < 0 ? "счёт сбит" : cn % 2 == 1 ? "идём по тренду" : "коррекция внутри тренда"
+    c8 = f_cell(8, "чтение", hint, f_col(tr))
