@@ -313,25 +313,20 @@ if barstate.isconfirmed
             if l1 == "LL"
                 iLL := n - 1
             if not bxActive
-                bool pairOk = false
-                if not na(iHH)
-                    if not na(iLL)
-                        if iHH >= 0 and iLL >= 0 and iHH < n and iLL < n
-                            if (n - 1 - iHH) <= boxM
-                                if (n - 1 - iLL) <= boxM
-                                    if array.get(KP, iHH) > array.get(KP, iLL)
-                                        pairOk := true
-                if pairOk
-                    nt = array.get(KP, iHH)
-                    nb2 = array.get(KP, iLL)
-                    if na(bxTop)
-                        bxTop := nt
-                        bxBot := nb2
-                        bxStart := array.get(KB, math.min(iHH, iLL))
-                        bxInside := 0
-                    else if nt != bxTop or nb2 != bxBot
-                        bxTop := nt
-                        bxBot := nb2
+                // рамка замораживается ОДИН раз и дальше не пересобирается.
+                // Новый HH или LL внутри рамки — просто ещё одно колено внутри.
+                if na(bxTop)
+                    bool pairOk = false
+                    if not na(iHH)
+                        if not na(iLL)
+                            if iHH >= 0 and iLL >= 0 and iHH < n and iLL < n
+                                if (n - 1 - iHH) <= boxM
+                                    if (n - 1 - iLL) <= boxM
+                                        if array.get(KP, iHH) > array.get(KP, iLL)
+                                            pairOk := true
+                    if pairOk
+                        bxTop := array.get(KP, iHH)
+                        bxBot := array.get(KP, iLL)
                         bxStart := array.get(KB, math.min(iHH, iLL))
                         bxInside := 0
                 if not na(bxTop)
