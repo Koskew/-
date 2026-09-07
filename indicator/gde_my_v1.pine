@@ -87,9 +87,12 @@ f_relabel(_p, _s, _l) =>
 // true = появилось НОВОЕ колено
 f_push(_p, _b, _s, _l, _price, _bar, _hi) =>
     n = array.size(_p)
-    bool fresh = true
-    if n > 0 and array.get(_s, n - 1) == _hi
-        fresh := false
+    bool sameSide = false
+    if n > 0
+        sameSide := array.get(_s, n - 1) == _hi
+    bool fresh = not sameSide
+    int shifted = 0
+    if sameSide
         better = _hi ? _price > array.get(_p, n - 1) : _price < array.get(_p, n - 1)
         if better
             array.set(_p, n - 1, _price)
@@ -102,8 +105,9 @@ f_push(_p, _b, _s, _l, _price, _bar, _hi) =>
             array.shift(_p)
             array.shift(_b)
             array.shift(_s)
+            shifted := 1
     dummy = f_relabel(_p, _s, _l)
-    fresh
+    [fresh, shifted]
 
 // счёт от нулевого колена вперёд; на (5) сброс — точка (5) становится (0)
 f_count(_l, _z, _dir) =>
@@ -166,13 +170,17 @@ if barstate.isconfirmed
     // ─────────── слой 5/5 ───────────
     bool fresh5 = false
     if not na(ph5)
-        r = f_push(P5, B5, S5, L5, high[5], bar_index - 5, true)
-        if r
+        [rf, rs] = f_push(P5, B5, S5, L5, high[5], bar_index - 5, true)
+        if rf
             fresh5 := true
+        if rs > 0
+            z5 := na(z5) ? na : z5 <= 0 ? na : z5 - 1
     if not na(pl5)
-        r = f_push(P5, B5, S5, L5, low[5], bar_index - 5, false)
-        if r
+        [qf, qs] = f_push(P5, B5, S5, L5, low[5], bar_index - 5, false)
+        if qf
             fresh5 := true
+        if qs > 0
+            z5 := na(z5) ? na : z5 <= 0 ? na : z5 - 1
     if fresh5
         msince5 += 1
 
@@ -220,13 +228,17 @@ if barstate.isconfirmed
     // ─────────── слой 2/2 ───────────
     bool fresh2 = false
     if not na(ph2)
-        r = f_push(P2, B2, S2, L2, high[2], bar_index - 2, true)
-        if r
+        [tf, ts] = f_push(P2, B2, S2, L2, high[2], bar_index - 2, true)
+        if tf
             fresh2 := true
+        if ts > 0
+            z2 := na(z2) ? na : z2 <= 0 ? na : z2 - 1
     if not na(pl2)
-        r = f_push(P2, B2, S2, L2, low[2], bar_index - 2, false)
-        if r
+        [uf, us] = f_push(P2, B2, S2, L2, low[2], bar_index - 2, false)
+        if uf
             fresh2 := true
+        if us > 0
+            z2 := na(z2) ? na : z2 <= 0 ? na : z2 - 1
     if fresh2
         msince2 += 1
 
