@@ -359,7 +359,11 @@ if barstate.isconfirmed
                         lvl := array.get(KP, j)
                         break
                     j -= 1
-        if array.size(KT) > 0
+        // Только на баре появления колена. Раньше это выполнялось КАЖДЫЙ
+        // бар, и последнее колено тянуло за собой живое состояние тренда:
+        // сплошная нога превращалась в штрих-пунктирную, когда тренд
+        // умирал позже. История переписывалась задним числом.
+        if fresh and array.size(KT) > 0
             array.set(KT, array.size(KT) - 1, tr)
             array.set(KX, array.size(KX) - 1, inTrans)
 
