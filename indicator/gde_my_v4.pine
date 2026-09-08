@@ -45,7 +45,7 @@ cDn   = input.color(#e0342c, "Нисходящий", group=gE)
 cBox  = input.color(color.new(#9c27b0, 88), "Заливка боковика", group=gE)
 cBoxB = input.color(#9c27b0, "Рамка боковика", group=gE)
 zzW   = input.int(2, "Толщина зиг-зага", minval=1, maxval=4, group=gE)
-zzMode = input.string("по ходу ноги", "Чем красить зиг-заг", options=["по ходу ноги","по счёту","по тренду"], group=gE, tooltip="«по ходу ноги» — линия вниз всегда красная, вверх всегда зелёная, врать не может. «по счёту» — цвет счёта, к которому принадлежит колено. «по тренду» — как было: цвет действующего тренда, поэтому падение внутри живого восходящего тренда рисуется зелёным.")
+zzMode = input.string("по счёту", "Чем красить зиг-заг", options=["по счёту","по ходу ноги","по тренду"], group=gE, tooltip="«по счёту» — цвет говорит, куда считает структура, а толщина отделяет импульс от коррекции: коррекция тоньше и бледнее, поэтому не читается как разворот. «по ходу ноги» — вниз всегда красная, вверх зелёная; честно про цену, но каждая коррекция выглядит началом разворота. «по тренду» — как было в самом начале: цвет действующего тренда, поэтому падение внутри живого восходящего рисуется зелёным.")
 
 gF = "Таблица"
 showT = input.bool(true, "Таблица", group=gF)
@@ -458,19 +458,29 @@ if barstate.islast
                 bool trs = array.get(KX, i)
                 kd  = f_kdir(i)
                 arr = kd == 1 ? "↑" : kd == -1 ? "↓" : ""
-                // Куда реально пошла нога. Режим «по тренду» этого не
-                // видит: пока тренд жив, любая нога красится его цветом,
-                // и обвал внутри восходящего тренда выходит зелёным.
+                num0 = array.get(KN, i)
+                // Нога В НОЛЬ счёта принадлежит ПРЕДЫДУЩЕМУ счёту: это
+                // последний ход старой структуры, а не первый ход новой.
+                // Иначе рывок вверх, поставивший вершину нового счёта
+                // вниз, красился бы красным.
+                kdL = (num0 == 0 and i > 0) ? f_kdir(i - 1) : kd
+                // Чётная точка — коррекция. Она идёт против своего счёта,
+                // и если красить её просто по ходу ноги, каждый откат
+                // читается как разворот. Поэтому цвет у коррекции тот же,
+                // что у счёта, но линия тоньше и бледнее.
+                bool corr = num0 > 0 and num0 % 2 == 0
                 bool legUp = array.get(KP, i) > array.get(KP, i - 1)
-                cc0 = zzMode == "по ходу ноги" ? (legUp ? cUp : cDn) : zzMode == "по счёту" ? (kd == 0 ? color.gray : f_col(kd)) : trs ? (legUp ? cUp : cDn) : t2 == 0 ? color.gray : f_col(t2)
+                cc0 = zzMode == "по ходу ноги" ? (legUp ? cUp : cDn) : zzMode == "по счёту" ? (kdL == 0 ? color.gray : f_col(kdL)) : trs ? (legUp ? cUp : cDn) : t2 == 0 ? color.gray : f_col(t2)
                 // действующая цепочка — колена текущего счёта, от его нуля
                 bool act = false
                 if cs >= 0
                     act := i > cs
-                cc = act ? cc0 : color.new(cc0, 62)
+                bool thin = corr and zzMode == "по счёту"
+                tp = (thin ? 45 : 0) + (act ? 0 : 55)
+                cc = color.new(cc0, math.min(85, tp))
                 if drawZZ
                     if array.get(KT, i - 1) == t2
-                        array.push(LNS, line.new(x1, array.get(KP, i - 1), x2, array.get(KP, i), color=cc, width=act ? zzW + 1 : zzW, style=trs ? line.style_dashed : line.style_solid))
+                        array.push(LNS, line.new(x1, array.get(KP, i - 1), x2, array.get(KP, i), color=cc, width=thin ? zzW : zzW + 1, style=trs ? line.style_dashed : line.style_solid))
                 // ОДНА подпись на колено, детали в тултипе
                 num = array.get(KN, i)
                 mc  = array.get(KM, i)
