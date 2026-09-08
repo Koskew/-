@@ -80,13 +80,18 @@ f_cstart() =>
             i -= 1
     o
 
-// куда считает действующий счёт: по первой точке после нуля
+// Куда считает действующий счёт. Обычно видно по первой точке после
+// нуля. Но на самой точке (0) следующего колена ещё нет — тогда берём
+// сторону нуля: счёт всегда стартует с вершины вниз и с низа вверх,
+// это заложено в f_recount (needHi = nd < 0).
 f_cdir(_o) =>
     n = array.size(KL)
     int d = 0
     if _o >= 0
         if _o + 1 < n
             d := f_isUp(array.get(KL, _o + 1)) ? 1 : -1
+        else if _o < array.size(KH)
+            d := array.get(KH, _o) ? -1 : 1
     d
 
 f_lab(_i) =>
@@ -481,12 +486,16 @@ if barstate.islast
                 array.push(LBS, label.new(db, dp, "слом", style=dt == 1 ? label.style_label_down : label.style_label_up, color=color.new(color.black, 100), textcolor=dt == 1 ? cDn : cUp, size=size.tiny))
 
 // ══════════════ ТАБЛИЦА ══════════════
-f_chainCur(_o) =>
+// Цепочка действующего счёта. Ноль отбит чертой; если счёт совсем
+// короткий, слева добирается хвост прошлого счёта — иначе на точке (0)
+// в строке остаётся одна метка и читать нечего.
+f_chainCur(_o, _min) =>
     n = array.size(KL)
     s = ""
-    if _o >= 0
-        for j = _o to n - 1
-            s := s + (j > _o ? ">" : "") + array.get(KL, j)
+    if _o >= 0 and n > 0
+        from = math.max(0, math.min(_o, n - _min))
+        for j = from to n - 1
+            s := s + (j == _o and j > from ? " | " : j > from ? ">" : "") + array.get(KL, j)
     s
 
 f_chain(_k) =>
@@ -554,7 +563,7 @@ if showT and barstate.islast
     a5 = f_cell(5, "счёт от", z0, cd == 0 ? color.gray : f_col(cd))
 
     a6 = f_cell(6, "колено", cn <= 0 ? "—" : (cn % 2 == 1 ? "импульсное" : "корректирующее") + " (" + str.tostring(cn) + ")" + cdn, cd == 0 ? color.new(color.aqua, 0) : f_col(cd))
-    ch = f_chainCur(csT)
+    ch = f_chainCur(csT, 4)
     a7 = f_cell(7, "цепочка", ch == "" ? f_chain(5) : ch, cd == 0 ? color.gray : f_col(cd))
 
     bxt = not boxOn ? "выключен" : bxActive ? "ДА  " + str.tostring(bxBot, format.mintick) + " — " + str.tostring(bxTop, format.mintick) : na(bxTop) ? "нет" : "набирается " + str.tostring(bxInside) + " из " + str.tostring(boxN)
