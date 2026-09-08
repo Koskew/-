@@ -549,8 +549,14 @@ if barstate.islast
                     lc0 = kd == 0 ? color.gray : f_col(kd)
                     lc  = act ? lc0 : color.new(lc0, 62)
                     kdn = kd == 1 ? "ВОСХОДЯЩИЙ счёт" : kd == -1 ? "НИСХОДЯЩИЙ счёт" : "счёт не определён"
-                    trn = trs ? "тренд: ПЕРЕХОД, был " + (t2 == 1 ? "восходящий" : "нисходящий") : t2 == 1 ? "тренд: восходящий" : t2 == -1 ? "тренд: нисходящий" : "тренд: не определён"
-                    tip = lb + "  " + str.tostring(pr, format.mintick) + "\n" + (num >= 0 ? "точка (" + str.tostring(num) + ") из 5 · " + (num % 2 == 1 ? "импульсное" : num == 0 ? "начало счёта" : "корректирующее") : "вне счёта") + "\n" + kdn + "\n" + trn + (kd != 0 and t2 != 0 and kd != t2 and not trs ? "   ← счёт против тренда" : "") + "\n" + (mud ? "МУТНОЕ: слилось " + str.tostring(mc) + " меток, поглощена " + str.tostring(ap, format.mintick) : "чистое колено")
+                    // прошедшее время: это состояние НА МОМЕНТ появления
+                    // колена, задним числом оно не переписывается
+                    trn = trs ? "на этом колене был ПЕРЕХОД от " + (t2 == 1 ? "восходящего" : "нисходящего") : t2 == 1 ? "на этом колене тренд был восходящий" : t2 == -1 ? "на этом колене тренд был нисходящий" : "на этом колене тренда не было"
+                    // строка «сейчас» — только когда состояние изменилось
+                    now = inTrans ? -2 : tr
+                    was = trs ? -2 : t2
+                    nw  = now == was ? "" : "\nсейчас " + (inTrans ? "ПЕРЕХОД" : tr == 1 ? "восходящий" : tr == -1 ? "нисходящий" : "не определён")
+                    tip = lb + "  " + str.tostring(pr, format.mintick) + "\n" + (num >= 0 ? "точка (" + str.tostring(num) + ") из 5 · " + (num % 2 == 1 ? "импульсное" : num == 0 ? "начало счёта" : "корректирующее") : "вне счёта") + "\n" + kdn + "\n" + trn + (kd != 0 and t2 != 0 and kd != t2 and not trs ? "   ← счёт шёл против тренда" : "") + nw + "\n" + (mud ? "МУТНОЕ: слилось " + str.tostring(mc) + " меток, поглощена " + str.tostring(ap, format.mintick) : "чистое колено")
                     array.push(LBS, label.new(x2, pr, txt, style=hh ? label.style_label_down : label.style_label_up, color=color.new(color.black, 100), textcolor=mud ? (act ? cMud : color.new(cMud, 62)) : lc, size=size.small, tooltip=tip))
 
     if drawLvl and not na(lvl) and tr != 0 and not inTrans
