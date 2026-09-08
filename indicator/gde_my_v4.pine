@@ -500,7 +500,7 @@ f_chain(_k) =>
 
 tpp = posT == "верх-право" ? position.top_right : posT == "верх-лево" ? position.top_left : posT == "низ-право" ? position.bottom_right : position.bottom_left
 tss = sizeT == "tiny" ? size.tiny : sizeT == "small" ? size.small : size.normal
-var table T = table.new(tpp, 2, 11, bgcolor=color.new(#000000, 10), border_width=1, border_color=color.new(color.gray, 75))
+var table T = table.new(tpp, 2, 12, bgcolor=color.new(#000000, 10), border_width=1, border_color=color.new(color.gray, 75))
 
 f_cell(_r, _k, _v, _c) =>
     table.cell(T, 0, _r, _k, text_color=color.new(color.silver, 25), text_halign=text.align_left, text_size=tss)
@@ -516,10 +516,28 @@ if showT and barstate.islast
     nm = tr == 1 ? "ВОСХОДЯЩИЙ" : tr == -1 ? "НИСХОДЯЩИЙ" : "не определён"
     st = inTrans ? "ПЕРЕХОД, был " + (pTr == 1 ? "восходящий" : "нисходящий") : nm + (na(trFrom) ? "" : ", " + str.tostring(bar_index - trFrom) + " бар")
     a1 = f_cell(1, "тренд", st, inTrans ? color.new(color.orange, 0) : tr == 0 ? color.gray : f_col(tr))
-    a2 = f_cell(2, "держится на", inTrans ? "— уровень пробит" : na(lvl) ? "—" : (tr == 1 ? "HL " : "LH ") + str.tostring(lvl, format.mintick) + "   запас до слома " + str.tostring(impAmp * fibDepth, format.mintick), inTrans ? color.new(color.orange, 0) : color.white)
+    a2 = f_cell(2, "держится на", inTrans ? "— уровень пробит" : na(lvl) ? "—" : (tr == 1 ? "HL " : "LH ") + str.tostring(lvl, format.mintick), inTrans ? color.new(color.orange, 0) : color.white)
+
+    // ЗАПАС — сколько хода осталось от цены до порога смерти, а не сам
+    // порог. Меряется в импульсных коленах: величина без размерности,
+    // поэтому не плывёт вместе с волатильностью.
+    // Замер на 2 годах (research/depth_check.py, 8782 бара в тренде):
+    // доля запаса от импульса -> вероятность смерти тренда за 10 баров
+    //   < 0.25  — 71%      0.50–1.00 — 16% (среднее по рынку 16%)
+    //   0.25–0.50 — 40%    1.00–2.00 —  5%      2.00+ — 1%
+    string rsv = "—"
+    color  rsc = color.gray
+    if not inTrans and not na(lvl) and tr != 0 and impAmp > 0
+        thr  = tr == 1 ? lvl - impAmp * fibDepth : lvl + impAmp * fibDepth
+        room = math.max(0.0, tr == 1 ? close - thr : thr - close)
+        k    = room / impAmp
+        risk = "за 10 бар тренд умирает в " + (k < 0.25 ? "71%" : k < 0.5 ? "40%" : k < 1.0 ? "16%, как в среднем" : k < 2.0 ? "5%" : "1%")
+        rsc := k < 0.25 ? cDn : k < 0.5 ? color.new(color.orange, 0) : k < 1.0 ? color.new(color.silver, 20) : cUp
+        rsv := str.tostring(room, format.mintick) + " = " + str.tostring(k, "#.##") + " импульса  ·  " + risk
+    a3 = f_cell(3, "запас", rsv, rsc)
 
     cn = array.size(KN) > 0 ? array.get(KN, array.size(KN) - 1) : -1
-    a3 = f_cell(3, "счёт", cn < 0 ? "вне счёта" : "точка (" + str.tostring(cn) + ") из 5", color.new(color.aqua, 0))
+    a4 = f_cell(4, "счёт", cn < 0 ? "вне счёта" : "точка (" + str.tostring(cn) + ") из 5", color.new(color.aqua, 0))
     csT = f_cstart()
     cd = f_cdir(csT)
     cdn = cd == 1 ? " восходящего счёта" : cd == -1 ? " нисходящего счёта" : ""
@@ -533,14 +551,14 @@ if showT and barstate.islast
         zl = array.get(KL, csT)
         zRev := cd == 1 ? zl == "LL" : cd == -1 ? zl == "HH" : false
         z0 := zl + " " + str.tostring(array.get(KP, csT), format.mintick) + ",  " + str.tostring(bar_index - array.get(KB, csT)) + " бар назад  ·  " + (zRev ? "разворотный" : "продолжение")
-    a4 = f_cell(4, "счёт от", z0, cd == 0 ? color.gray : f_col(cd))
+    a5 = f_cell(5, "счёт от", z0, cd == 0 ? color.gray : f_col(cd))
 
-    a5 = f_cell(5, "колено", cn <= 0 ? "—" : (cn % 2 == 1 ? "импульсное" : "корректирующее") + " (" + str.tostring(cn) + ")" + cdn, cd == 0 ? color.new(color.aqua, 0) : f_col(cd))
+    a6 = f_cell(6, "колено", cn <= 0 ? "—" : (cn % 2 == 1 ? "импульсное" : "корректирующее") + " (" + str.tostring(cn) + ")" + cdn, cd == 0 ? color.new(color.aqua, 0) : f_col(cd))
     ch = f_chainCur(csT)
-    a6 = f_cell(6, "цепочка", ch == "" ? f_chain(5) : ch, cd == 0 ? color.gray : f_col(cd))
+    a7 = f_cell(7, "цепочка", ch == "" ? f_chain(5) : ch, cd == 0 ? color.gray : f_col(cd))
 
     bxt = not boxOn ? "выключен" : bxActive ? "ДА  " + str.tostring(bxBot, format.mintick) + " — " + str.tostring(bxTop, format.mintick) : na(bxTop) ? "нет" : "набирается " + str.tostring(bxInside) + " из " + str.tostring(boxN)
-    a7 = f_cell(7, "боковик", bxt, bxActive ? cBoxB : color.gray)
+    a8 = f_cell(8, "боковик", bxt, bxActive ? cBoxB : color.gray)
 
     nk = array.size(KM)
     lastMud = nk > 0 ? array.get(KM, nk - 1) : 1
@@ -552,8 +570,8 @@ if showT and barstate.islast
             if array.get(KM, q) >= 2
                 mudC += 1
     mudTxt = (lastMud >= 2 ? "последнее колено МУТНОЕ, слилось " + str.tostring(lastMud) + " меток  |  " : "последнее чистое  |  ") + "мутных в счёте: " + str.tostring(mudC) + " из " + str.tostring(cnt)
-    a8 = f_cell(8, "чистота", mudTxt, lastMud >= 2 ? cMud : color.new(color.silver, 30))
+    a9 = f_cell(9, "чистота", mudTxt, lastMud >= 2 ? cMud : color.new(color.silver, 30))
 
     pt = pTr == 0 ? "—" : (pTr == 1 ? "восходящий" : "нисходящий") + ", слом на " + str.tostring(pDeath, format.mintick) + ", " + str.tostring(bar_index - pDeathBar) + " бар назад"
-    a9 = f_cell(9, "прошлый тренд", pt, color.new(color.silver, 30))
-    a10 = f_cell(10, "пауза", inTrans ? str.tostring(math.min(marks, 2)) + " из 2 меток — ждём" : "—", inTrans ? color.new(color.orange, 0) : color.gray)
+    a10 = f_cell(10, "прошлый тренд", pt, color.new(color.silver, 30))
+    a11 = f_cell(11, "пауза", inTrans ? str.tostring(math.min(marks, 2)) + " из 2 меток — ждём" : "—", inTrans ? color.new(color.orange, 0) : color.gray)
