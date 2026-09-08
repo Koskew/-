@@ -376,7 +376,11 @@ if barstate.isconfirmed
                         impAmp := math.abs(p1 - p2)
 
         // ── 5. уровень тренда ──
-        if tr == 1
+        // В ПЕРЕХОДЕ уровень не восстанавливается. Иначе после смерти
+        // поиск назад по коленам воскрешал старый HL или LH, цена
+        // пробивала и его, и регистрировалась ВТОРАЯ смерть того же
+        // тренда — с чужим уровнем в «прошлом тренде» и в пороге рывка.
+        if not inTrans and tr == 1
             if l1 == "HL"
                 lvl := p1
                 lvlProv := false
@@ -387,7 +391,7 @@ if barstate.isconfirmed
                         lvl := array.get(KP, j)
                         break
                     j -= 1
-        if tr == -1
+        if not inTrans and tr == -1
             if l1 == "LH"
                 lvl := p1
                 lvlProv := false
