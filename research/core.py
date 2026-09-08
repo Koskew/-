@@ -16,6 +16,7 @@
 import csv
 
 L = R = 5
+MAXK = 80          # как в Pine: массив колен обрезается сверху
 up = lambda l: l in ("HH", "HL")
 
 
@@ -95,6 +96,9 @@ class Core:
             self.KP.append(price); self.KH.append(isHi); self.KB.append(bar)
             self.KM.append(1); self.KT.append(self.tr); self.KX.append(self.inTrans)
             fresh = True
+            if len(self.KP) > MAXK:
+                for a in (self.KP, self.KH, self.KB, self.KM, self.KT, self.KX):
+                    a.pop(0)
         self._relabel(); self._recount()
         return fresh
 
