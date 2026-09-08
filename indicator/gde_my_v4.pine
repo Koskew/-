@@ -45,6 +45,7 @@ cDn   = input.color(#e0342c, "Нисходящий", group=gE)
 cBox  = input.color(color.new(#9c27b0, 88), "Заливка боковика", group=gE)
 cBoxB = input.color(#9c27b0, "Рамка боковика", group=gE)
 zzW   = input.int(2, "Толщина зиг-зага", minval=1, maxval=4, group=gE)
+zzMode = input.string("по ходу ноги", "Чем красить зиг-заг", options=["по ходу ноги","по счёту","по тренду"], group=gE, tooltip="«по ходу ноги» — линия вниз всегда красная, вверх всегда зелёная, врать не может. «по счёту» — цвет счёта, к которому принадлежит колено. «по тренду» — как было: цвет действующего тренда, поэтому падение внутри живого восходящего тренда рисуется зелёным.")
 
 gF = "Таблица"
 showT = input.bool(true, "Таблица", group=gF)
@@ -453,11 +454,15 @@ if barstate.islast
             x1 = array.get(KB, i - 1)
             x2 = array.get(KB, i)
             if last_bar_index - x1 <= winBars
-                t2 = array.get(KT, i)
-                // в ПЕРЕХОДЕ тренд не подтверждён — красим ногу по её
-                // фактическому ходу, а не по умершему тренду
+                t2  = array.get(KT, i)
                 bool trs = array.get(KX, i)
-                cc0 = trs ? (array.get(KP, i) > array.get(KP, i - 1) ? cUp : cDn) : t2 == 0 ? color.gray : f_col(t2)
+                kd  = f_kdir(i)
+                arr = kd == 1 ? "↑" : kd == -1 ? "↓" : ""
+                // Куда реально пошла нога. Режим «по тренду» этого не
+                // видит: пока тренд жив, любая нога красится его цветом,
+                // и обвал внутри восходящего тренда выходит зелёным.
+                bool legUp = array.get(KP, i) > array.get(KP, i - 1)
+                cc0 = zzMode == "по ходу ноги" ? (legUp ? cUp : cDn) : zzMode == "по счёту" ? (kd == 0 ? color.gray : f_col(kd)) : trs ? (legUp ? cUp : cDn) : t2 == 0 ? color.gray : f_col(t2)
                 // действующая цепочка — колена текущего счёта, от его нуля
                 bool act = false
                 if cs >= 0
@@ -476,8 +481,6 @@ if barstate.islast
                 mud = mc >= 2
                 if drawMud and mud and not na(ap)
                     array.push(LNS, line.new(x1, ap, x2, ap, color=color.new(cMud, 20), width=1, style=line.style_dotted))
-                kd  = f_kdir(i)
-                arr = kd == 1 ? "↑" : kd == -1 ? "↓" : ""
                 string txt = na
                 if labMode == "номер + мутность"
                     txt := (num >= 0 ? "(" + str.tostring(num) + ")" : "·") + arr + (mud ? "м" : "")
@@ -486,10 +489,12 @@ if barstate.islast
                 else if labMode == "номер и метка"
                     txt := (num >= 0 ? "(" + str.tostring(num) + ") " : "") + lb + arr + (mud ? " м" : "")
                 if not na(txt)
+                    lc0 = kd == 0 ? color.gray : f_col(kd)
+                    lc  = act ? lc0 : color.new(lc0, 62)
                     kdn = kd == 1 ? "ВОСХОДЯЩИЙ счёт" : kd == -1 ? "НИСХОДЯЩИЙ счёт" : "счёт не определён"
                     trn = trs ? "тренд: ПЕРЕХОД, был " + (t2 == 1 ? "восходящий" : "нисходящий") : t2 == 1 ? "тренд: восходящий" : t2 == -1 ? "тренд: нисходящий" : "тренд: не определён"
                     tip = lb + "  " + str.tostring(pr, format.mintick) + "\n" + (num >= 0 ? "точка (" + str.tostring(num) + ") из 5 · " + (num % 2 == 1 ? "импульсное" : num == 0 ? "начало счёта" : "корректирующее") : "вне счёта") + "\n" + kdn + "\n" + trn + (kd != 0 and t2 != 0 and kd != t2 and not trs ? "   ← счёт против тренда" : "") + "\n" + (mud ? "МУТНОЕ: слилось " + str.tostring(mc) + " меток, поглощена " + str.tostring(ap, format.mintick) : "чистое колено")
-                    array.push(LBS, label.new(x2, pr, txt, style=hh ? label.style_label_down : label.style_label_up, color=color.new(color.black, 100), textcolor=mud ? (act ? cMud : color.new(cMud, 62)) : cc, size=size.small, tooltip=tip))
+                    array.push(LBS, label.new(x2, pr, txt, style=hh ? label.style_label_down : label.style_label_up, color=color.new(color.black, 100), textcolor=mud ? (act ? cMud : color.new(cMud, 62)) : lc, size=size.small, tooltip=tip))
 
     if drawLvl and not na(lvl) and tr != 0 and not inTrans
         x0 = na(trFrom) ? bar_index - 50 : trFrom
