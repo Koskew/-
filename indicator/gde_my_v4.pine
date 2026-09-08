@@ -66,6 +66,28 @@ var float[]  KA = array.new_float()    // цена первой, поглощё�
 
 f_isUp(_l) => _l == "HH" or _l == "HL"
 
+// начало ДЕЙСТВУЮЩЕГО счёта: последнее колено с номером (0)
+f_cstart() =>
+    n = array.size(KN)
+    int o = -1
+    if n > 0
+        i = n - 1
+        while i >= 0
+            if array.get(KN, i) == 0
+                o := i
+                break
+            i -= 1
+    o
+
+// куда считает действующий счёт: по первой точке после нуля
+f_cdir(_o) =>
+    n = array.size(KL)
+    int d = 0
+    if _o >= 0
+        if _o + 1 < n
+            d := f_isUp(array.get(KL, _o + 1)) ? 1 : -1
+    d
+
 f_lab(_i) =>
     hi = array.get(KH, _i)
     float prev = na
@@ -399,16 +421,22 @@ if barstate.islast
         label.delete(array.pop(LBS))
 
     n = array.size(KP)
+    cs = f_cstart()
     if n >= 2
         for i = 1 to n - 1
             x1 = array.get(KB, i - 1)
             x2 = array.get(KB, i)
             if last_bar_index - x1 <= winBars
                 t2 = array.get(KT, i)
-                cc = t2 == 0 ? color.gray : f_col(t2)
+                cc0 = t2 == 0 ? color.gray : f_col(t2)
+                // действующая цепочка — колена текущего счёта, от его нуля
+                bool act = false
+                if cs >= 0
+                    act := i > cs
+                cc = act ? cc0 : color.new(cc0, 62)
                 if drawZZ
                     if array.get(KT, i - 1) == t2
-                        array.push(LNS, line.new(x1, array.get(KP, i - 1), x2, array.get(KP, i), color=cc, width=zzW))
+                        array.push(LNS, line.new(x1, array.get(KP, i - 1), x2, array.get(KP, i), color=cc, width=act ? zzW + 1 : zzW))
                 // ОДНА подпись на колено, детали в тултипе
                 num = array.get(KN, i)
                 mc  = array.get(KM, i)
@@ -428,9 +456,9 @@ if barstate.islast
                     txt := (num >= 0 ? "(" + str.tostring(num) + ") " : "") + lb + (mud ? " м" : "")
                 if not na(txt)
                     tip = lb + "  " + str.tostring(pr, format.mintick) + "\n" + (num >= 0 ? "точка (" + str.tostring(num) + ") из 5 · " + (num % 2 == 1 ? "импульсное" : num == 0 ? "начало счёта" : "корректирующее") : "вне счёта") + "\n" + (mud ? "МУТНОЕ: слилось " + str.tostring(mc) + " меток, поглощена " + str.tostring(ap, format.mintick) : "чистое колено")
-                    array.push(LBS, label.new(x2, pr, txt, style=hh ? label.style_label_down : label.style_label_up, color=color.new(color.black, 100), textcolor=mud ? cMud : cc, size=size.small, tooltip=tip))
+                    array.push(LBS, label.new(x2, pr, txt, style=hh ? label.style_label_down : label.style_label_up, color=color.new(color.black, 100), textcolor=mud ? (act ? cMud : color.new(cMud, 62)) : cc, size=size.small, tooltip=tip))
 
-    if drawLvl and not na(lvl) and tr != 0
+    if drawLvl and not na(lvl) and tr != 0 and not inTrans
         x0 = na(trFrom) ? bar_index - 50 : trFrom
         array.push(LNS, line.new(x0, lvl, bar_index + 8, lvl, color=color.new(f_col(tr), 25), width=2, style=line.style_dashed))
         array.push(LBS, label.new(bar_index + 8, lvl, (tr == 1 ? "HL " : "LH ") + str.tostring(lvl, format.mintick), style=label.style_label_left, color=color.new(f_col(tr), 85), textcolor=f_col(tr), size=size.small))
@@ -446,6 +474,14 @@ if barstate.islast
                 array.push(LBS, label.new(db, dp, "слом", style=dt == 1 ? label.style_label_down : label.style_label_up, color=color.new(color.black, 100), textcolor=dt == 1 ? cDn : cUp, size=size.tiny))
 
 // ══════════════ ТАБЛИЦА ══════════════
+f_chainCur(_o) =>
+    n = array.size(KL)
+    s = ""
+    if _o >= 0
+        for j = _o to n - 1
+            s := s + (j > _o ? ">" : "") + array.get(KL, j)
+    s
+
 f_chain(_k) =>
     n = array.size(KL)
     m = math.min(_k, n)
@@ -473,25 +509,30 @@ if showT and barstate.islast
     nm = tr == 1 ? "ВОСХОДЯЩИЙ" : tr == -1 ? "НИСХОДЯЩИЙ" : "не определён"
     st = inTrans ? "ПЕРЕХОД, был " + (pTr == 1 ? "восходящий" : "нисходящий") : nm + (na(trFrom) ? "" : ", " + str.tostring(bar_index - trFrom) + " бар")
     a1 = f_cell(1, "тренд", st, inTrans ? color.new(color.orange, 0) : tr == 0 ? color.gray : f_col(tr))
-    a2 = f_cell(2, "держится на", na(lvl) ? "—" : (tr == 1 ? "HL " : "LH ") + str.tostring(lvl, format.mintick) + "   запас до слома " + str.tostring(impAmp * fibDepth, format.mintick), color.white)
+    a2 = f_cell(2, "держится на", inTrans ? "— уровень пробит" : na(lvl) ? "—" : (tr == 1 ? "HL " : "LH ") + str.tostring(lvl, format.mintick) + "   запас до слома " + str.tostring(impAmp * fibDepth, format.mintick), inTrans ? color.new(color.orange, 0) : color.white)
 
     cn = array.size(KN) > 0 ? array.get(KN, array.size(KN) - 1) : -1
     a3 = f_cell(3, "счёт", cn < 0 ? "вне счёта" : "точка (" + str.tostring(cn) + ") из 5", color.new(color.aqua, 0))
-    a4 = f_cell(4, "колено", cn <= 0 ? "—" : (cn % 2 == 1 ? "импульсное" : "корректирующее") + " (" + str.tostring(cn) + ")", color.new(color.aqua, 0))
-    a5 = f_cell(5, "цепочка", f_chain(5), tr == 0 ? color.gray : f_col(tr))
+    csT = f_cstart()
+    cd = f_cdir(csT)
+    cdn = cd == 1 ? " восходящего счёта" : cd == -1 ? " нисходящего счёта" : ""
+    a4 = f_cell(4, "колено", cn <= 0 ? "—" : (cn % 2 == 1 ? "импульсное" : "корректирующее") + " (" + str.tostring(cn) + ")" + cdn, cd == 0 ? color.new(color.aqua, 0) : f_col(cd))
+    ch = f_chainCur(csT)
+    a5 = f_cell(5, "цепочка", ch == "" ? f_chain(5) : ch, cd == 0 ? color.gray : f_col(cd))
 
     bxt = not boxOn ? "выключен" : bxActive ? "ДА  " + str.tostring(bxBot, format.mintick) + " — " + str.tostring(bxTop, format.mintick) : na(bxTop) ? "нет" : "набирается " + str.tostring(bxInside) + " из " + str.tostring(boxN)
     a6 = f_cell(6, "боковик", bxt, bxActive ? cBoxB : color.gray)
 
     nk = array.size(KM)
     lastMud = nk > 0 ? array.get(KM, nk - 1) : 1
-    mud5 = 0
-    if nk > 0
-        i5 = math.max(0, nk - 5)
-        for q = i5 to nk - 1
+    mudC = 0
+    cnt  = 0
+    if csT >= 0
+        for q = csT to nk - 1
+            cnt += 1
             if array.get(KM, q) >= 2
-                mud5 += 1
-    mudTxt = lastMud >= 2 ? "последнее колено МУТНОЕ, слилось " + str.tostring(lastMud) + " меток" : "последнее чистое  |  мутных в пятёрке: " + str.tostring(mud5)
+                mudC += 1
+    mudTxt = (lastMud >= 2 ? "последнее колено МУТНОЕ, слилось " + str.tostring(lastMud) + " меток  |  " : "последнее чистое  |  ") + "мутных в счёте: " + str.tostring(mudC) + " из " + str.tostring(cnt)
     a7 = f_cell(7, "чистота", mudTxt, lastMud >= 2 ? cMud : color.new(color.silver, 30))
 
     pt = pTr == 0 ? "—" : (pTr == 1 ? "восходящий" : "нисходящий") + ", слом на " + str.tostring(pDeath, format.mintick) + ", " + str.tostring(bar_index - pDeathBar) + " бар назад"
