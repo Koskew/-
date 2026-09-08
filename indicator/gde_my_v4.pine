@@ -63,6 +63,7 @@ var int[]    KT = array.new_int()
 var int[]    KN = array.new_int()
 var int[]    KM = array.new_int()      // сколько сырых меток слилось в колено
 var float[]  KA = array.new_float()    // цена первой, поглощённой метки
+var bool[]   KX = array.new_bool()      // колено пришло в ПЕРЕХОДЕ — тренд ещё не подтверждён
 
 f_isUp(_l) => _l == "HH" or _l == "HL"
 
@@ -199,6 +200,7 @@ f_pushKnee(_price, _bar, _hi) =>
         array.push(KB, _bar)
         array.push(KH, _hi)
         array.push(KT, tr)
+        array.push(KX, inTrans)
         array.push(KM, 1)
         array.push(KA, na)
         if array.size(KP) > MAXK
@@ -206,6 +208,7 @@ f_pushKnee(_price, _bar, _hi) =>
             array.shift(KB)
             array.shift(KH)
             array.shift(KT)
+            array.shift(KX)
             array.shift(KM)
             array.shift(KA)
             shifted := 1
@@ -335,6 +338,7 @@ if barstate.isconfirmed
                     j -= 1
         if array.size(KT) > 0
             array.set(KT, array.size(KT) - 1, tr)
+            array.set(KX, array.size(KX) - 1, inTrans)
 
         // ── 6. БОКОВИК: отдельный слой ──
         if boxOn and fresh
@@ -428,7 +432,10 @@ if barstate.islast
             x2 = array.get(KB, i)
             if last_bar_index - x1 <= winBars
                 t2 = array.get(KT, i)
-                cc0 = t2 == 0 ? color.gray : f_col(t2)
+                // в ПЕРЕХОДЕ тренд не подтверждён — красим ногу по её
+                // фактическому ходу, а не по умершему тренду
+                bool trs = array.get(KX, i)
+                cc0 = trs ? (array.get(KP, i) > array.get(KP, i - 1) ? cUp : cDn) : t2 == 0 ? color.gray : f_col(t2)
                 // действующая цепочка — колена текущего счёта, от его нуля
                 bool act = false
                 if cs >= 0
@@ -436,7 +443,7 @@ if barstate.islast
                 cc = act ? cc0 : color.new(cc0, 62)
                 if drawZZ
                     if array.get(KT, i - 1) == t2
-                        array.push(LNS, line.new(x1, array.get(KP, i - 1), x2, array.get(KP, i), color=cc, width=act ? zzW + 1 : zzW))
+                        array.push(LNS, line.new(x1, array.get(KP, i - 1), x2, array.get(KP, i), color=cc, width=act ? zzW + 1 : zzW, style=trs ? line.style_dashed : line.style_solid))
                 // ОДНА подпись на колено, детали в тултипе
                 num = array.get(KN, i)
                 mc  = array.get(KM, i)
@@ -493,7 +500,7 @@ f_chain(_k) =>
 
 tpp = posT == "верх-право" ? position.top_right : posT == "верх-лево" ? position.top_left : posT == "низ-право" ? position.bottom_right : position.bottom_left
 tss = sizeT == "tiny" ? size.tiny : sizeT == "small" ? size.small : size.normal
-var table T = table.new(tpp, 2, 10, bgcolor=color.new(#000000, 10), border_width=1, border_color=color.new(color.gray, 75))
+var table T = table.new(tpp, 2, 11, bgcolor=color.new(#000000, 10), border_width=1, border_color=color.new(color.gray, 75))
 
 f_cell(_r, _k, _v, _c) =>
     table.cell(T, 0, _r, _k, text_color=color.new(color.silver, 25), text_halign=text.align_left, text_size=tss)
@@ -516,12 +523,24 @@ if showT and barstate.islast
     csT = f_cstart()
     cd = f_cdir(csT)
     cdn = cd == 1 ? " восходящего счёта" : cd == -1 ? " нисходящего счёта" : ""
-    a4 = f_cell(4, "колено", cn <= 0 ? "—" : (cn % 2 == 1 ? "импульсное" : "корректирующее") + " (" + str.tostring(cn) + ")" + cdn, cd == 0 ? color.new(color.aqua, 0) : f_col(cd))
+
+    // ноль счёта: HH у нисходящего / LL у восходящего = счёт РАЗВОРОТНЫЙ,
+    // он стартует с вершины прошлого движения. LH или HL = ПРОДОЛЖЕНИЕ,
+    // рынок уже шёл в эту сторону. На золоте разворотных около половины.
+    string z0 = "—"
+    bool zRev = false
+    if csT >= 0
+        zl = array.get(KL, csT)
+        zRev := cd == 1 ? zl == "LL" : cd == -1 ? zl == "HH" : false
+        z0 := zl + " " + str.tostring(array.get(KP, csT), format.mintick) + ",  " + str.tostring(bar_index - array.get(KB, csT)) + " бар назад  ·  " + (zRev ? "разворотный" : "продолжение")
+    a4 = f_cell(4, "счёт от", z0, cd == 0 ? color.gray : f_col(cd))
+
+    a5 = f_cell(5, "колено", cn <= 0 ? "—" : (cn % 2 == 1 ? "импульсное" : "корректирующее") + " (" + str.tostring(cn) + ")" + cdn, cd == 0 ? color.new(color.aqua, 0) : f_col(cd))
     ch = f_chainCur(csT)
-    a5 = f_cell(5, "цепочка", ch == "" ? f_chain(5) : ch, cd == 0 ? color.gray : f_col(cd))
+    a6 = f_cell(6, "цепочка", ch == "" ? f_chain(5) : ch, cd == 0 ? color.gray : f_col(cd))
 
     bxt = not boxOn ? "выключен" : bxActive ? "ДА  " + str.tostring(bxBot, format.mintick) + " — " + str.tostring(bxTop, format.mintick) : na(bxTop) ? "нет" : "набирается " + str.tostring(bxInside) + " из " + str.tostring(boxN)
-    a6 = f_cell(6, "боковик", bxt, bxActive ? cBoxB : color.gray)
+    a7 = f_cell(7, "боковик", bxt, bxActive ? cBoxB : color.gray)
 
     nk = array.size(KM)
     lastMud = nk > 0 ? array.get(KM, nk - 1) : 1
@@ -533,8 +552,8 @@ if showT and barstate.islast
             if array.get(KM, q) >= 2
                 mudC += 1
     mudTxt = (lastMud >= 2 ? "последнее колено МУТНОЕ, слилось " + str.tostring(lastMud) + " меток  |  " : "последнее чистое  |  ") + "мутных в счёте: " + str.tostring(mudC) + " из " + str.tostring(cnt)
-    a7 = f_cell(7, "чистота", mudTxt, lastMud >= 2 ? cMud : color.new(color.silver, 30))
+    a8 = f_cell(8, "чистота", mudTxt, lastMud >= 2 ? cMud : color.new(color.silver, 30))
 
     pt = pTr == 0 ? "—" : (pTr == 1 ? "восходящий" : "нисходящий") + ", слом на " + str.tostring(pDeath, format.mintick) + ", " + str.tostring(bar_index - pDeathBar) + " бар назад"
-    a8 = f_cell(8, "прошлый тренд", pt, color.new(color.silver, 30))
-    a9 = f_cell(9, "пауза", inTrans ? str.tostring(math.min(marks, 2)) + " из 2 меток — ждём" : "—", inTrans ? color.new(color.orange, 0) : color.gray)
+    a9 = f_cell(9, "прошлый тренд", pt, color.new(color.silver, 30))
+    a10 = f_cell(10, "пауза", inTrans ? str.tostring(math.min(marks, 2)) + " из 2 меток — ждём" : "—", inTrans ? color.new(color.orange, 0) : color.gray)
