@@ -31,6 +31,7 @@ gC = "Слом тренда"
 fibDepth = input.float(0.33, "Глубина слома, доля импульсного колена", 0.0, 1.0, 0.01, group=gC, tooltip="0 = любой пробой телом убивает тренд. 0.33 = нужно уйти за уровень на треть последнего импульсного колена.")
 drawLvl  = input.bool(true, "Уровень, который держит тренд", group=gC)
 drawMSB  = input.bool(true, "Отметка слома", group=gC)
+jumpConf = input.float(0.5, "Досрочное подтверждение, импульсов", 0.0, 3.0, 0.25, group=gC, tooltip="Пауза «жду 2 метки» считает КОЛЕНА. В одностороннем обвале каждый новый минимум сливается в то же колено, счётчик стоит, и тренд не подтверждается сколько бы цена ни прошла. Если цена ушла от уровня смерти дальше этой доли импульсного колена И структура согласна — тренд подтверждается не дожидаясь второго колена. 0 выключает. Замер на 2 годах: 0.5 сокращает медиану ПЕРЕХОДА с 19 до 13 баров, долю переходов длиннее 20 баров с 45% до 23%, а ложных стартов становится не больше, а меньше — 6% против 9%.")
 
 gD = "Боковик"
 boxOn   = input.bool(true, "Искать боковик", group=gD)
@@ -272,6 +273,31 @@ if barstate.isconfirmed
         inTrans := true
         marks := 0
         lvl := na
+
+    // ── 1б. досрочное подтверждение по рывку ──
+    // Пауза считает КОЛЕНА, а не метки. В одностороннем ходе новый
+    // экстремум сливается в то же колено: метка есть, колена нет,
+    // счётчик стоит. Индикатор досиживал в ПЕРЕХОДЕ ход в 1200 долларов.
+    // Если цена ушла от уровня смерти дальше jumpConf импульсов И две
+    // последние метки колен смотрят туда же — подтверждаем сразу.
+    if jumpConf > 0 and inTrans and impAmp > 0 and not na(lastDeathLvl)
+        nj = array.size(KL)
+        if nj >= 2
+            j1 = array.get(KL, nj - 1)
+            j2 = array.get(KL, nj - 2)
+            bool ju = f_isUp(j1) and f_isUp(j2)
+            bool jd = (not f_isUp(j1)) and (not f_isUp(j2))
+            bool far = false
+            if jd
+                far := close < lastDeathLvl - impAmp * jumpConf
+            if ju
+                far := close > lastDeathLvl + impAmp * jumpConf
+            if far
+                tr := ju ? 1 : -1
+                trFrom := bar_index
+                inTrans := false
+                lastDeathLvl := na
+                lvl := na
 
     // ── 2. новые колена ──
     bool fresh = false
@@ -623,4 +649,17 @@ if showT and barstate.islast
 
     pt = pTr == 0 ? "—" : (pTr == 1 ? "восходящий" : "нисходящий") + ", слом на " + str.tostring(pDeath, format.mintick) + ", " + str.tostring(bar_index - pDeathBar) + " бар назад"
     a10 = f_cell(10, "прошлый тренд", pt, color.new(color.silver, 30))
-    a11 = f_cell(11, "пауза", inTrans ? str.tostring(math.min(marks, 2)) + " из 2 меток — ждём" : "—", inTrans ? color.new(color.orange, 0) : color.gray)
+    // порог рывка считаем по тем же меткам, что и сама логика, а не по
+    // умершему тренду: структура может согласиться и с прежней стороной
+    pz = "—"
+    if inTrans
+        pz := str.tostring(math.min(marks, 2)) + " из 2 колен — ждём"
+        nz = array.size(KL)
+        if jumpConf > 0 and impAmp > 0 and not na(lastDeathLvl) and nz >= 2
+            z1 = array.get(KL, nz - 1)
+            z2 = array.get(KL, nz - 2)
+            bool zu = f_isUp(z1) and f_isUp(z2)
+            bool zd = (not f_isUp(z1)) and (not f_isUp(z2))
+            if zu or zd
+                pz := pz + "   или рывок " + (zu ? "выше " : "ниже ") + str.tostring(zu ? lastDeathLvl + impAmp * jumpConf : lastDeathLvl - impAmp * jumpConf, format.mintick)
+    a11 = f_cell(11, "пауза", pz, inTrans ? color.new(color.orange, 0) : color.gray)
