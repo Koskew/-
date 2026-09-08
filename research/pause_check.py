@@ -24,7 +24,7 @@ for i in range(L, len(rows) - R):
         at.setdefault(i + R, []).append((i, lo[i], False))
 up = lambda l: l in ("HH", "HL")
 
-def run(mode, jump=0.0):
+def run(mode, jump=0.0, prov=False):
     K = []; KL = []
     tr, lvl, imp, inTrans, marks, lastD = 0, None, 0.0, False, 0, None
     trStart, trFrom = None, None
@@ -61,9 +61,13 @@ def run(mode, jump=0.0):
             if far:
                 if trStart is not None: spans.append(b - trStart)
                 tr, trFrom, inTrans, imp = (1 if u2 else -1), b, False, imp
+                dl = lastD
                 lastD = None
                 conf.append(b)
-                if tr == 1:
+                if prov:
+                    # провизорный уровень: тот самый, что убил прошлый тренд
+                    lvl = dl
+                elif tr == 1:
                     lvl = next((K[j][1] for j in range(len(KL)-1, -1, -1) if KL[j] == "HL"), None)
                 else:
                     lvl = next((K[j][1] for j in range(len(KL)-1, -1, -1) if KL[j] == "LH"), None)
@@ -102,12 +106,10 @@ def run(mode, jump=0.0):
 
 print(f'{"":>10} {"ПЕРЕХОДОВ":>10} {"медиана":>9} {">20б":>6} {"время в":>9} {"жизнь":>8} {"умерли за":>11}')
 print(f'{"":>10} {"":>10} {"длина":>9} {"":>6} {"ПЕРЕХОДЕ":>9} {"тренда":>8} {"10 баров":>11}')
-for mode, jp, nm in (('колена', 0.0, 'колена'), ('метки', 0.0, 'метки'),
-                     ('колена', 2.0, 'рывок 2.0'), ('колена', 1.5, 'рывок 1.5'),
-                     ('колена', 1.25,'рывок 1.25'),('колена', 1.0, 'рывок 1.0'),
-                     ('колена', 0.75,'рывок 0.75'),('колена', 0.5, 'рывок 0.5'),
-                     ('колена', 0.25,'рывок 0.25')):
-    sp, li, cf, tb = run(mode, jp)
+VAR = (('колена',0.0,False,'колена'), ('колена',0.5,False,'рывок 0.5'),
+       ('колена',0.5,True, 'рывок 0.5 + провиз'), ('колена',1.0,True,'рывок 1.0 + провиз'))
+for mode, jp, pv, nm in VAR:
+    sp, li, cf, tb = run(mode, jp, pv)
     mode = nm
     dead = sorted(li)
     # сколько подтверждений умерло в пределах 10 баров
