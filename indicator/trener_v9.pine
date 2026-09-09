@@ -989,8 +989,13 @@ c_other = not na(v5_vd) and not (c_entry or c_ban or c_trend or c_knee or c_slom
 f_dotcol() =>
     c_entry ? (v9_q >= 3 ? col_q3 : v9_q == 2 ? col_q2 : col_q1) : col_skip
 
+// Размер держим таким же, как в v8: вход — small, пропуск — tiny.
+// location.belowbar и yloc.belowbar отступают от свечи в ПИКСЕЛЯХ, а не в
+// цене. Чем крупнее фигура, тем больше отступ, и тем сильнее точка ездит
+// относительно свечей при смене масштаба. size.normal делал это заметным.
+// Балл различается ЦВЕТОМ, размер в этом не участвует.
 f_dotsz() =>
-    c_entry ? (v9_q >= 3 ? size.normal : v9_q == 2 ? size.small : size.tiny) : size.tiny
+    c_entry ? size.small : size.tiny
 
 if show_tips and in_tip and not na(v5_vd) and ((c_entry and show_entry) or (not c_entry and show_skip))
     label.new(bar_index, na, "", yloc=yloc.belowbar, style=label.style_circle, color=f_dotcol(), size=f_dotsz(), tooltip=v5_chk)
@@ -1000,9 +1005,9 @@ q_ok  = c_entry and v9_q >= 3
 q_mid = c_entry and v9_q == 2
 q_low = c_entry and v9_q <= 1
 
-plotshape(no_tip and show_entry and q_ok,  title="Вход · балл 3",   style=shape.circle, location=location.belowbar, color=col_q3, size=size.normal)
+plotshape(no_tip and show_entry and q_ok,  title="Вход · балл 3",   style=shape.circle, location=location.belowbar, color=col_q3, size=size.small)
 plotshape(no_tip and show_entry and q_mid, title="Вход · балл 2",   style=shape.circle, location=location.belowbar, color=col_q2, size=size.small)
-plotshape(no_tip and show_entry and q_low, title="Вход · балл 0-1", style=shape.circle, location=location.belowbar, color=col_q1, size=size.tiny)
+plotshape(no_tip and show_entry and q_low, title="Вход · балл 0-1", style=shape.circle, location=location.belowbar, color=col_q1, size=size.small)
 plotshape(no_tip and show_skip and not c_entry and not na(v5_vd), title="Пропуск", style=shape.circle, location=location.belowbar, color=col_skip, size=size.tiny)
 
 // старая раскладка по причине — если переключить режим
