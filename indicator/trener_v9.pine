@@ -1215,10 +1215,13 @@ f_block(_row, _txt) =>
     table.cell(T, 2, _row, "", bgcolor=color.new(#1a1a2e, 0), text_size=size.tiny)
     table.merge_cells(T, 0, _row, 2, _row)
 
-// строка на всю ширину: подпись слева, значение через две колонки
+// строка на всю ширину: подпись слева, значение через две колонки.
+// Возвращает номер строки: merge_cells сам по себе void, и без возврата
+// присваивание результата было бы ошибкой компиляции.
 f_wide(_row) =>
     table.cell(T, 2, _row, "", text_size=size.small)
     table.merge_cells(T, 1, _row, 2, _row)
+    _row
 
 f_rowW(_r, _k, _v5, _c5, _v2, _c2, _tip) =>
     table.cell(T, 0, _r, _k, text_color=color.new(color.silver, 25), text_halign=text.align_left, text_size=size.small, tooltip=_tip)
