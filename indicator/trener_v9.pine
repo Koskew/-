@@ -1,14 +1,36 @@
 //@version=5
 // ═══════════════════════════════════════════════════════════════════
-// ТРЕНАЖЁР v8 — чистая пересборка. Этапы п.1-4: точки+причины, линии, таблица.
-// Логика вердиктов сверена с engine_v5.py повердиктно: 9416/9416 (0 расхождений),
-// сделки — 939/939 один в один. Проверено на графике OANDA:XAUUSD (июнь 2026).
-// Цвета точек: яркость = учебная ценность, не частота.
-//   🟡 ВХОД (10.0%)             🔴 запрет структуры (3.3%) — крупнее: v2-глаз входит!
-//   🟠 против тренда (10.3%)    🟣 слом (5.4%)
-//   ⚪ заморозка (25.0%)        ⚫ бол.свеча (15.5%)      ▫️ нет RR (30.5%)
-// Наведи мышь на точку в свежем окне — всплывёт чек-лист цепочки решения.
-// Данные: сделки живут медиана 4 бара (80% < 17), одновременно до 5 позиций.
+// ТРЕНАЖЁР v9. База — v8, чей каскад сверен с engine_v5.py повердиктно
+// 9416/9416 и по сделкам 939/939. Логика каскада не тронута, добавлена
+// одна ступень и переделано отображение.
+//
+// Что изменилось против v8:
+//   1. Раздел ГДЕ МЫ заменён на два слоя из gde_my_v5: 5/5 и 2/2 считаются
+//      параллельно, у каждого свои колена, счёт, тренд, уровень и запас.
+//      Внизу строка СВЯЗЬ — разворот 2/2 против 5/5 разделяется запасом
+//      старшего: меньше 0.5 импульса старший ломается в 54% за 10 баров,
+//      больше 1.0 — ни разу за два года.
+//   2. Новая ступень каскада «колена»: балл от 0 до 3 по трём условиям —
+//      слои согласны, вход на коррекционной точке счёта, у старшего есть
+//      запас. По умолчанию режим «мягко»: балл считается и красит точку,
+//      но вход не блокирует.
+//   3. Точки красятся по КАЧЕСТВУ входа, а не по причине отказа. Причина
+//      осталась в тултипе. Старая раскладка доступна переключателем.
+//   4. Блок РИСК переписан: день, неделя, месяц, всего с просадкой, серия.
+//      Периоды считаются по времени ВХОДА сделки, а не закрытия.
+//   5. Алерт на вход шлёт живой текст: цена, стоп, цель, RR, балл, оба слоя.
+//
+// Ориентиры за два года на часовом золоте (research/risk_check.py):
+//   261 сделка, +29.3R, доля TP 20%, медианный RR у выигрышей 4.05.
+//   День: медиана -1.0R, в плюсе 27%.  Неделя: -1.0R, в плюсе 44%.
+//   Месяц: +1.2R, в плюсе 58%.  Просадка максимальная 21.1R.
+//   Серии стопов: медиана 4, девяностый перцентиль 13, максимум 19.
+//
+// ЧЕСТНО ПРО БАЛЛ: упорядоченность есть — 0 даёт -0.13R на сделку, 1 даёт
+// -0.01R, 2 даёт +0.35R, 3 даёт +0.73R. Но разница между «балл >= 2» и
+// «балл <= 1» составляет +0.49R при стандартной ошибке 0.31R, это всего
+// 1.6 сигмы, и признаки подобраны на этих же двух годах. Величина НЕ
+// доказана. Поэтому режим по умолчанию мягкий.
 // ═══════════════════════════════════════════════════════════════════
 indicator("Тренажёр v9 — ГДЕ МЫ v5", overlay=true, max_lines_count=500, max_labels_count=500, max_bars_back=3000)
 
@@ -586,6 +608,91 @@ if barstate.isconfirmed
         d3_lvl := na
         d3_since := bar_index
 
+// ── помощники блока ГДЕ МЫ ──
+w_col(_t) => _t == 1 ? color.lime : color.new(color.red, 0)
+
+w_trend(L) =>
+    L.inTrans ? "ПЕРЕХОД, был " + (L.pTr == 1 ? "восх" : "нисх") : L.tr == 1 ? "ВОСХОДЯЩИЙ, " + str.tostring(bar_index - L.trFrom) + "б" : L.tr == -1 ? "НИСХОДЯЩИЙ, " + str.tostring(bar_index - L.trFrom) + "б" : "не определён"
+
+w_trendC(L) => L.inTrans ? color.new(color.orange, 0) : L.tr == 0 ? color.gray : w_col(L.tr)
+
+w_lvlTxt(L) =>
+    L.inTrans ? "— пробит" : na(L.lvl) ? "—" : (L.lvlProv ? "смерть " : L.tr == 1 ? "HL " : "LH ") + str.tostring(L.lvl, format.mintick) + (L.lvlProv ? " провиз" : "")
+
+// вероятность смерти тренда за 10 баров по замеру на 9675 барах живого
+// тренда: запас меньше 0.25 импульса — 73%, 0.25-0.50 — 42%, 0.50-1.00 —
+// 17%, 1.00-2.00 — 6%, дальше 1%. В среднем по рынку 16%.
+w_roomTxt(L) =>
+    r = w_room(L)
+    na(r) ? "—" : str.tostring(r, "#.##") + " имп · " + (r < 0.25 ? "73%" : r < 0.5 ? "42%" : r < 1.0 ? "17%" : r < 2.0 ? "6%" : "1%")
+
+w_roomC(L) =>
+    r = w_room(L)
+    na(r) ? color.gray : r < 0.25 ? color.new(color.red, 0) : r < 0.5 ? color.new(color.orange, 0) : r < 1.0 ? color.new(color.silver, 20) : color.lime
+
+w_mudTxt(L, _cs) =>
+    nk = array.size(L.KM)
+    mudC = 0
+    cnt = 0
+    if _cs >= 0
+        for q = _cs to nk - 1
+            cnt += 1
+            if array.get(L.KM, q) >= 2
+                mudC += 1
+    last = nk > 0 ? array.get(L.KM, nk - 1) : 1
+    (last >= 2 ? "МУТНОЕ x" + str.tostring(last) + " · " : "чистое · ") + str.tostring(mudC) + " из " + str.tostring(cnt)
+
+w_pauseTxt(L) =>
+    s = "—"
+    if L.inTrans
+        s := str.tostring(math.min(L.marks, 2)) + " из 2 колен"
+        nz2 = array.size(L.KL)
+        if L.jump > 0 and L.imp > 0 and not na(L.lastD) and nz2 >= 2
+            z1 = array.get(L.KL, nz2 - 1)
+            z2b = array.get(L.KL, nz2 - 2)
+            bool zu = w_isUp(z1) and w_isUp(z2b)
+            bool zd = (not w_isUp(z1)) and (not w_isUp(z2b))
+            if zu or zd
+                s := s + " · рывок " + (zu ? "выше " : "ниже ") + str.tostring(zu ? L.lastD + L.imp * L.jump : L.lastD - L.imp * L.jump, format.mintick)
+    s
+
+w_zeroTxt(L, _cs, _cd) =>
+    s = "—"
+    if _cs >= 0
+        zl = array.get(L.KL, _cs)
+        s := zl + " " + str.tostring(array.get(L.KP, _cs), format.mintick) + " · " + ((_cd == 1 ? zl == "LL" : _cd == -1 ? zl == "HH" : false) ? "разворот" : "продолж")
+    s
+
+w_cntTxt(L, _cn, _cd) =>
+    _cn < 0 ? "вне счёта" : "(" + str.tostring(_cn) + ") из 5 " + (_cd == 1 ? "↑" : _cd == -1 ? "↓" : "") + (_cn <= 0 ? "" : _cn % 2 == 1 ? " импульс" : " коррекция")
+
+// ══════════════ БАЛЛ КАЧЕСТВА ВХОДА ══════════════
+// Три условия, каждое мерилось отдельно на 261 сделке движка за 2 года:
+//   слои согласны              +0.22R против +0.00R
+//   коррекционная точка счёта  +0.32R против -0.06R
+//   запас старшего > импульса  +0.39R против +0.03R
+// Балл в сумме упорядочен: 0 -> -0.13R, 1 -> -0.01R, 2 -> +0.35R, 3 -> +0.73R.
+// ВАЖНО: разница между «балл >= 2» и «балл <= 1» составляет +0.49R при
+// стандартной ошибке 0.31R — это 1.6 сигмы. Упорядоченность видна, но
+// величина НЕ доказана, и признаки подобраны на этих же двух годах.
+gQ = "Качество входа"
+q_mode = input.string("мягко", "Фильтр по баллу", options=["выкл","мягко","жёстко"], group=gQ, tooltip="«мягко» — балл считается и красит точку, но вход не блокирует. «жёстко» — вход с баллом ниже порога отсекается: на истории это 35% сделок вместо 100% и +39.0R вместо +29.3R, но доказательство слабое (1.6 сигмы). «выкл» — как в v8.")
+q_min  = input.int(2, "Минимальный балл для входа", 1, 3, group=gQ)
+
+// балл для конкретного направления сделки
+w_score(_isLong) =>
+    sd = _isLong ? 1 : -1
+    t5 = L5.inTrans ? 0 : L5.tr
+    t2 = L2.inTrans ? 0 : L2.tr
+    cs2 = w_cstart(L2)
+    cd2 = w_cdir(L2, cs2)
+    cn2 = array.size(L2.KN) > 0 ? array.get(L2.KN, array.size(L2.KN) - 1) : -1
+    r5 = w_room(L5)
+    int a = t5 != 0 and t5 == t2 ? 1 : 0
+    int b = (cn2 == 2 or cn2 == 4) and cd2 == sd ? 1 : 0
+    int c = not na(r5) and r5 > 1.0 ? 1 : 0
+    [a + b + c, a, b, c]
+
 // ══════════════ ПОРОГ РАЗМЕРА ══════════════
 var float[] trig_sz = array.new_float()
 sz_pct = close > 0 ? (high - low) / close * 100 : 0.0
@@ -649,6 +756,12 @@ f_decide(_thr) =>
                 chk += "\nразмер: " + str.tostring(sz_pct, "#.###") + "% > " + str.tostring(_thr, "#.###") + "% — ПРОПУСК"
             else
                 chk += "\nразмер: ок " + str.tostring(sz_pct, "#.###") + "% ≤ " + str.tostring(_thr, "#.###") + "%"
+                // ── ступень: колена обоих слоёв ──
+                [qs, qa, qb, qc] = w_score(is_long)
+                chk += "\nколена: балл " + str.tostring(qs) + "/3 · " + (qa == 1 ? "слои согласны" : "слои спорят") + " · " + (qb == 1 ? "точка счёта по входу" : "точка счёта не та") + " · " + (qc == 1 ? "запас старшего есть" : "запаса у старшего нет")
+                bool knee_block = q_mode == "жёстко" and qs < q_min
+                if knee_block
+                    chk += "\nколена: балл ниже " + str.tostring(q_min) + " — ПРОПУСК"
                 trend_block = false
                 if not had_slom and not is_long and up >= (lastL == "HH" ? 3 : 4)
                     trend_block := true
@@ -656,7 +769,9 @@ f_decide(_thr) =>
                 if not had_slom and is_long and dn >= 4
                     trend_block := true
                     chk += "\nтренд: вниз " + str.tostring(dn) + "/5 против лонга — ПРОПУСК"
-                if trend_block
+                if knee_block
+                    vd := "колена"
+                else if trend_block
                     vd := "против тренда"
                 else
                     chk += "\nтренд: ок (вверх " + str.tostring(up) + " / вниз " + str.tostring(dn) + (had_slom ? ", есть слом в пятёрке" : "") + ")"
@@ -707,22 +822,35 @@ var array<float> P_en   = array.new<float>()
 var array<float> P_sl   = array.new<float>()
 var array<float> P_tp   = array.new<float>()
 var array<int>   P_bar  = array.new<int>()
+var array<int>   P_tim  = array.new<int>()   // время входа: период сделки считается по нему
 var array<line>  P_lnen = array.new<line>()
 var array<line>  P_lnsl = array.new<line>()
 var array<line>  P_lntp = array.new<line>()
 
 // закрытые сделки движка — для счётчика R (R = RR при TP, -1 при SL, как эталон)
 var float[] R_val = array.new_float()
-var int[]   R_tim = array.new_int()
+var int[]   R_tim = array.new_int()          // время закрытия
+var int[]   R_ent = array.new_int()          // время ВХОДА — по нему группируем по периодам
 
 // неделя и предохранитель (weekofyear может расходиться с ISO на стыке годов)
-var int   wk_cur = -1
-var float wk_r   = 0.0
-if barstate.isconfirmed
-    wk_now = year(time, "Etc/UTC") * 100 + weekofyear(time, "Etc/UTC")
-    if wk_now != wk_cur
-        wk_cur := wk_now
-        wk_r := 0.0
+// Периоды считаются по времени ВХОДА сделки, а не закрытия. Раньше сделка,
+// открытая в пятницу и закрытая в понедельник, падала в следующую неделю.
+w_period(_t, _kind) =>
+    _kind == "D" ? year(_t, "Etc/UTC") * 10000 + month(_t, "Etc/UTC") * 100 + dayofmonth(_t, "Etc/UTC") : _kind == "W" ? year(_t, "Etc/UTC") * 100 + weekofyear(_t, "Etc/UTC") : year(_t, "Etc/UTC") * 100 + month(_t, "Etc/UTC")
+
+w_sumR(_kind) =>
+    float sm = 0.0
+    int   cn = 0
+    n = array.size(R_val)
+    if n > 0
+        cur = w_period(time, _kind)
+        for i = 0 to n - 1
+            if w_period(array.get(R_ent, i), _kind) == cur
+                sm += array.get(R_val, i)
+                cn += 1
+    [sm, cn]
+
+var float wk_r = 0.0
 
 in_line = last_bar_index - bar_index <= v5_line_bars
 in_tip  = last_bar_index - bar_index <= v5_tip_bars
@@ -748,6 +876,7 @@ if array.size(P_en) > 0
                 R_ = res_sl ? -1.0 : math.abs(ptp - pen) / math.abs(pen - psl)
                 array.push(R_val, R_)
                 array.push(R_tim, time)
+                array.push(R_ent, array.get(P_tim, k))
                 wk_r += R_
                 if show_lines and in_line
                     label.new(bar_index, res_sl ? psl : ptp, res_sl ? "SL" : "TP", style=res_sl ? label.style_label_up : label.style_label_down, color=res_sl ? color.new(color.red, 0) : color.new(color.green, 0), textcolor=color.white, size=size.small)
@@ -756,12 +885,19 @@ if array.size(P_en) > 0
                 array.remove(P_sl,   k)
                 array.remove(P_tp,   k)
                 array.remove(P_bar,  k)
+                array.remove(P_tim,  k)
                 array.remove(P_lnen, k)
                 array.remove(P_lnsl, k)
                 array.remove(P_lntp, k)
                 closed := true
         if not closed
             k += 1
+
+// неделя для предохранителя считается ПОСЛЕ закрытий этого бара,
+// иначе предохранитель отстаёт на бар
+if barstate.isconfirmed
+    [wsx, wcx] = w_sumR("W")
+    wk_r := wsx
 
 // ══════════════ РЕШЕНИЕ НА ТРИГГЕРНОЙ СВЕЧЕ ══════════════
 string v5_vd  = na
@@ -791,6 +927,12 @@ if shape_ok and barstate.isconfirmed
             v5_vd  := "режим БОК+LONG"
             v5_chk := a7 + "\n─────\nФИЛЬТР РЕЖИМА: лонг в БОКОВИКЕ (D3)\nлонги в боковике на золоте: -33R за 9 лет\nпропуск (walk-forward +26R OOS)\nИТОГ: пропуск по режиму"
 
+// балл качества входа на этом баре — для цвета точки и для алерта
+int v9_q = na
+if not na(v5_dd) and v5_dd != ""
+    [qq, q1_, q2_, q3_] = w_score(v5_dd == "LONG")
+    v9_q := qq
+
 // память для таблицы
 var string last_chk  = "—"
 var int    last_time = na
@@ -805,6 +947,7 @@ if v5_vd == "ВХОД"
     array.push(P_sl,  v5_sl_)
     array.push(P_tp,  v5_tp_)
     array.push(P_bar, bar_index)
+    array.push(P_tim, time)
     if show_lines and in_line
         array.push(P_lnen, line.new(bar_index, v5_en,  bar_index + 1, v5_en,  color=color.new(color.blue,  0), width=2))
         array.push(P_lnsl, line.new(bar_index, v5_sl_, bar_index + 1, v5_sl_, color=color.new(color.red,   0), width=2))
@@ -814,44 +957,78 @@ if v5_vd == "ВХОД"
         array.push(P_lnsl, line(na))
         array.push(P_lntp, line(na))
 
-alertcondition(v5_vd == "ВХОД", "Движок v5: ВХОД", "Движок v5: валидный вход")
+// Алерт на вход. alertcondition оставлен для совместимости со старыми
+// оповещениями, alert() шлёт живой текст с ценами и баллом качества.
+alertcondition(v5_vd == "ВХОД", "Движок: ВХОД", "Движок: валидный вход")
+if v5_vd == "ВХОД"
+    alert(syminfo.ticker + " " + timeframe.period + "  ВХОД " + v5_dd +
+          "\nцена " + str.tostring(v5_en, format.mintick) +
+          "  стоп " + str.tostring(v5_sl_, format.mintick) +
+          "  цель " + str.tostring(v5_tp_, format.mintick) +
+          "\nRR " + str.tostring(v5_rr_, "#.##") + "   качество " + str.tostring(v9_q) + "/3" +
+          "\n5/5 " + w_trend(L5) + "   2/2 " + w_trend(L2),
+          alert.freq_once_per_bar_close)
 
-// ══════════════ ТОЧКИ: ЦВЕТ = ПРИЧИНА ══════════════
+// ══════════════ ТОЧКИ ══════════════
+// Было девять цветов по причине отказа. Причина всё равно читается в
+// тултипе, а девять цветов на графике не читаются. Теперь цвет говорит
+// про КАЧЕСТВО входа, а размер — про уверенность.
+//   балл 3  крупная ярко-зелёная
+//   балл 2  зелёная
+//   балл 0-1 приглушённая жёлтая
+//   пропуск  одна серая точка, причина в тултипе
+gT = "Точки"
+dot_mode = input.string("по качеству", "Чем красить точки", options=["по качеству","по причине (как в v8)"], group=gT)
+
 c_entry = v5_vd == "ВХОД"
 c_ban   = not na(v5_vd) and str.startswith(v5_vd, "запрет")
 c_trend = v5_vd == "против тренда"
+c_knee  = v5_vd == "колена"
 c_slom  = v5_vd == "слом"
 c_frz   = v5_vd == "заморозка"
 c_big   = v5_vd == "бол.свеча"
 c_norr  = v5_vd == "нет RR"
 c_wsb   = v5_vd == "стоп-неделя"
 c_regf  = v5_vd == "режим БОК+LONG"
-c_other = not na(v5_vd) and not (c_entry or c_ban or c_trend or c_slom or c_frz or c_big or c_norr or c_wsb or c_regf)
+c_other = not na(v5_vd) and not (c_entry or c_ban or c_trend or c_knee or c_slom or c_frz or c_big or c_norr or c_wsb or c_regf)
 
-// в окне tooltip точки рисуются метками (наводимы мышью), вне окна — plotshape
 f_dotcol() =>
-    c_entry ? col_entry : c_ban ? col_ban : c_trend ? col_trend : c_slom ? col_slom : c_frz ? col_frz : c_big ? col_big : c_norr ? col_norr : c_wsb ? color.new(color.maroon, 20) : c_regf ? col_regf : color.new(color.gray, 85)
+    color r = color.new(color.gray, 85)
+    if dot_mode == "по качеству"
+        r := c_entry ? (v9_q >= 3 ? color.new(#00e676, 0) : v9_q == 2 ? color.new(#00b050, 15) : color.new(#ffd54f, 25)) : color.new(color.gray, 60)
+    else
+        r := c_entry ? col_entry : c_ban ? col_ban : c_trend ? col_trend : c_knee ? col_regf : c_slom ? col_slom : c_frz ? col_frz : c_big ? col_big : c_norr ? col_norr : c_wsb ? color.new(color.maroon, 20) : c_regf ? col_regf : color.new(color.gray, 85)
+    r
+
+f_dotsz() =>
+    c_entry ? (v9_q >= 3 ? size.normal : v9_q == 2 ? size.small : size.tiny) : size.tiny
 
 if show_tips and in_tip and not na(v5_vd) and ((c_entry and show_entry) or (not c_entry and show_skip))
-    label.new(bar_index, na, "", yloc=yloc.belowbar, style=label.style_circle, color=f_dotcol(), size=c_ban or c_entry ? size.small : size.tiny, tooltip=v5_chk)
+    label.new(bar_index, na, "", yloc=yloc.belowbar, style=label.style_circle, color=f_dotcol(), size=f_dotsz(), tooltip=v5_chk)
 
 no_tip = not show_tips or not in_tip
-plotshape(no_tip and show_entry and c_entry, title="ВХОД", style=shape.circle, location=location.belowbar, color=col_entry, size=size.small)
-plotshape(no_tip and show_skip and c_ban and not show_lett, title="Запрет структуры", style=shape.circle, location=location.belowbar, color=col_ban, size=size.small)
-plotshape(no_tip and show_skip and c_ban and show_lett,     title="Запрет (буква)",   style=shape.circle, location=location.belowbar, color=col_ban, size=size.small, text="х", textcolor=col_ban)
-plotshape(no_tip and show_skip and c_trend and not show_lett, title="Против тренда", style=shape.circle, location=location.belowbar, color=col_trend, size=size.tiny)
-plotshape(no_tip and show_skip and c_trend and show_lett,     title="Против тренда (буква)", style=shape.circle, location=location.belowbar, color=col_trend, size=size.tiny, text="т", textcolor=col_trend)
-plotshape(no_tip and show_skip and c_slom and not show_lett, title="Слом", style=shape.circle, location=location.belowbar, color=col_slom, size=size.tiny)
-plotshape(no_tip and show_skip and c_slom and show_lett,     title="Слом (буква)", style=shape.circle, location=location.belowbar, color=col_slom, size=size.tiny, text="с", textcolor=col_slom)
-plotshape(no_tip and show_skip and c_frz and not show_lett, title="Заморозка", style=shape.circle, location=location.belowbar, color=col_frz, size=size.tiny)
-plotshape(no_tip and show_skip and c_frz and show_lett,     title="Заморозка (буква)", style=shape.circle, location=location.belowbar, color=col_frz, size=size.tiny, text="з", textcolor=col_frz)
-plotshape(no_tip and show_skip and c_big and not show_lett, title="Бол.свеча", style=shape.circle, location=location.belowbar, color=col_big, size=size.tiny)
-plotshape(no_tip and show_skip and c_big and show_lett,     title="Бол.свеча (буква)", style=shape.circle, location=location.belowbar, color=col_big, size=size.tiny, text="б", textcolor=col_big)
-plotshape(no_tip and show_skip and c_norr and not show_lett, title="Нет RR", style=shape.circle, location=location.belowbar, color=col_norr, size=size.tiny)
-plotshape(no_tip and show_skip and c_norr and show_lett,     title="Нет RR (буква)", style=shape.circle, location=location.belowbar, color=col_norr, size=size.tiny, text="R", textcolor=col_norr)
-plotshape(no_tip and show_skip and c_wsb, title="Стоп-неделя", style=shape.circle, location=location.belowbar, color=color.new(color.maroon, 20), size=size.tiny)
-plotshape(no_tip and show_skip and c_regf, title="Фильтр БОК+LONG", style=shape.circle, location=location.belowbar, color=col_regf, size=size.small)
-plotshape(no_tip and show_skip and c_other, title="Прочее", style=shape.circle, location=location.belowbar, color=color.new(color.gray, 85), size=size.tiny)
+q_ok  = c_entry and v9_q >= 3
+q_mid = c_entry and v9_q == 2
+q_low = c_entry and v9_q <= 1
+by_q  = dot_mode == "по качеству"
+
+plotshape(no_tip and show_entry and by_q and q_ok,  title="Вход · балл 3",   style=shape.circle, location=location.belowbar, color=color.new(#00e676, 0),  size=size.normal)
+plotshape(no_tip and show_entry and by_q and q_mid, title="Вход · балл 2",   style=shape.circle, location=location.belowbar, color=color.new(#00b050, 15), size=size.small)
+plotshape(no_tip and show_entry and by_q and q_low, title="Вход · балл 0-1", style=shape.circle, location=location.belowbar, color=color.new(#ffd54f, 25), size=size.tiny)
+plotshape(no_tip and show_skip  and by_q and not c_entry and not na(v5_vd), title="Пропуск", style=shape.circle, location=location.belowbar, color=color.new(color.gray, 60), size=size.tiny)
+
+// старая раскладка по причине — если переключить режим
+plotshape(no_tip and not by_q and show_entry and c_entry, title="ВХОД", style=shape.circle, location=location.belowbar, color=col_entry, size=size.small)
+plotshape(no_tip and not by_q and show_skip and c_ban,   title="Запрет структуры", style=shape.circle, location=location.belowbar, color=col_ban, size=size.small, text=show_lett ? "х" : "", textcolor=col_ban)
+plotshape(no_tip and not by_q and show_skip and c_knee,  title="Колена", style=shape.circle, location=location.belowbar, color=col_regf, size=size.tiny, text=show_lett ? "к" : "", textcolor=col_regf)
+plotshape(no_tip and not by_q and show_skip and c_trend, title="Против тренда", style=shape.circle, location=location.belowbar, color=col_trend, size=size.tiny, text=show_lett ? "т" : "", textcolor=col_trend)
+plotshape(no_tip and not by_q and show_skip and c_slom,  title="Слом", style=shape.circle, location=location.belowbar, color=col_slom, size=size.tiny, text=show_lett ? "с" : "", textcolor=col_slom)
+plotshape(no_tip and not by_q and show_skip and c_frz,   title="Заморозка", style=shape.circle, location=location.belowbar, color=col_frz, size=size.tiny, text=show_lett ? "з" : "", textcolor=col_frz)
+plotshape(no_tip and not by_q and show_skip and c_big,   title="Бол.свеча", style=shape.circle, location=location.belowbar, color=col_big, size=size.tiny, text=show_lett ? "б" : "", textcolor=col_big)
+plotshape(no_tip and not by_q and show_skip and c_norr,  title="Нет RR", style=shape.circle, location=location.belowbar, color=col_norr, size=size.tiny, text=show_lett ? "R" : "", textcolor=col_norr)
+plotshape(no_tip and not by_q and show_skip and c_wsb,   title="Стоп-неделя", style=shape.circle, location=location.belowbar, color=color.new(color.maroon, 20), size=size.tiny)
+plotshape(no_tip and not by_q and show_skip and c_regf,  title="Фильтр БОК+LONG", style=shape.circle, location=location.belowbar, color=col_regf, size=size.small)
+plotshape(no_tip and not by_q and show_skip and c_other, title="Прочее", style=shape.circle, location=location.belowbar, color=color.new(color.gray, 85), size=size.tiny)
 
 // ══════════════ УРОВНИ HH/LL: ЖИВЫЕ, N БЛИЖАЙШИХ ══════════════
 // Хранилища живых уровней (цена + бар пивота). Пробитый уровень умирает.
@@ -1017,7 +1194,7 @@ if barstate.islast
 
 // ══════════════ ТАБЛИЦА-ЧЕКЛИСТ ══════════════
 tp_ = tbl_pos == "верх-право" ? position.top_right : tbl_pos == "верх-лево" ? position.top_left : tbl_pos == "низ-право" ? position.bottom_right : position.bottom_left
-var table T = table.new(tp_, 3, 20, bgcolor=color.new(#000000, 15), border_width=1, border_color=color.new(color.gray, 70))
+var table T = table.new(tp_, 3, 22, bgcolor=color.new(#000000, 15), border_width=1, border_color=color.new(color.gray, 70))
 
 f_join(_arr) =>
     s = ""
@@ -1042,64 +1219,6 @@ f_block(_row, _txt) =>
 f_wide(_row) =>
     table.cell(T, 2, _row, "", text_size=size.small)
     table.merge_cells(T, 1, _row, 2, _row)
-
-// ── помощники блока ГДЕ МЫ ──
-w_col(_t) => _t == 1 ? color.lime : color.new(color.red, 0)
-
-w_trend(L) =>
-    L.inTrans ? "ПЕРЕХОД, был " + (L.pTr == 1 ? "восх" : "нисх") : L.tr == 1 ? "ВОСХОДЯЩИЙ, " + str.tostring(bar_index - L.trFrom) + "б" : L.tr == -1 ? "НИСХОДЯЩИЙ, " + str.tostring(bar_index - L.trFrom) + "б" : "не определён"
-
-w_trendC(L) => L.inTrans ? color.new(color.orange, 0) : L.tr == 0 ? color.gray : w_col(L.tr)
-
-w_lvlTxt(L) =>
-    L.inTrans ? "— пробит" : na(L.lvl) ? "—" : (L.lvlProv ? "смерть " : L.tr == 1 ? "HL " : "LH ") + str.tostring(L.lvl, format.mintick) + (L.lvlProv ? " провиз" : "")
-
-// вероятность смерти тренда за 10 баров по замеру на 9675 барах живого
-// тренда: запас меньше 0.25 импульса — 73%, 0.25-0.50 — 42%, 0.50-1.00 —
-// 17%, 1.00-2.00 — 6%, дальше 1%. В среднем по рынку 16%.
-w_roomTxt(L) =>
-    r = w_room(L)
-    na(r) ? "—" : str.tostring(r, "#.##") + " имп · " + (r < 0.25 ? "73%" : r < 0.5 ? "42%" : r < 1.0 ? "17%" : r < 2.0 ? "6%" : "1%")
-
-w_roomC(L) =>
-    r = w_room(L)
-    na(r) ? color.gray : r < 0.25 ? color.new(color.red, 0) : r < 0.5 ? color.new(color.orange, 0) : r < 1.0 ? color.new(color.silver, 20) : color.lime
-
-w_mudTxt(L, _cs) =>
-    nk = array.size(L.KM)
-    mudC = 0
-    cnt = 0
-    if _cs >= 0
-        for q = _cs to nk - 1
-            cnt += 1
-            if array.get(L.KM, q) >= 2
-                mudC += 1
-    last = nk > 0 ? array.get(L.KM, nk - 1) : 1
-    (last >= 2 ? "МУТНОЕ x" + str.tostring(last) + " · " : "чистое · ") + str.tostring(mudC) + " из " + str.tostring(cnt)
-
-w_pauseTxt(L) =>
-    s = "—"
-    if L.inTrans
-        s := str.tostring(math.min(L.marks, 2)) + " из 2 колен"
-        nz2 = array.size(L.KL)
-        if L.jump > 0 and L.imp > 0 and not na(L.lastD) and nz2 >= 2
-            z1 = array.get(L.KL, nz2 - 1)
-            z2b = array.get(L.KL, nz2 - 2)
-            bool zu = w_isUp(z1) and w_isUp(z2b)
-            bool zd = (not w_isUp(z1)) and (not w_isUp(z2b))
-            if zu or zd
-                s := s + " · рывок " + (zu ? "выше " : "ниже ") + str.tostring(zu ? L.lastD + L.imp * L.jump : L.lastD - L.imp * L.jump, format.mintick)
-    s
-
-w_zeroTxt(L, _cs, _cd) =>
-    s = "—"
-    if _cs >= 0
-        zl = array.get(L.KL, _cs)
-        s := zl + " " + str.tostring(array.get(L.KP, _cs), format.mintick) + " · " + ((_cd == 1 ? zl == "LL" : _cd == -1 ? zl == "HH" : false) ? "разворот" : "продолж")
-    s
-
-w_cntTxt(L, _cn, _cd) =>
-    _cn < 0 ? "вне счёта" : "(" + str.tostring(_cn) + ") из 5 " + (_cd == 1 ? "↑" : _cd == -1 ? "↓" : "") + (_cn <= 0 ? "" : _cn % 2 == 1 ? " импульс" : " коррекция")
 
 f_rowW(_r, _k, _v5, _c5, _v2, _c2, _tip) =>
     table.cell(T, 0, _r, _k, text_color=color.new(color.silver, 25), text_halign=text.align_left, text_size=size.small, tooltip=_tip)
@@ -1203,32 +1322,45 @@ if show_tbl and barstate.islast
     table.cell(T, 1, 15, postxt, text_color=np_ > 0 ? color.white : color.gray, text_halign=text.align_left, text_size=size.small)
     // ═══ БЛОК: РИСК ═══
     f_block(16, "━━  РИСК  ━━")
-    // 17: неделя и предохранитель
-    ws_hit = use_ws and wk_r <= -ws_r
-    wktxt = (wk_r >= 0 ? "+" : "") + str.tostring(wk_r, "#.#") + "R" + (use_ws ? (ws_hit ? "  |  ПРЕДОХРАНИТЕЛЬ СРАБОТАЛ — до пн" : "  |  стоп-неделя при -" + str.tostring(ws_r, "#.#") + "R") : "  |  предохранитель выкл")
-    table.cell(T, 0, 17, "Неделя", text_color=hdrc, text_halign=text.align_left, text_size=size.small, tooltip="R движка с начала недели (пн, UTC). Предохранитель проверен: +53.2R → +80.1R, худшая неделя -9 → -3R, train и test оба лучше, 8/10 лет не хуже, эффект размазан (36 мес плюс / 9 минус).")
-    table.cell(T, 1, 17, wktxt, text_color=ws_hit ? color.new(color.red, 0) : wk_r >= 0 ? color.lime : color.new(color.orange, 0), text_halign=text.align_left, text_size=size.small)
-    // 18: счётчик R движка: R = RR при TP, -1 при SL; «всё» = загруженная история графика
-    float r30 = 0.0
-    float r90 = 0.0
+    // Все периоды считаются по времени ВХОДА сделки. Ориентиры в тултипах —
+    // прогон эталонного движка на 261 сделке за два года, research/risk_check.py.
+    [dR, dN] = w_sumR("D")
+    [wR, wN] = w_sumR("W")
+    [mR, mN] = w_sumR("M")
+    ws_hit = use_ws and wR <= -ws_r
+
+    // 17: день
+    dtxt = str.tostring(dN) + " сд · " + (dR >= 0 ? "+" : "") + str.tostring(dR, "#.#") + "R"
+    table.cell(T, 0, 17, "День", text_color=hdrc, text_halign=text.align_left, text_size=size.small, tooltip="За два года: 174 дня со сделками, медиана 1 сделка в день, максимум 5. Медиана дня −1.0R, в плюсе только 27% дней. Худший день −4.0R, лучший +13.1R. Минусовый день — норма, а не сбой.")
+    table.cell(T, 1, 17, dtxt, text_color=dR > 0 ? color.lime : dR < 0 ? color.new(color.orange, 0) : color.gray, text_halign=text.align_left, text_size=size.small)
+
+    // 18: неделя и предохранитель
+    wtxt = str.tostring(wN) + " сд · " + (wR >= 0 ? "+" : "") + str.tostring(wR, "#.#") + "R" + (use_ws ? (ws_hit ? "  |  ПРЕДОХРАНИТЕЛЬ — до пн" : "  |  стоп при −" + str.tostring(ws_r, "#.#") + "R") : "  |  предохранитель выкл")
+    table.cell(T, 0, 18, "Неделя", text_color=hdrc, text_halign=text.align_left, text_size=size.small, tooltip="За два года: 91 неделя со сделками, медиана 2 сделки. Медиана недели −1.0R, в плюсе 44% недель. Худшая −7.0R, лучшая +13.6R. Пять процентов худших недель ниже −4.0R — на это и настроен предохранитель.")
+    table.cell(T, 1, 18, wtxt, text_color=ws_hit ? color.new(color.red, 0) : wR > 0 ? color.lime : wR < 0 ? color.new(color.orange, 0) : color.gray, text_halign=text.align_left, text_size=size.small)
+
+    // 19: месяц
+    mtxt = str.tostring(mN) + " сд · " + (mR >= 0 ? "+" : "") + str.tostring(mR, "#.#") + "R"
+    table.cell(T, 0, 19, "Месяц", text_color=hdrc, text_halign=text.align_left, text_size=size.small, tooltip="За два года: 26 месяцев, медиана 10 сделок. Медиана месяца +1.2R, в плюсе 58% месяцев. Худший −8.1R, лучший +15.0R. Месяц — первый период, где медиана становится положительной.")
+    table.cell(T, 1, 19, mtxt, text_color=mR > 0 ? color.lime : mR < 0 ? color.new(color.orange, 0) : color.gray, text_halign=text.align_left, text_size=size.small)
+
+    // 20: всего и просадка
     float rall = 0.0
-    int   n30 = 0
-    int   n90 = 0
+    float peak = 0.0
+    float cum  = 0.0
+    float ddmx = 0.0
     if array.size(R_val) > 0
         for i = 0 to array.size(R_val) - 1
-            rv = array.get(R_val, i)
-            age = time - array.get(R_tim, i)
-            rall += rv
-            if age <= 1000 * 60 * 60 * 24 * 30
-                r30 += rv
-                n30 += 1
-            if age <= 1000 * 60 * 60 * 24 * 90
-                r90 += rv
-                n90 += 1
-    rtxt = "30д: " + (r30 >= 0 ? "+" : "") + str.tostring(r30, "#.#") + "R (" + str.tostring(n30) + ") | 90д: " + (r90 >= 0 ? "+" : "") + str.tostring(r90, "#.#") + "R (" + str.tostring(n90) + ") | всё: " + (rall >= 0 ? "+" : "") + str.tostring(rall, "#.#") + "R (" + str.tostring(array.size(R_val)) + ")"
-    table.cell(T, 0, 18, "R движка", text_color=hdrc, text_halign=text.align_left, text_size=size.small)
-    table.cell(T, 1, 18, rtxt, text_color=r30 >= 0 ? color.lime : color.new(color.red, 0), text_halign=text.align_left, text_size=size.small)
-    // 19: серия SL — статистика против тильта (эталон: медиана 4, p90 12, макс 38 за 9 лет)
+            cum += array.get(R_val, i)
+            peak := math.max(peak, cum)
+            ddmx := math.max(ddmx, peak - cum)
+        rall := cum
+    ddnow = peak - cum
+    atxt = str.tostring(array.size(R_val)) + " сд · " + (rall >= 0 ? "+" : "") + str.tostring(rall, "#.#") + "R  |  просадка сейчас " + str.tostring(ddnow, "#.#") + "R из " + str.tostring(ddmx, "#.#") + "R макс"
+    table.cell(T, 0, 20, "Всего", text_color=hdrc, text_halign=text.align_left, text_size=size.small, tooltip="Вся загруженная история графика. Ориентир за два года: 261 сделка, +29.3R, доля TP 20%, медианный RR у выигрышей 4.05. Максимальная просадка 21.1R. Если текущая просадка близка к максимальной — это не поломка, а рабочий режим системы с долей выигрышей в 20%.")
+    table.cell(T, 1, 20, atxt, text_color=rall >= 0 ? color.lime : color.new(color.red, 0), text_halign=text.align_left, text_size=size.small)
+
+    // 21: серия стопов
     int streak = 0
     if array.size(R_val) > 0
         for i = array.size(R_val) - 1 to 0
@@ -1236,14 +1368,17 @@ if show_tbl and barstate.islast
                 streak += 1
             else
                 break
-    sertxt = str.tostring(streak) + " SL подряд (золото 9л: медиана 4, p90 12, макс 38)"
-    table.cell(T, 0, 19, "Серия", text_color=hdrc, text_halign=text.align_left, text_size=size.small)
-    table.cell(T, 1, 19, sertxt, text_color=streak >= 8 ? color.new(color.orange, 0) : color.gray, text_halign=text.align_left, text_size=size.small)
+    sertxt = str.tostring(streak) + " SL подряд"
+    table.cell(T, 0, 21, "Серия", text_color=hdrc, text_halign=text.align_left, text_size=size.small, tooltip="Стопы подряд. За два года: 40 серий, медиана 4, девяностый перцентиль 13, максимум 19. Серия из 13 стопов — обычное дело, а не повод менять систему.")
+    table.cell(T, 1, 21, sertxt, text_color=streak >= 13 ? color.new(color.red, 0) : streak >= 8 ? color.new(color.orange, 0) : color.gray, text_halign=text.align_left, text_size=size.small)
+
     w14 = f_wide(14)
     w15 = f_wide(15)
     w17 = f_wide(17)
     w18 = f_wide(18)
     w19 = f_wide(19)
+    w20 = f_wide(20)
+    w21 = f_wide(21)
 
 // ══════════════ ЗИГ-ЗАГ (логика v3, окно N баров) ══════════════
 to_up_zz = high >= ta.highest(zz_len)
