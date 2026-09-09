@@ -52,15 +52,6 @@ use_regfilt = input.bool(false, "Фильтр режима: не входить 
 g3 = "🎨 Точки"
 show_entry = input.bool(true,  "Входы (жёлтые)", group=g3)
 show_skip  = input.bool(true,  "Пропуски (цвет = причина)", group=g3)
-show_lett  = input.bool(false, "Буквы причин у точек", group=g3, tooltip="з=заморозка б=бол.свеча т=против тренда с=слом R=нет RR х=запрет хвоста")
-col_entry  = input.color(color.new(color.yellow, 0),  "ВХОД",            group=g3)
-col_ban    = input.color(color.new(color.red, 0),     "запрет структуры", group=g3)
-col_trend  = input.color(color.new(color.orange, 0),  "против тренда",   group=g3)
-col_slom   = input.color(color.new(color.purple, 0),  "слом",            group=g3)
-col_frz    = input.color(color.new(color.silver, 40), "заморозка",       group=g3)
-col_big    = input.color(color.new(#404040, 20),      "бол.свеча",       group=g3)
-col_norr   = input.color(color.new(color.gray, 75),   "нет RR",          group=g3)
-col_regf   = input.color(color.new(color.teal, 0),    "фильтр БОК+LONG", group=g3)
 
 g6 = "🏷 Структура"
 show_fast  = input.bool(true, "Быстрые метки 2/2 (решающие)", group=g6, tooltip="~31/нед. По ним работает движок. Подтверждение через 2 бара.")
@@ -978,7 +969,10 @@ if v5_vd == "ВХОД"
 //   балл 0-1 приглушённая жёлтая
 //   пропуск  одна серая точка, причина в тултипе
 gT = "Точки"
-dot_mode = input.string("по качеству", "Чем красить точки", options=["по качеству","по причине (как в v8)"], group=gT)
+col_q3   = input.color(#00e676, "Вход · балл 3", group=gT)
+col_q2   = input.color(#00b050, "Вход · балл 2", group=gT)
+col_q1   = input.color(#ffd54f, "Вход · балл 0-1", group=gT)
+col_skip = input.color(color.new(color.gray, 60), "Пропуск", group=gT)
 
 c_entry = v5_vd == "ВХОД"
 c_ban   = not na(v5_vd) and str.startswith(v5_vd, "запрет")
@@ -993,12 +987,7 @@ c_regf  = v5_vd == "режим БОК+LONG"
 c_other = not na(v5_vd) and not (c_entry or c_ban or c_trend or c_knee or c_slom or c_frz or c_big or c_norr or c_wsb or c_regf)
 
 f_dotcol() =>
-    color r = color.new(color.gray, 85)
-    if dot_mode == "по качеству"
-        r := c_entry ? (v9_q >= 3 ? color.new(#00e676, 0) : v9_q == 2 ? color.new(#00b050, 15) : color.new(#ffd54f, 25)) : color.new(color.gray, 60)
-    else
-        r := c_entry ? col_entry : c_ban ? col_ban : c_trend ? col_trend : c_knee ? col_regf : c_slom ? col_slom : c_frz ? col_frz : c_big ? col_big : c_norr ? col_norr : c_wsb ? color.new(color.maroon, 20) : c_regf ? col_regf : color.new(color.gray, 85)
-    r
+    c_entry ? (v9_q >= 3 ? col_q3 : v9_q == 2 ? col_q2 : col_q1) : col_skip
 
 f_dotsz() =>
     c_entry ? (v9_q >= 3 ? size.normal : v9_q == 2 ? size.small : size.tiny) : size.tiny
@@ -1010,35 +999,13 @@ no_tip = not show_tips or not in_tip
 q_ok  = c_entry and v9_q >= 3
 q_mid = c_entry and v9_q == 2
 q_low = c_entry and v9_q <= 1
-by_q  = dot_mode == "по качеству"
 
-plotshape(no_tip and show_entry and by_q and q_ok,  title="Вход · балл 3",   style=shape.circle, location=location.belowbar, color=color.new(#00e676, 0),  size=size.normal)
-plotshape(no_tip and show_entry and by_q and q_mid, title="Вход · балл 2",   style=shape.circle, location=location.belowbar, color=color.new(#00b050, 15), size=size.small)
-plotshape(no_tip and show_entry and by_q and q_low, title="Вход · балл 0-1", style=shape.circle, location=location.belowbar, color=color.new(#ffd54f, 25), size=size.tiny)
-plotshape(no_tip and show_skip  and by_q and not c_entry and not na(v5_vd), title="Пропуск", style=shape.circle, location=location.belowbar, color=color.new(color.gray, 60), size=size.tiny)
+plotshape(no_tip and show_entry and q_ok,  title="Вход · балл 3",   style=shape.circle, location=location.belowbar, color=col_q3, size=size.normal)
+plotshape(no_tip and show_entry and q_mid, title="Вход · балл 2",   style=shape.circle, location=location.belowbar, color=col_q2, size=size.small)
+plotshape(no_tip and show_entry and q_low, title="Вход · балл 0-1", style=shape.circle, location=location.belowbar, color=col_q1, size=size.tiny)
+plotshape(no_tip and show_skip and not c_entry and not na(v5_vd), title="Пропуск", style=shape.circle, location=location.belowbar, color=col_skip, size=size.tiny)
 
 // старая раскладка по причине — если переключить режим
-// text= у plotshape принимает только КОНСТАНТУ, поэтому на каждый случай
-// два вызова: с буквой и без. Тернарник с инпутом там не компилируется.
-plotshape(no_tip and not by_q and show_entry and c_entry, title="ВХОД", style=shape.circle, location=location.belowbar, color=col_entry, size=size.small)
-plotshape(no_tip and not by_q and show_skip and c_ban and not show_lett,   title="Запрет структуры", style=shape.circle, location=location.belowbar, color=col_ban, size=size.small)
-plotshape(no_tip and not by_q and show_skip and c_ban and show_lett,       title="Запрет структуры (буква)", style=shape.circle, location=location.belowbar, color=col_ban, size=size.small, text="х", textcolor=col_ban)
-plotshape(no_tip and not by_q and show_skip and c_knee and not show_lett,  title="Колена", style=shape.circle, location=location.belowbar, color=col_regf, size=size.tiny)
-plotshape(no_tip and not by_q and show_skip and c_knee and show_lett,      title="Колена (буква)", style=shape.circle, location=location.belowbar, color=col_regf, size=size.tiny, text="к", textcolor=col_regf)
-plotshape(no_tip and not by_q and show_skip and c_trend and not show_lett, title="Против тренда", style=shape.circle, location=location.belowbar, color=col_trend, size=size.tiny)
-plotshape(no_tip and not by_q and show_skip and c_trend and show_lett,     title="Против тренда (буква)", style=shape.circle, location=location.belowbar, color=col_trend, size=size.tiny, text="т", textcolor=col_trend)
-plotshape(no_tip and not by_q and show_skip and c_slom and not show_lett,  title="Слом", style=shape.circle, location=location.belowbar, color=col_slom, size=size.tiny)
-plotshape(no_tip and not by_q and show_skip and c_slom and show_lett,      title="Слом (буква)", style=shape.circle, location=location.belowbar, color=col_slom, size=size.tiny, text="с", textcolor=col_slom)
-plotshape(no_tip and not by_q and show_skip and c_frz and not show_lett,   title="Заморозка", style=shape.circle, location=location.belowbar, color=col_frz, size=size.tiny)
-plotshape(no_tip and not by_q and show_skip and c_frz and show_lett,       title="Заморозка (буква)", style=shape.circle, location=location.belowbar, color=col_frz, size=size.tiny, text="з", textcolor=col_frz)
-plotshape(no_tip and not by_q and show_skip and c_big and not show_lett,   title="Бол.свеча", style=shape.circle, location=location.belowbar, color=col_big, size=size.tiny)
-plotshape(no_tip and not by_q and show_skip and c_big and show_lett,       title="Бол.свеча (буква)", style=shape.circle, location=location.belowbar, color=col_big, size=size.tiny, text="б", textcolor=col_big)
-plotshape(no_tip and not by_q and show_skip and c_norr and not show_lett,  title="Нет RR", style=shape.circle, location=location.belowbar, color=col_norr, size=size.tiny)
-plotshape(no_tip and not by_q and show_skip and c_norr and show_lett,      title="Нет RR (буква)", style=shape.circle, location=location.belowbar, color=col_norr, size=size.tiny, text="R", textcolor=col_norr)
-plotshape(no_tip and not by_q and show_skip and c_wsb,   title="Стоп-неделя", style=shape.circle, location=location.belowbar, color=color.new(color.maroon, 20), size=size.tiny)
-plotshape(no_tip and not by_q and show_skip and c_regf,  title="Фильтр БОК+LONG", style=shape.circle, location=location.belowbar, color=col_regf, size=size.small)
-plotshape(no_tip and not by_q and show_skip and c_other, title="Прочее", style=shape.circle, location=location.belowbar, color=color.new(color.gray, 85), size=size.tiny)
-
 // ══════════════ УРОВНИ HH/LL: ЖИВЫЕ, N БЛИЖАЙШИХ ══════════════
 // Хранилища живых уровней (цена + бар пивота). Пробитый уровень умирает.
 var float[] hh1_p = array.new_float()
