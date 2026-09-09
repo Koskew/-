@@ -1530,13 +1530,13 @@ if show_tbl and barstate.islast
     table.cell(T, 0, 22, "Серия", text_color=hdrc, text_halign=text.align_left, text_size=size.small, tooltip="Стопы подряд. За два года: 40 серий, медиана 4, девяностый перцентиль 13, максимум 19. Серия из 13 стопов — обычное дело, а не повод менять систему.")
     table.cell(T, 1, 22, sertxt, text_color=streak >= 13 ? color.new(color.red, 0) : streak >= 8 ? color.new(color.orange, 0) : color.gray, text_halign=text.align_left, text_size=size.small)
 
-    w14 = f_wide(15)
-    w15 = f_wide(16)
-    w17 = f_wide(18)
-    w18 = f_wide(19)
-    w19 = f_wide(20)
-    w20 = f_wide(21)
-    w21 = f_wide(22)
+    w15 = f_wide(15)
+    w16 = f_wide(16)
+    w18 = f_wide(18)
+    w19 = f_wide(19)
+    w20 = f_wide(20)
+    w21 = f_wide(21)
+    w22 = f_wide(22)
 
 // ══════════════ ЗИГ-ЗАГ (логика v3, окно N баров) ══════════════
 to_up_zz = high >= ta.highest(zz_len)
