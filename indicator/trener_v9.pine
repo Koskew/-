@@ -1327,7 +1327,7 @@ if barstate.islast and w_zz
 
 // ══════════════ ТАБЛИЦА-ЧЕКЛИСТ ══════════════
 tp_ = tbl_pos == "верх-право" ? position.top_right : tbl_pos == "верх-лево" ? position.top_left : tbl_pos == "низ-право" ? position.bottom_right : position.bottom_left
-var table T = table.new(tp_, 3, 22, bgcolor=color.new(#000000, 15), border_width=1, border_color=color.new(color.gray, 70))
+var table T = table.new(tp_, 3, 23, bgcolor=color.new(#000000, 15), border_width=1, border_color=color.new(color.gray, 70))
 
 f_join(_arr) =>
     s = ""
@@ -1420,7 +1420,8 @@ if show_tbl and barstate.islast
     n_f = array.size(q_lab)
     dir_f = n_f > 0 ? f_dir(array.get(q_lab, n_f - 1)) : ""
     table.cell(T, 0, 11, "Метки 2/2 (5)", text_color=hdrc, text_halign=text.align_left, text_size=size.small, tooltip="Решающие метки движка. Порог размера свечи: " + (na(thr) ? "мало данных" : str.tostring(thr, "#.###") + "%"))
-    table.cell(T, 1, 11, t5 == "" ? "—" : t5 + dir_f, text_color=color.yellow, text_halign=text.align_left, text_size=size.small)
+    lag_f = n_f > 0 ? bar_index - array.get(q_conf, n_f - 1) : na
+    table.cell(T, 1, 11, t5 == "" ? "—" : t5 + dir_f + (na(lag_f) ? "" : "   лаг " + str.tostring(lag_f) + (lag_f <= 1 ? " — заморозка" : "")), text_color=color.yellow, text_halign=text.align_left, text_size=size.small)
     // 12: структура — чистая / мутная (мутная = зона хотелок)
     n_q = array.size(q_lab)
     up_t = 0
@@ -1435,9 +1436,9 @@ if show_tbl and barstate.islast
                 a = array.get(q_lab, j - 1)
                 if (a == "HH" and lb == "LL") or (a == "LL" and lb == "HL")
                     slom_t := true
-    strtxt = slom_t ? "МУТНАЯ (слом в пятёрке) — зона хотелок" : up_t >= 4 ? "чистая: тренд вверх " + str.tostring(up_t) + "/5" : dn_t >= 4 ? "чистая: тренд вниз " + str.tostring(dn_t) + "/5" : "смешанная (вверх " + str.tostring(up_t) + " / вниз " + str.tostring(dn_t) + ")"
+    strtxt = slom_t ? "разнонаправленная: есть слом в пятёрке — ступень не блокирует" : up_t >= 4 ? "вверх " + str.tostring(up_t) + "/5 — шорт заблокирован" : dn_t >= 4 ? "вниз " + str.tostring(dn_t) + "/5 — лонг заблокирован" : "вверх " + str.tostring(up_t) + " / вниз " + str.tostring(dn_t) + " — не блокирует"
     strcol = slom_t ? color.new(color.red, 0) : (up_t >= 4 or dn_t >= 4) ? color.lime : color.new(color.orange, 0)
-    table.cell(T, 0, 12, "Структура", text_color=hdrc, text_halign=text.align_left, text_size=size.small)
+    table.cell(T, 0, 12, "Согласованность", text_color=hdrc, text_halign=text.align_left, text_size=size.small, tooltip="Ступень каскада «против тренда»: голоса в пятёрке сырых меток 2/2. Это НЕ тренд из блока ГДЕ МЫ. Проверено на 261 сделке — грубый подсчёт голосов обгоняет настоящий тренд, потому что он быстрый, а подтверждённый тренд опаздывает на 13-23 бара:\n  голоса        +29.3R, просадка 21.1R\n  тренд 5/5      -1.3R, просадка 30.9R\n  оба слоя       +3.5R, просадка 27.8R\n  без ступени    -6.5R, просадка 30.5R\nПоэтому ступень оставлена как есть.")
     table.cell(T, 1, 12, strtxt, text_color=strcol, text_halign=text.align_left, text_size=size.small)
     // 13: запрет сейчас — предупреждение ДО триггера
     bantxt = str.endswith(t5, "LL>HH") ? "…LL>HH → шорт от HH запрещён" : str.endswith(t5, "HH>LH") ? "…HH>LH → шорт от LH запрещён" : str.endswith(t5, "LL>LH>HL") ? "…LL>LH>HL → лонг от HL запрещён" : str.endswith(t5, "HH>LL>LL") ? "…HH>LL>LL → лонг от LL запрещён" : "нет"
@@ -1447,17 +1448,38 @@ if show_tbl and barstate.islast
     w12 = f_wide(12)
     w13 = f_wide(13)
 
-    // 14: чек-лист (время триггера — в заголовке)
+    // 14: качество входа — три условия, каждое мерилось на 261 сделке.
+    // Балл упорядочен: 0 даёт -0.13R на сделку, 1 даёт -0.01R, 2 даёт
+    // +0.35R, 3 даёт +0.73R. Но разница «>=2» против «<=1» это +0.49R
+    // при ошибке 0.31R — всего 1.6 сигмы. Величина НЕ доказана.
+    [qL, qLa, qLb, qLc] = w_score(true)
+    [qS, qSa, qSb, qSc] = w_score(false)
+    qtxt = "лонг " + str.tostring(qL) + "/3 · шорт " + str.tostring(qS) + "/3   " + (qLa == 1 or qSa == 1 ? "слои согласны" : "слои спорят") + " · " + (qLb == 1 ? "точка счёта под лонг" : qSb == 1 ? "точка счёта под шорт" : "точка счёта не входная") + " · " + (qLc == 1 ? "у старшего есть запас" : "запаса у старшего нет")
+    qbest = math.max(qL, qS)
+    table.cell(T, 0, 14, "Качество", text_color=hdrc, text_halign=text.align_left, text_size=size.small, tooltip="Балл 0-3: слои 5/5 и 2/2 согласны, вход на коррекционной точке счёта 2/2 в сторону счёта, у старшего тренда есть запас больше импульса. Замер на 261 сделке за два года: балл 0 даёт -0.13R на сделку, 1 даёт -0.01R, 2 даёт +0.35R, 3 даёт +0.73R. Разница между «>=2» и «<=1» это +0.49R при стандартной ошибке 0.31R, всего 1.6 сигмы, и признаки подобраны на тех же двух годах — величина НЕ доказана. Поэтому режим фильтра по умолчанию мягкий: балл красит точку, но вход не блокирует.")
+    table.cell(T, 1, 14, qtxt, text_color=qbest >= 3 ? color.lime : qbest == 2 ? color.new(#00b050, 0) : qbest == 1 ? color.new(color.orange, 0) : color.gray, text_halign=text.align_left, text_size=size.small)
+    w14 = f_wide(14)
+
+    // 15: чек-лист (время триггера — в заголовке)
     chk_hdr = "Чек-лист" + (na(last_time) ? "" : " " + str.format_time(last_time, "dd.MM HH:mm", tbl_tz))
-    table.cell(T, 0, 14, chk_hdr, text_color=hdrc, text_halign=text.align_left, text_valign=text.align_top, text_size=size.small)
-    table.cell(T, 1, 14, last_chk, text_color=color.new(color.aqua, 0), text_halign=text.align_left, text_size=size.small)
-    // 15: позиции
-    table.cell(T, 0, 15, "Позиции", text_color=hdrc, text_halign=text.align_left, text_size=size.small)
+    table.cell(T, 0, 15, chk_hdr, text_color=hdrc, text_halign=text.align_left, text_valign=text.align_top, text_size=size.small)
+    table.cell(T, 1, 15, last_chk, text_color=color.new(color.aqua, 0), text_halign=text.align_left, text_size=size.small)
+    // 16: позиции
+    table.cell(T, 0, 16, "Позиции", text_color=hdrc, text_halign=text.align_left, text_size=size.small)
     np_ = array.size(P_en)
-    postxt = np_ == 0 ? "нет" : str.tostring(np_) + " шт | посл: " + (array.get(P_long, np_ - 1) ? "LONG " : "SHORT ") + str.tostring(array.get(P_en, np_ - 1), format.mintick) + " | SL " + str.tostring(array.get(P_sl, np_ - 1), format.mintick) + " | TP " + str.tostring(array.get(P_tp, np_ - 1), format.mintick)
-    table.cell(T, 1, 15, postxt, text_color=np_ > 0 ? color.white : color.gray, text_halign=text.align_left, text_size=size.small)
+    string postxt = "нет"
+    if np_ > 0
+        pl_ = array.get(P_long, np_ - 1)
+        pe_ = array.get(P_en, np_ - 1)
+        ps_ = array.get(P_sl, np_ - 1)
+        pt_ = array.get(P_tp, np_ - 1)
+        prr = math.abs(pe_ - ps_) > 0 ? math.abs(pt_ - pe_) / math.abs(pe_ - ps_) : na
+        // сколько прошла цена от входа к цели, в долях риска: 1.00 значит дошла
+        pgo = math.abs(pe_ - ps_) > 0 ? (pl_ ? close - pe_ : pe_ - close) / math.abs(pe_ - ps_) : na
+        postxt := str.tostring(np_) + " шт · посл " + (pl_ ? "LONG " : "SHORT ") + str.tostring(pe_, format.mintick) + "  SL " + str.tostring(ps_, format.mintick) + "  TP " + str.tostring(pt_, format.mintick) + "  RR " + str.tostring(prr, "#.##") + "  сейчас " + (pgo >= 0 ? "+" : "") + str.tostring(pgo, "#.##") + "R, " + str.tostring(bar_index - array.get(P_bar, np_ - 1)) + " бар"
+    table.cell(T, 1, 16, postxt, text_color=np_ > 0 ? color.white : color.gray, text_halign=text.align_left, text_size=size.small)
     // ═══ БЛОК: РИСК ═══
-    f_block(16, "━━  РИСК  ━━")
+    f_block(17, "━━  РИСК  ━━")
     // Все периоды считаются по времени ВХОДА сделки. Ориентиры в тултипах —
     // прогон эталонного движка на 261 сделке за два года, research/risk_check.py.
     [dR, dN] = w_sumR("D")
@@ -1465,22 +1487,22 @@ if show_tbl and barstate.islast
     [mR, mN] = w_sumR("M")
     ws_hit = use_ws and wR <= -ws_r
 
-    // 17: день
+    // 18: день
     dtxt = str.tostring(dN) + " сд · " + (dR >= 0 ? "+" : "") + str.tostring(dR, "#.#") + "R"
-    table.cell(T, 0, 17, "День", text_color=hdrc, text_halign=text.align_left, text_size=size.small, tooltip="За два года: 174 дня со сделками, медиана 1 сделка в день, максимум 5. Медиана дня −1.0R, в плюсе только 27% дней. Худший день −4.0R, лучший +13.1R. Минусовый день — норма, а не сбой.")
-    table.cell(T, 1, 17, dtxt, text_color=dR > 0 ? color.lime : dR < 0 ? color.new(color.orange, 0) : color.gray, text_halign=text.align_left, text_size=size.small)
+    table.cell(T, 0, 18, "День", text_color=hdrc, text_halign=text.align_left, text_size=size.small, tooltip="За два года: 174 дня со сделками, медиана 1 сделка в день, максимум 5. Медиана дня −1.0R, в плюсе только 27% дней. Худший день −4.0R, лучший +13.1R. Минусовый день — норма, а не сбой.")
+    table.cell(T, 1, 18, dtxt, text_color=dR > 0 ? color.lime : dR < 0 ? color.new(color.orange, 0) : color.gray, text_halign=text.align_left, text_size=size.small)
 
-    // 18: неделя и предохранитель
+    // 19: неделя и предохранитель
     wtxt = str.tostring(wN) + " сд · " + (wR >= 0 ? "+" : "") + str.tostring(wR, "#.#") + "R" + (use_ws ? (ws_hit ? "  |  ПРЕДОХРАНИТЕЛЬ — до пн" : "  |  стоп при −" + str.tostring(ws_r, "#.#") + "R") : "  |  предохранитель выкл")
-    table.cell(T, 0, 18, "Неделя", text_color=hdrc, text_halign=text.align_left, text_size=size.small, tooltip="За два года: 91 неделя со сделками, медиана 2 сделки. Медиана недели −1.0R, в плюсе 44% недель. Худшая −7.0R, лучшая +13.6R. Пять процентов худших недель ниже −4.0R — на это и настроен предохранитель.")
-    table.cell(T, 1, 18, wtxt, text_color=ws_hit ? color.new(color.red, 0) : wR > 0 ? color.lime : wR < 0 ? color.new(color.orange, 0) : color.gray, text_halign=text.align_left, text_size=size.small)
+    table.cell(T, 0, 19, "Неделя", text_color=hdrc, text_halign=text.align_left, text_size=size.small, tooltip="За два года: 91 неделя со сделками, медиана 2 сделки. Медиана недели −1.0R, в плюсе 44% недель. Худшая −7.0R, лучшая +13.6R. Пять процентов худших недель ниже −4.0R — на это и настроен предохранитель.")
+    table.cell(T, 1, 19, wtxt, text_color=ws_hit ? color.new(color.red, 0) : wR > 0 ? color.lime : wR < 0 ? color.new(color.orange, 0) : color.gray, text_halign=text.align_left, text_size=size.small)
 
-    // 19: месяц
+    // 20: месяц
     mtxt = str.tostring(mN) + " сд · " + (mR >= 0 ? "+" : "") + str.tostring(mR, "#.#") + "R"
-    table.cell(T, 0, 19, "Месяц", text_color=hdrc, text_halign=text.align_left, text_size=size.small, tooltip="За два года: 26 месяцев, медиана 10 сделок. Медиана месяца +1.2R, в плюсе 58% месяцев. Худший −8.1R, лучший +15.0R. Месяц — первый период, где медиана становится положительной.")
-    table.cell(T, 1, 19, mtxt, text_color=mR > 0 ? color.lime : mR < 0 ? color.new(color.orange, 0) : color.gray, text_halign=text.align_left, text_size=size.small)
+    table.cell(T, 0, 20, "Месяц", text_color=hdrc, text_halign=text.align_left, text_size=size.small, tooltip="За два года: 26 месяцев, медиана 10 сделок. Медиана месяца +1.2R, в плюсе 58% месяцев. Худший −8.1R, лучший +15.0R. Месяц — первый период, где медиана становится положительной.")
+    table.cell(T, 1, 20, mtxt, text_color=mR > 0 ? color.lime : mR < 0 ? color.new(color.orange, 0) : color.gray, text_halign=text.align_left, text_size=size.small)
 
-    // 20: всего и просадка
+    // 21: всего и просадка
     float rall = 0.0
     float peak = 0.0
     float cum  = 0.0
@@ -1493,10 +1515,10 @@ if show_tbl and barstate.islast
         rall := cum
     ddnow = peak - cum
     atxt = str.tostring(array.size(R_val)) + " сд · " + (rall >= 0 ? "+" : "") + str.tostring(rall, "#.#") + "R  |  просадка сейчас " + str.tostring(ddnow, "#.#") + "R из " + str.tostring(ddmx, "#.#") + "R макс"
-    table.cell(T, 0, 20, "Всего", text_color=hdrc, text_halign=text.align_left, text_size=size.small, tooltip="Вся загруженная история графика. Ориентир за два года: 261 сделка, +29.3R, доля TP 20%, медианный RR у выигрышей 4.05. Максимальная просадка 21.1R. Если текущая просадка близка к максимальной — это не поломка, а рабочий режим системы с долей выигрышей в 20%.")
-    table.cell(T, 1, 20, atxt, text_color=rall >= 0 ? color.lime : color.new(color.red, 0), text_halign=text.align_left, text_size=size.small)
+    table.cell(T, 0, 21, "Всего", text_color=hdrc, text_halign=text.align_left, text_size=size.small, tooltip="Вся загруженная история графика. Ориентир за два года: 261 сделка, +29.3R, доля TP 20%, медианный RR у выигрышей 4.05. Максимальная просадка 21.1R. Если текущая просадка близка к максимальной — это не поломка, а рабочий режим системы с долей выигрышей в 20%.")
+    table.cell(T, 1, 21, atxt, text_color=rall >= 0 ? color.lime : color.new(color.red, 0), text_halign=text.align_left, text_size=size.small)
 
-    // 21: серия стопов
+    // 22: серия стопов
     int streak = 0
     if array.size(R_val) > 0
         for i = array.size(R_val) - 1 to 0
@@ -1505,16 +1527,16 @@ if show_tbl and barstate.islast
             else
                 break
     sertxt = str.tostring(streak) + " SL подряд"
-    table.cell(T, 0, 21, "Серия", text_color=hdrc, text_halign=text.align_left, text_size=size.small, tooltip="Стопы подряд. За два года: 40 серий, медиана 4, девяностый перцентиль 13, максимум 19. Серия из 13 стопов — обычное дело, а не повод менять систему.")
-    table.cell(T, 1, 21, sertxt, text_color=streak >= 13 ? color.new(color.red, 0) : streak >= 8 ? color.new(color.orange, 0) : color.gray, text_halign=text.align_left, text_size=size.small)
+    table.cell(T, 0, 22, "Серия", text_color=hdrc, text_halign=text.align_left, text_size=size.small, tooltip="Стопы подряд. За два года: 40 серий, медиана 4, девяностый перцентиль 13, максимум 19. Серия из 13 стопов — обычное дело, а не повод менять систему.")
+    table.cell(T, 1, 22, sertxt, text_color=streak >= 13 ? color.new(color.red, 0) : streak >= 8 ? color.new(color.orange, 0) : color.gray, text_halign=text.align_left, text_size=size.small)
 
-    w14 = f_wide(14)
-    w15 = f_wide(15)
-    w17 = f_wide(17)
-    w18 = f_wide(18)
-    w19 = f_wide(19)
-    w20 = f_wide(20)
-    w21 = f_wide(21)
+    w14 = f_wide(15)
+    w15 = f_wide(16)
+    w17 = f_wide(18)
+    w18 = f_wide(19)
+    w19 = f_wide(20)
+    w20 = f_wide(21)
+    w21 = f_wide(22)
 
 // ══════════════ ЗИГ-ЗАГ (логика v3, окно N баров) ══════════════
 to_up_zz = high >= ta.highest(zz_len)
