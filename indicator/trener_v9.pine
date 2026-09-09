@@ -217,6 +217,22 @@ w_jmp2 = input.float(0.5, "2/2 · досрочное подтверждение,
 w_prov = input.bool(true, "После рывка держать на уровне смерти", group=gW, tooltip="Без этого уровень берётся с вершины прошлого движения: после рывка он дальше 1.5 импульса в 78% случаев, и строка запаса успокаивает ложно.")
 W_MAXK = 80
 
+// ── отрисовка ГДЕ МЫ на графике: колена, волны, уровни ──
+w_zz    = input.bool(true,  "Рисовать колена и волны", group=gW, tooltip="Зиг-заг по коленам с номерами точек (0)-(5) — это и есть волны. Отдельный зиг-заг v8 построен на ta.highest/lowest и с метками не связан: если включишь оба, на графике будут две разные ломаные.")
+w_zz5   = input.bool(true,  "· слой 5/5", inline="wl", group=gW)
+w_zz2   = input.bool(false, "· слой 2/2", inline="wl", group=gW)
+w_main  = input.string("5/5", "Чей счёт подписывать", options=["5/5","2/2"], group=gW, tooltip="Подписи с номерами точек рисуются только для одного слоя, иначе наложатся. Второй слой виден ломаной.")
+w_lab   = input.string("номер + мутность", "Что писать у колена", options=["номер + мутность","метка","номер и метка","ничего"], group=gW)
+w_mud   = input.bool(true,  "Помечать мутные колена", group=gW)
+w_cmud  = input.color(#ff9800, "Цвет мутного", group=gW)
+w_win   = input.int(700, "Рисовать за последние N баров", minval=100, group=gW)
+w_lvl   = input.bool(true,  "Уровень, который держит тренд", group=gW)
+w_msb   = input.bool(true,  "Отметка слома", group=gW)
+w_zzw   = input.int(2, "Толщина ломаной 5/5", minval=1, maxval=4, group=gW)
+w_zzm   = input.string("по счёту", "Чем красить ломаную", options=["по счёту","по ходу ноги","по тренду"], group=gW, tooltip="«по счёту» — цвет говорит, куда считает структура, толщина отделяет импульс от коррекции. «по ходу ноги» — вниз красная, вверх зелёная. «по тренду» — цвет действующего тренда, поэтому падение внутри живого восходящего рисуется зелёным.")
+wc_up   = input.color(#00b050, "Восходящий", inline="wc", group=gW)
+wc_dn   = input.color(#e0342c, "Нисходящий", inline="wc", group=gW)
+
 // ══════════════ СЛОЙ ══════════════
 type Layer
     array<float>  KP        // цена колена
@@ -556,9 +572,24 @@ L5.fib := w_fib5
 L5.jump := w_jmp5
 L2.fib := w_fib2
 L2.jump := w_jmp2
+// сломы 5/5 — для отметок «слом» на графике
+var float[] DXP5 = array.new_float()
+var int[]   DXB5 = array.new_int()
+var int[]   DXT5 = array.new_int()
+
 if barstate.isconfirmed
     wf5 = w_step(L5, ph5, pl5, high[5], low[5])
     wf2 = w_step(L2, ph,  pl,  high[2], low[2])
+    // смерть могла быть перекрыта рывком в том же баре, поэтому
+    // отмечаем по бару смерти, а не по состоянию ПЕРЕХОДА
+    if L5.pDb == bar_index
+        array.push(DXP5, L5.pD)
+        array.push(DXB5, L5.pDb)
+        array.push(DXT5, L5.pTr)
+        if array.size(DXB5) > 40
+            array.shift(DXP5)
+            array.shift(DXB5)
+            array.shift(DXT5)
 
 // очередь медленных меток (5 последних) — для таблицы
 var string[] q5_lab = array.new_string()
@@ -626,7 +657,7 @@ if barstate.isconfirmed
         d3_since := bar_index
 
 // ── помощники блока ГДЕ МЫ ──
-w_col(_t) => _t == 1 ? color.lime : color.new(color.red, 0)
+w_col(_t) => _t == 1 ? wc_up : wc_dn
 
 w_trend(L) =>
     L.inTrans ? "ПЕРЕХОД, был " + (L.pTr == 1 ? "восх" : "нисх") : L.tr == 1 ? "ВОСХОДЯЩИЙ, " + str.tostring(bar_index - L.trFrom) + "б" : L.tr == -1 ? "НИСХОДЯЩИЙ, " + str.tostring(bar_index - L.trFrom) + "б" : "не определён"
@@ -1198,6 +1229,101 @@ if barstate.islast
         if show_lvlh
             f_draw_nearest(lhd_p, lhd_b, col_lvH, 3, line.style_dotted)
             f_draw_nearest(hld_p, hld_b, col_lvL, 3, line.style_dotted)
+
+
+// ══════════════ ГДЕ МЫ: ОТРИСОВКА НА ГРАФИКЕ ══════════════
+// Перенесено из gde_my_v5.pine. Три канала не пересекаются: ломаная
+// говорит про счёт и про то, импульс это или коррекция; подпись со
+// стрелкой — про счёт колена; пунктир уровня и таблица — про тренд.
+var line[]  WLN = array.new<line>()
+var label[] WLB = array.new<label>()
+
+w_drawZZ(L, _w, _labels) =>
+    n = array.size(L.KP)
+    cs = w_cstart(L)
+    if n >= 2
+        for i = 1 to n - 1
+            x1 = array.get(L.KB, i - 1)
+            x2 = array.get(L.KB, i)
+            if last_bar_index - x1 <= w_win
+                t2   = array.get(L.KT, i)
+                trs  = array.get(L.KX, i)
+                kd   = w_kdir(L, i)
+                num0 = array.get(L.KN, i)
+                // нога В НОЛЬ счёта принадлежит ПРЕДЫДУЩЕМУ счёту: это
+                // последний ход старой структуры, а не первый ход новой
+                kdL  = (num0 == 0 and i > 0) ? w_kdir(L, i - 1) : kd
+                // чётная точка — коррекция: цвет свой, но линия тоньше,
+                // иначе каждый откат читается как разворот
+                bool corr  = num0 > 0 and num0 % 2 == 0
+                bool legUp = array.get(L.KP, i) > array.get(L.KP, i - 1)
+                cc0 = w_zzm == "по ходу ноги" ? (legUp ? wc_up : wc_dn) : w_zzm == "по счёту" ? (kdL == 0 ? color.gray : w_col(kdL)) : trs ? (legUp ? wc_up : wc_dn) : t2 == 0 ? color.gray : w_col(t2)
+                bool act = false
+                if cs >= 0
+                    act := i > cs
+                bool thin = corr and w_zzm == "по счёту"
+                tp = (thin ? 45 : 0) + (act ? 0 : 55)
+                cc = color.new(cc0, math.min(85, tp))
+                if array.get(L.KT, i - 1) == t2
+                    array.push(WLN, line.new(x1, array.get(L.KP, i - 1), x2, array.get(L.KP, i), color=cc, width=thin ? _w : _w + 1, style=trs ? line.style_dashed : line.style_solid))
+                if _labels
+                    mc  = array.get(L.KM, i)
+                    ap  = array.get(L.KA, i)
+                    lbb = array.get(L.KL, i)
+                    pr  = array.get(L.KP, i)
+                    hh  = array.get(L.KH, i)
+                    mud = mc >= 2
+                    if w_mud and mud and not na(ap)
+                        array.push(WLN, line.new(x1, ap, x2, ap, color=color.new(w_cmud, 20), width=1, style=line.style_dotted))
+                    arr = kd == 1 ? "↑" : kd == -1 ? "↓" : ""
+                    string txt = na
+                    if w_lab == "номер + мутность"
+                        txt := (num0 >= 0 ? "(" + str.tostring(num0) + ")" : "·") + arr + (mud ? "м" : "")
+                    else if w_lab == "метка"
+                        txt := lbb + arr + (mud ? " м" : "")
+                    else if w_lab == "номер и метка"
+                        txt := (num0 >= 0 ? "(" + str.tostring(num0) + ") " : "") + lbb + arr + (mud ? " м" : "")
+                    if not na(txt)
+                        lc0 = kd == 0 ? color.gray : w_col(kd)
+                        lc  = act ? lc0 : color.new(lc0, 62)
+                        kdn = kd == 1 ? "ВОСХОДЯЩИЙ счёт" : kd == -1 ? "НИСХОДЯЩИЙ счёт" : "счёт не определён"
+                        // прошедшее время: состояние НА МОМЕНТ появления
+                        trn = trs ? "на этом колене был ПЕРЕХОД от " + (t2 == 1 ? "восходящего" : "нисходящего") : t2 == 1 ? "на этом колене тренд был восходящий" : t2 == -1 ? "на этом колене тренд был нисходящий" : "на этом колене тренда не было"
+                        now = L.inTrans ? -2 : L.tr
+                        was = trs ? -2 : t2
+                        nw  = now == was ? "" : "\nсейчас " + (L.inTrans ? "ПЕРЕХОД" : L.tr == 1 ? "восходящий" : L.tr == -1 ? "нисходящий" : "не определён")
+                        tip = str.tostring(L.lb) + "/" + str.tostring(L.lb) + "   " + lbb + "  " + str.tostring(pr, format.mintick) + "\n" + (num0 >= 0 ? "точка (" + str.tostring(num0) + ") из 5 · " + (num0 % 2 == 1 ? "импульсное" : num0 == 0 ? "начало счёта" : "корректирующее") : "вне счёта") + "\n" + kdn + "\n" + trn + (kd != 0 and t2 != 0 and kd != t2 and not trs ? "   ← счёт шёл против тренда" : "") + nw + "\n" + (mud ? "МУТНОЕ: слилось " + str.tostring(mc) + " меток, поглощена " + str.tostring(ap, format.mintick) : "чистое колено")
+                        array.push(WLB, label.new(x2, pr, txt, style=hh ? label.style_label_down : label.style_label_up, color=color.new(color.black, 100), textcolor=mud ? (act ? w_cmud : color.new(w_cmud, 62)) : lc, size=size.small, tooltip=tip))
+    n
+
+w_drawLvl(L, _tag) =>
+    if w_lvl and not na(L.lvl) and L.tr != 0 and not L.inTrans
+        x0 = na(L.trFrom) ? bar_index - 50 : L.trFrom
+        array.push(WLN, line.new(x0, L.lvl, bar_index + 8, L.lvl, color=color.new(w_col(L.tr), 25), width=2, style=line.style_dashed))
+        array.push(WLB, label.new(bar_index + 8, L.lvl, _tag + " " + (L.lvlProv ? "провиз " : L.tr == 1 ? "HL " : "LH ") + str.tostring(L.lvl, format.mintick), style=label.style_label_left, color=color.new(w_col(L.tr), 85), textcolor=w_col(L.tr), size=size.small))
+    0
+
+
+if barstate.islast and w_zz
+    while array.size(WLN) > 0
+        line.delete(array.pop(WLN))
+    while array.size(WLB) > 0
+        label.delete(array.pop(WLB))
+    if w_zz5
+        wd1 = w_drawZZ(L5, w_zzw, w_main == "5/5")
+        wd2 = w_drawLvl(L5, "5/5")
+    if w_zz2
+        wd3 = w_drawZZ(L2, 1, w_main == "2/2")
+        wd4 = w_drawLvl(L2, "2/2")
+    if w_msb and array.size(DXB5) > 0
+        wi0 = math.max(0, array.size(DXB5) - 10)
+        for wi = wi0 to array.size(DXB5) - 1
+            wdb = array.get(DXB5, wi)
+            if last_bar_index - wdb <= w_win
+                wdp = array.get(DXP5, wi)
+                wdt = array.get(DXT5, wi)
+                array.push(WLN, line.new(wdb - 20, wdp, wdb, wdp, color=wdt == 1 ? wc_dn : wc_up, width=2))
+                array.push(WLB, label.new(wdb, wdp, "слом", style=wdt == 1 ? label.style_label_down : label.style_label_up, color=color.new(color.black, 100), textcolor=wdt == 1 ? wc_dn : wc_up, size=size.tiny))
 
 // ══════════════ ТАБЛИЦА-ЧЕКЛИСТ ══════════════
 tp_ = tbl_pos == "верх-право" ? position.top_right : tbl_pos == "верх-лево" ? position.top_left : tbl_pos == "низ-право" ? position.bottom_right : position.bottom_left
