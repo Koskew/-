@@ -60,6 +60,14 @@ col_fastH  = input.color(color.new(color.green, 30), "быстрые верх/н
 col_fastL  = input.color(color.new(color.red, 30),   "", inline="cf", group=g6)
 col_slowH  = input.color(color.new(#00c853, 0), "медленные верх/низ", inline="cs", group=g6)
 col_slowL  = input.color(color.new(#ff1744, 0), "", inline="cs", group=g6)
+// Пивот 5/5 ВСЕГДА одновременно и пивот 2/2 — проверено, 1516 из 1516.
+// Поэтому буква рисовалась дважды, одна над другой. Плюс plotshape
+// отступает от свечи в ПИКСЕЛЯХ: две фигуры разного размера, стоящие
+// друг на друге, разъезжаются при смене масштаба.
+m_fast_txt = input.bool(false, "Писать буквы у быстрых меток 2/2", group=g6, tooltip="По умолчанию у быстрых меток только треугольник: буква всё равно дублировала медленную метку на том же баре. Включи, если смотришь только 2/2 с выключенными 5/5.")
+m_slow_px  = input.bool(true,  "Медленные метки крепить к ЦЕНЕ", group=g6, tooltip="plotshape отступает от свечи в пикселях, поэтому метка ездит при смене масштаба и таймфрейма. С этой галкой медленная метка ставится на конкретную цену — high плюс отступ или low минус отступ — и не сдвигается никогда.")
+m_slow_off = input.float(0.6, "Отступ медленной метки, ATR", 0.0, 3.0, 0.1, group=g6)
+m_slow_bar = input.int(700, "Медленные метки за последние N баров", minval=100, group=g6, tooltip="Метки на цене — это объекты label, их лимит 500 на скрипт. Окно ограничивает, сколько последних показывать.")
 
 g4 = "📐 Линии сделок"
 show_lines   = input.bool(true, "Линии вход/стоп/тейк", group=g4)
@@ -153,10 +161,14 @@ else if newL
 
 // ══════════════ МЕТКИ СТРУКТУРЫ НА ГРАФИКЕ ══════════════
 // быстрые 2/2 — решающие (по ним движок); мелкие, приглушённые
-plotshape(show_fast and not na(higherhigh) ? higherhigh : na, title="HH 2/2", style=shape.triangledown, location=location.abovebar, color=col_fastH, text="HH", textcolor=col_fastH, size=size.tiny, offset=-2)
-plotshape(show_fast and not na(lowerhigh)  ? lowerhigh  : na, title="LH 2/2", style=shape.triangledown, location=location.abovebar, color=col_fastH, text="LH", textcolor=col_fastH, size=size.tiny, offset=-2)
-plotshape(show_fast and not na(higherlow)  ? higherlow  : na, title="HL 2/2", style=shape.triangleup,   location=location.belowbar, color=col_fastL, text="HL", textcolor=col_fastL, size=size.tiny, offset=-2)
-plotshape(show_fast and not na(lowerlow)   ? lowerlow   : na, title="LL 2/2", style=shape.triangleup,   location=location.belowbar, color=col_fastL, text="LL", textcolor=col_fastL, size=size.tiny, offset=-2)
+plotshape(show_fast and not m_fast_txt and not na(higherhigh) ? higherhigh : na, title="HH 2/2", style=shape.triangledown, location=location.abovebar, color=col_fastH, size=size.tiny, offset=-2)
+plotshape(show_fast and not m_fast_txt and not na(lowerhigh)  ? lowerhigh  : na, title="LH 2/2", style=shape.triangledown, location=location.abovebar, color=col_fastH, size=size.tiny, offset=-2)
+plotshape(show_fast and not m_fast_txt and not na(higherlow)  ? higherlow  : na, title="HL 2/2", style=shape.triangleup,   location=location.belowbar, color=col_fastL, size=size.tiny, offset=-2)
+plotshape(show_fast and not m_fast_txt and not na(lowerlow)   ? lowerlow   : na, title="LL 2/2", style=shape.triangleup,   location=location.belowbar, color=col_fastL, size=size.tiny, offset=-2)
+plotshape(show_fast and m_fast_txt and not na(higherhigh) ? higherhigh : na, title="HH 2/2 (буква)", style=shape.triangledown, location=location.abovebar, color=col_fastH, text="HH", textcolor=col_fastH, size=size.tiny, offset=-2)
+plotshape(show_fast and m_fast_txt and not na(lowerhigh)  ? lowerhigh  : na, title="LH 2/2 (буква)", style=shape.triangledown, location=location.abovebar, color=col_fastH, text="LH", textcolor=col_fastH, size=size.tiny, offset=-2)
+plotshape(show_fast and m_fast_txt and not na(higherlow)  ? higherlow  : na, title="HL 2/2 (буква)", style=shape.triangleup,   location=location.belowbar, color=col_fastL, text="HL", textcolor=col_fastL, size=size.tiny, offset=-2)
+plotshape(show_fast and m_fast_txt and not na(lowerlow)   ? lowerlow   : na, title="LL 2/2 (буква)", style=shape.triangleup,   location=location.belowbar, color=col_fastL, text="LL", textcolor=col_fastL, size=size.tiny, offset=-2)
 
 // медленные 5/5 — глобальная структура (контекст); крупнее и ярче, лаг 5 баров
 ph5 = ta.pivothigh(high, 5, 5)
@@ -172,10 +184,24 @@ vw4s = ta.valuewhen(not na(pl5), pl5_value, 0)
 hl5 = na(pl5) ? na : vw3s < vw4s ? pl5 : na
 ll5 = na(pl5) ? na : vw3s > vw4s ? pl5 : na
 
-plotshape(show_slow and not na(hh5) ? hh5 : na, title="HH 5/5", style=shape.labeldown, location=location.abovebar, color=color.new(color.black, 100), text="HH", textcolor=col_slowH, size=size.small, offset=-5)
-plotshape(show_slow and not na(lh5) ? lh5 : na, title="LH 5/5", style=shape.labeldown, location=location.abovebar, color=color.new(color.black, 100), text="LH", textcolor=col_slowH, size=size.small, offset=-5)
-plotshape(show_slow and not na(hl5) ? hl5 : na, title="HL 5/5", style=shape.labelup,   location=location.belowbar, color=color.new(color.black, 100), text="HL", textcolor=col_slowL, size=size.small, offset=-5)
-plotshape(show_slow and not na(ll5) ? ll5 : na, title="LL 5/5", style=shape.labelup,   location=location.belowbar, color=color.new(color.black, 100), text="LL", textcolor=col_slowL, size=size.small, offset=-5)
+// Вариант на ЦЕНЕ: метка ставится на high + отступ или low − отступ, отступ
+// в долях ATR. Не ездит при смене масштаба и не наезжает на быструю метку.
+m_atr = ta.atr(14)
+if show_slow and m_slow_px and barstate.isconfirmed and last_bar_index - (bar_index - 5) <= m_slow_bar
+    if not na(hh5)
+        label.new(bar_index - 5, high[5] + m_atr * m_slow_off, "HH", xloc.bar_index, yloc.price, color.new(color.black, 100), label.style_label_down, col_slowH, size.small)
+    if not na(lh5)
+        label.new(bar_index - 5, high[5] + m_atr * m_slow_off, "LH", xloc.bar_index, yloc.price, color.new(color.black, 100), label.style_label_down, col_slowH, size.small)
+    if not na(hl5)
+        label.new(bar_index - 5, low[5] - m_atr * m_slow_off, "HL", xloc.bar_index, yloc.price, color.new(color.black, 100), label.style_label_up, col_slowL, size.small)
+    if not na(ll5)
+        label.new(bar_index - 5, low[5] - m_atr * m_slow_off, "LL", xloc.bar_index, yloc.price, color.new(color.black, 100), label.style_label_up, col_slowL, size.small)
+
+// Старый вариант на пикселях — если снять галку
+plotshape(show_slow and not m_slow_px and not na(hh5) ? hh5 : na, title="HH 5/5", style=shape.labeldown, location=location.abovebar, color=color.new(color.black, 100), text="HH", textcolor=col_slowH, size=size.small, offset=-5)
+plotshape(show_slow and not m_slow_px and not na(lh5) ? lh5 : na, title="LH 5/5", style=shape.labeldown, location=location.abovebar, color=color.new(color.black, 100), text="LH", textcolor=col_slowH, size=size.small, offset=-5)
+plotshape(show_slow and not m_slow_px and not na(hl5) ? hl5 : na, title="HL 5/5", style=shape.labelup,   location=location.belowbar, color=color.new(color.black, 100), text="HL", textcolor=col_slowL, size=size.small, offset=-5)
+plotshape(show_slow and not m_slow_px and not na(ll5) ? ll5 : na, title="LL 5/5", style=shape.labelup,   location=location.belowbar, color=color.new(color.black, 100), text="LL", textcolor=col_slowL, size=size.small, offset=-5)
 
 
 // ══════════════ ГДЕ МЫ v5: ДВА СЛОЯ ══════════════
