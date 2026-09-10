@@ -1,0 +1,532 @@
+//@version=5
+// ═══════════════════════════════════════════════════════════════════
+// МЕТКИ 3/3 — один слой, только структура
+//
+// Движок скопирован из ГДЕ МЫ v5 без единого изменения: тип Layer,
+// f_relabel, f_recount, f_push, f_step. Отличие одно — слой один, и
+// его глубина пивота вынесена в настройку.
+//
+// Что показывает:
+//   сырые пивоты      — маленькие треугольники, видно слияние в колена
+//   зиг-заг по коленам — цвет говорит про счёт, толщина про импульс
+//   подписи у колен    — номер точки, стрелка счёта, мутность
+//   пунктир            — уровень, на котором держится тренд
+//   таблица            — где мы сейчас
+//
+// Замер на 1H золота, два года: при глубине пивота 3 колено появляется
+// раз в 6.7 бара против 4.8 у 2/2 и 10.0 у 5/5, счёт идёт 28 баров
+// против 19 и 41. Мутность, медиана глубины счёта и доля счётов,
+// дошедших до (5), у всех слоёв ОДИНАКОВЫ — настройка пивота меняет
+// скорость, а не форму структуры.
+// ═══════════════════════════════════════════════════════════════════
+indicator("Метки 3/3", overlay=true, max_lines_count=500, max_labels_count=500)
+
+gA = "① Слой"
+LB      = input.int(3,    "Глубина пивота (3 = метки 3/3)", minval=2, maxval=8, group=gA, tooltip="Сколько баров слева и справа должно быть ниже вершины. Меняйте, чтобы сравнить 2/2, 3/3, 4/4, 5/5 на одном графике. Метка видна через столько же баров после факта.")
+fibD    = input.float(0.33,"Глубина слома, импульсов", 0.0, 1.0, 0.01, group=gA, tooltip="Насколько тело закрытой свечи должно уйти за уровень, чтобы тренд считался мёртвым. 0.33 при глубине пивота 3 даёт медиану жизни тренда 32 бара на 1H и 30 на 5m, время в ПЕРЕХОДЕ 18-21%.")
+jumpC   = input.float(0.5, "Досрочное подтверждение, импульсов", 0.0, 3.0, 0.25, group=gA, tooltip="Пауза «жду 2 колена» в одностороннем ходе не двигается: новый экстремум сливается в то же колено. Рывок подтверждает тренд сразу, если цена ушла от уровня смерти дальше этой доли импульса И две последние метки согласны. 0 выключает.")
+provOn  = input.bool(true, "После рывка держать на уровне смерти", group=gA)
+
+gB = "② Что рисовать"
+showRaw = input.bool(true,  "Сырые пивоты", group=gB, tooltip="Маленькие треугольники на самих пивотах. Если рядом два одной стороны — они слились в одно колено, это и есть мутность.")
+showZZ  = input.bool(true,  "Зиг-заг по коленам", group=gB)
+labMode = input.string("номер + мутность", "Подпись у колена", options=["номер + мутность","метка","номер и метка","ничего"], group=gB)
+drawMud = input.bool(true,  "Помечать мутные колена", group=gB, tooltip="Колено, собранное из двух и более меток: первая появилась, была перебита, цена сделала второй экстремум. Около 21% на 1H и 18% на 5m — и это не зависит от глубины пивота.")
+drawLvl = input.bool(true,  "Уровень, который держит тренд", group=gB)
+drawMSB = input.bool(true,  "Отметка слома", group=gB)
+winBars = input.int(700,   "Рисовать за последние N баров", minval=100, group=gB)
+
+gC = "③ Цвета"
+cUp    = input.color(#00b050, "Восходящий", group=gC)
+cDn    = input.color(#e0342c, "Нисходящий", group=gC)
+cMud   = input.color(#ff9800, "Пометка мутного", group=gC)
+zzW    = input.int(2, "Толщина зиг-зага", minval=1, maxval=4, group=gC)
+zzMode = input.string("по счёту", "Чем красить зиг-заг", options=["по счёту","по ходу ноги","по тренду"], group=gC, tooltip="«по счёту» — цвет говорит, куда считает структура, толщина отделяет импульс от коррекции. «по ходу ноги» — вниз красная, вверх зелёная. «по тренду» — цвет действующего тренда.")
+
+gD = "④ Таблица"
+showT = input.bool(true, "Таблица", group=gD)
+posT  = input.string("верх-право", "Позиция", options=["верх-право","верх-лево","низ-право","низ-лево"], group=gD)
+sizeT = input.string("small", "Размер", options=["tiny","small","normal"], group=gD)
+
+MAXK = 80
+
+// ══════════════ СЛОЙ ══════════════
+type Layer
+    array<float>  KP        // цена колена
+    array<int>    KB        // бар колена
+    array<bool>   KH        // вершина или низ
+    array<string> KL        // метка HH / LH / HL / LL
+    array<int>    KN        // номер точки в счёте, -1 вне счёта
+    array<int>    KM        // сколько сырых меток слилось
+    array<float>  KA        // цена первой, поглощённой метки
+    array<int>    KT        // тренд на момент появления колена
+    array<bool>   KX        // колено появилось в ПЕРЕХОДЕ
+    int      lb
+    float    fib
+    float    jump
+    int      tr
+    float    lvl
+    float    imp
+    int      trFrom
+    bool     inTrans
+    int      marks
+    float    lastD
+    bool     lvlProv
+    int      pTr
+    float    pD
+    int      pDb
+
+f_new(_lb, _fib, _jump) =>
+    Layer.new(KP = array.new_float(), KB = array.new_int(), KH = array.new_bool(),
+              KL = array.new_string(), KN = array.new_int(), KM = array.new_int(),
+              KA = array.new_float(), KT = array.new_int(), KX = array.new_bool(),
+              lb = _lb, fib = _fib, jump = _jump,
+              tr = 0, lvl = na, imp = 0.0, trFrom = na, inTrans = false, marks = 0,
+              lastD = na, lvlProv = false, pTr = 0, pD = na, pDb = na)
+
+f_isUp(_l) => _l == "HH" or _l == "HL"
+
+f_relabel(L) =>
+    array.clear(L.KL)
+    n = array.size(L.KP)
+    if n > 0
+        for i = 0 to n - 1
+            hi = array.get(L.KH, i)
+            float prev = na
+            j = i - 1
+            while j >= 0
+                if array.get(L.KH, j) == hi
+                    prev := array.get(L.KP, j)
+                    break
+                j -= 1
+            cur = array.get(L.KP, i)
+            array.push(L.KL, na(prev) ? "?" : hi ? (cur > prev ? "HH" : "LH") : (cur > prev ? "HL" : "LL"))
+    n
+
+f_recount(L) =>
+    n = array.size(L.KL)
+    array.clear(L.KN)
+    if n > 0
+        for i = 0 to n - 1
+            array.push(L.KN, -1)
+    if n >= 2
+        int o = 0
+        int d = f_isUp(array.get(L.KL, 1)) ? 1 : -1
+        int guard = 0
+        bool go = true
+        while go and guard < 500
+            guard += 1
+            int pts = 0
+            i = o + 1
+            while i < n and pts < 5
+                lbl = array.get(L.KL, i)
+                ok = d > 0 ? f_isUp(lbl) : not f_isUp(lbl)
+                if not ok
+                    break
+                pts += 1
+                i += 1
+            for k = 0 to pts
+                if o + k < n
+                    array.set(L.KN, o + k, k)
+            e = o + pts
+            x = e + 1
+            if x >= n
+                go := false
+            else
+                nd = pts == 5 ? d : (f_isUp(array.get(L.KL, x)) ? 1 : -1)
+                needHi = nd < 0
+                j = x
+                while j >= 0
+                    if array.get(L.KH, j) == needHi
+                        break
+                    j -= 1
+                if j <= o
+                    j := x
+                o := j
+                d := nd
+    n
+
+f_push(L, _price, _bar, _hi) =>
+    n = array.size(L.KP)
+    bool same = false
+    if n > 0
+        same := array.get(L.KH, n - 1) == _hi
+    bool fresh = false
+    if same
+        old = array.get(L.KP, n - 1)
+        bool better = _hi ? _price > old : _price < old
+        array.set(L.KM, n - 1, array.get(L.KM, n - 1) + 1)
+        if na(array.get(L.KA, n - 1))
+            array.set(L.KA, n - 1, old)
+        if better
+            array.set(L.KP, n - 1, _price)
+            array.set(L.KB, n - 1, _bar)
+    else
+        array.push(L.KP, _price)
+        array.push(L.KB, _bar)
+        array.push(L.KH, _hi)
+        array.push(L.KM, 1)
+        array.push(L.KA, na)
+        array.push(L.KT, L.tr)
+        array.push(L.KX, L.inTrans)
+        fresh := true
+        if array.size(L.KP) > MAXK
+            array.shift(L.KP)
+            array.shift(L.KB)
+            array.shift(L.KH)
+            array.shift(L.KM)
+            array.shift(L.KA)
+            array.shift(L.KT)
+            array.shift(L.KX)
+    d1 = f_relabel(L)
+    d2 = f_recount(L)
+    fresh
+
+// ══════════════ ШАГ БАРА ══════════════
+// Порядок ровно как в v5, он сверен репликой строка в строку.
+f_step(L, _pvH, _pvL, _hiPx, _loPx) =>
+    bLo = math.min(open, close)
+    bHi = math.max(open, close)
+
+    // 1. смерть тренда с фильтром глубины
+    need = L.imp * L.fib
+    bool died = false
+    if L.tr == 1
+        if not na(L.lvl)
+            if bLo < L.lvl - need
+                died := true
+    if L.tr == -1
+        if not na(L.lvl)
+            if bHi > L.lvl + need
+                died := true
+    if died
+        if not na(L.lastD)
+            if math.abs(L.lvl - L.lastD) < syminfo.mintick
+                died := false
+    if died
+        L.pTr := L.tr
+        L.pD := L.lvl
+        L.pDb := bar_index
+        L.lastD := L.lvl
+        L.inTrans := true
+        L.marks := 0
+        L.lvl := na
+        L.lvlProv := false
+
+    // 1б. досрочное подтверждение по рывку
+    if L.jump > 0 and L.inTrans and L.imp > 0 and not na(L.lastD)
+        nj = array.size(L.KL)
+        if nj >= 2
+            j1 = array.get(L.KL, nj - 1)
+            j2 = array.get(L.KL, nj - 2)
+            bool ju = f_isUp(j1) and f_isUp(j2)
+            bool jd = (not f_isUp(j1)) and (not f_isUp(j2))
+            bool far = false
+            if jd
+                far := close < L.lastD - L.imp * L.jump
+            if ju
+                far := close > L.lastD + L.imp * L.jump
+            if far
+                dl = L.lastD
+                L.tr := ju ? 1 : -1
+                L.trFrom := bar_index
+                L.inTrans := false
+                L.lastD := na
+                L.lvl := na
+                if provOn
+                    L.lvl := dl
+                    L.lvlProv := true
+
+    // 2. новые колена
+    bool fresh = false
+    if not na(_pvH)
+        if f_push(L, _hiPx, bar_index - L.lb, true)
+            fresh := true
+    if not na(_pvL)
+        if f_push(L, _loPx, bar_index - L.lb, false)
+            fresh := true
+    if fresh
+        L.marks := L.marks + 1
+
+    n = array.size(L.KL)
+    if n >= 2
+        l1 = array.get(L.KL, n - 1)
+        l2 = array.get(L.KL, n - 2)
+        p1 = array.get(L.KP, n - 1)
+        p2 = array.get(L.KP, n - 2)
+
+        if fresh
+            // 3. импульсное колено — ход по направлению тренда
+            if L.tr != 0
+                movedUp = p1 > p2
+                if (L.tr == 1 and movedUp) or (L.tr == -1 and not movedUp)
+                    L.imp := math.abs(p1 - p2)
+            // 4. рождение или подтверждение
+            bool up2 = f_isUp(l1) and f_isUp(l2)
+            bool dn2 = (not f_isUp(l1)) and (not f_isUp(l2))
+            if L.tr == 0
+                if up2
+                    L.tr := 1
+                    L.trFrom := bar_index
+                    L.imp := math.abs(p1 - p2)
+                if dn2
+                    L.tr := -1
+                    L.trFrom := bar_index
+                    L.imp := math.abs(p1 - p2)
+            else if L.inTrans
+                if L.marks >= 2
+                    if up2 or dn2
+                        L.tr := up2 ? 1 : -1
+                        L.trFrom := bar_index
+                        L.inTrans := false
+                        L.lastD := na
+                        L.lvlProv := false
+                        L.imp := math.abs(p1 - p2)
+
+        // 5. уровень тренда. В ПЕРЕХОДЕ не восстанавливается: иначе
+        // поиск назад воскрешает старый HL, цена пробивает и его, и
+        // пишется вторая смерть уже мёртвого тренда.
+        if not L.inTrans and L.tr == 1
+            if l1 == "HL"
+                L.lvl := p1
+                L.lvlProv := false
+            if na(L.lvl)
+                j = n - 1
+                while j >= 0
+                    if array.get(L.KL, j) == "HL"
+                        L.lvl := array.get(L.KP, j)
+                        break
+                    j -= 1
+        if not L.inTrans and L.tr == -1
+            if l1 == "LH"
+                L.lvl := p1
+                L.lvlProv := false
+            if na(L.lvl)
+                j = n - 1
+                while j >= 0
+                    if array.get(L.KL, j) == "LH"
+                        L.lvl := array.get(L.KP, j)
+                        break
+                    j -= 1
+
+        // 6. тренд и флаг ПЕРЕХОДА пишутся один раз, на баре появления
+        if fresh and array.size(L.KT) > 0
+            array.set(L.KT, array.size(L.KT) - 1, L.tr)
+            array.set(L.KX, array.size(L.KX) - 1, L.inTrans)
+    fresh
+
+// ══════════════ ПРОИЗВОДНЫЕ ══════════════
+f_cstart(L) =>
+    n = array.size(L.KN)
+    int o = -1
+    if n > 0
+        i = n - 1
+        while i >= 0
+            if array.get(L.KN, i) == 0
+                o := i
+                break
+            i -= 1
+    o
+
+f_cdir(L, _o) =>
+    n = array.size(L.KL)
+    int d = 0
+    if _o >= 0
+        if _o + 1 < n
+            d := f_isUp(array.get(L.KL, _o + 1)) ? 1 : -1
+        else if _o < array.size(L.KH)
+            d := array.get(L.KH, _o) ? -1 : 1
+    d
+
+f_kdir(L, _i) =>
+    int z = -1
+    j = _i
+    while j >= 0
+        if array.get(L.KN, j) == 0
+            z := j
+            break
+        j -= 1
+    int d = 0
+    if z >= 0
+        if z < array.size(L.KH)
+            d := array.get(L.KH, z) ? -1 : 1
+    d
+
+f_room(L) =>
+    float r = na
+    if not L.inTrans and not na(L.lvl) and L.tr != 0 and L.imp > 0
+        thr = L.tr == 1 ? L.lvl - L.imp * L.fib : L.lvl + L.imp * L.fib
+        r := math.max(0.0, L.tr == 1 ? close - thr : thr - close) / L.imp
+    r
+
+f_chainCur(L, _o, _min) =>
+    n = array.size(L.KL)
+    s = ""
+    if _o >= 0 and n > 0
+        from = math.max(0, math.min(_o, n - _min))
+        for j = from to n - 1
+            s := s + (j == _o and j > from ? " | " : j > from ? ">" : "") + array.get(L.KL, j)
+    s
+
+// ══════════════ ПРОГОН ══════════════
+var Layer L = f_new(LB, fibD, jumpC)
+L.fib  := fibD
+L.jump := jumpC
+
+pvH = ta.pivothigh(high, LB, LB)
+pvL = ta.pivotlow (low,  LB, LB)
+
+var float[] DXP = array.new_float()
+var int[]   DXB = array.new_int()
+var int[]   DXT = array.new_int()
+
+if barstate.isconfirmed
+    fr = f_step(L, pvH, pvL, high[LB], low[LB])
+    // смерть могла быть перекрыта рывком в том же баре, поэтому
+    // отмечаем по бару смерти, а не по состоянию ПЕРЕХОДА
+    if L.pDb == bar_index
+        array.push(DXP, L.pD)
+        array.push(DXB, L.pDb)
+        array.push(DXT, L.pTr)
+
+// сырые пивоты — видно, где две метки слились в одно колено
+plotshape(showRaw and not na(pvH) ? pvH : na, title="сырой верх", style=shape.triangledown, location=location.absolute, color=color.new(cDn, 35), size=size.tiny, offset=-LB)
+plotshape(showRaw and not na(pvL) ? pvL : na, title="сырой низ",  style=shape.triangleup,   location=location.absolute, color=color.new(cUp, 35), size=size.tiny, offset=-LB)
+
+// ══════════════ ОТРИСОВКА ══════════════
+var line[]  LNS = array.new<line>()
+var label[] LBS = array.new<label>()
+f_col(_t) => _t == 1 ? cUp : cDn
+
+f_drawZZ(L2, _w) =>
+    n = array.size(L2.KP)
+    cs = f_cstart(L2)
+    if n >= 2
+        for i = 1 to n - 1
+            x1 = array.get(L2.KB, i - 1)
+            x2 = array.get(L2.KB, i)
+            if last_bar_index - x1 <= winBars
+                t2   = array.get(L2.KT, i)
+                trs  = array.get(L2.KX, i)
+                kd   = f_kdir(L2, i)
+                num0 = array.get(L2.KN, i)
+                // нога В НОЛЬ счёта принадлежит ПРЕДЫДУЩЕМУ счёту
+                kdL  = (num0 == 0 and i > 0) ? f_kdir(L2, i - 1) : kd
+                bool corr  = num0 > 0 and num0 % 2 == 0
+                bool legUp = array.get(L2.KP, i) > array.get(L2.KP, i - 1)
+                cc0 = zzMode == "по ходу ноги" ? (legUp ? cUp : cDn) : zzMode == "по счёту" ? (kdL == 0 ? color.gray : f_col(kdL)) : trs ? (legUp ? cUp : cDn) : t2 == 0 ? color.gray : f_col(t2)
+                bool act = false
+                if cs >= 0
+                    act := i > cs
+                bool thin = corr and zzMode == "по счёту"
+                tp = (thin ? 45 : 0) + (act ? 0 : 55)
+                cc = color.new(cc0, math.min(85, tp))
+                if showZZ and array.get(L2.KT, i - 1) == t2
+                    array.push(LNS, line.new(x1, array.get(L2.KP, i - 1), x2, array.get(L2.KP, i), color=cc, width=thin ? _w : _w + 1, style=trs ? line.style_dashed : line.style_solid))
+                mc  = array.get(L2.KM, i)
+                ap  = array.get(L2.KA, i)
+                lbb = array.get(L2.KL, i)
+                pr  = array.get(L2.KP, i)
+                hh  = array.get(L2.KH, i)
+                mud = mc >= 2
+                if drawMud and mud and not na(ap)
+                    array.push(LNS, line.new(x1, ap, x2, ap, color=color.new(cMud, 20), width=1, style=line.style_dotted))
+                arr = kd == 1 ? "↑" : kd == -1 ? "↓" : ""
+                string txt = na
+                if labMode == "номер + мутность"
+                    txt := (num0 >= 0 ? "(" + str.tostring(num0) + ")" : "·") + arr + (mud ? "м" : "")
+                else if labMode == "метка"
+                    txt := lbb + arr + (mud ? " м" : "")
+                else if labMode == "номер и метка"
+                    txt := (num0 >= 0 ? "(" + str.tostring(num0) + ") " : "") + lbb + arr + (mud ? " м" : "")
+                if not na(txt)
+                    lc0 = kd == 0 ? color.gray : f_col(kd)
+                    lc  = act ? lc0 : color.new(lc0, 62)
+                    kdn = kd == 1 ? "ВОСХОДЯЩИЙ счёт" : kd == -1 ? "НИСХОДЯЩИЙ счёт" : "счёт не определён"
+                    trn = trs ? "на этом колене был ПЕРЕХОД от " + (t2 == 1 ? "восходящего" : "нисходящего") : t2 == 1 ? "на этом колене тренд был восходящий" : t2 == -1 ? "на этом колене тренд был нисходящий" : "на этом колене тренда не было"
+                    now = L2.inTrans ? -2 : L2.tr
+                    was = trs ? -2 : t2
+                    nw  = now == was ? "" : "\nсейчас " + (L2.inTrans ? "ПЕРЕХОД" : L2.tr == 1 ? "восходящий" : L2.tr == -1 ? "нисходящий" : "не определён")
+                    tip = str.tostring(L2.lb) + "/" + str.tostring(L2.lb) + "   " + lbb + "  " + str.tostring(pr, format.mintick) + "\n" + (num0 >= 0 ? "точка (" + str.tostring(num0) + ") из 5 · " + (num0 % 2 == 1 ? "импульсное" : num0 == 0 ? "начало счёта" : "корректирующее") : "вне счёта") + "\n" + kdn + "\n" + trn + (kd != 0 and t2 != 0 and kd != t2 and not trs ? "   ← счёт шёл против тренда" : "") + nw + "\n" + (mud ? "МУТНОЕ: слилось " + str.tostring(mc) + " меток, поглощена " + str.tostring(ap, format.mintick) : "чистое колено")
+                    array.push(LBS, label.new(x2, pr, txt, style=hh ? label.style_label_down : label.style_label_up, color=color.new(color.black, 100), textcolor=mud ? (act ? cMud : color.new(cMud, 62)) : lc, size=size.small, tooltip=tip))
+    n
+
+f_drawLvl(L2) =>
+    if drawLvl and not na(L2.lvl) and L2.tr != 0 and not L2.inTrans
+        x0 = na(L2.trFrom) ? bar_index - 50 : L2.trFrom
+        array.push(LNS, line.new(x0, L2.lvl, bar_index + 8, L2.lvl, color=color.new(f_col(L2.tr), 25), width=2, style=line.style_dashed))
+        array.push(LBS, label.new(bar_index + 8, L2.lvl, (L2.lvlProv ? "провиз " : L2.tr == 1 ? "HL " : "LH ") + str.tostring(L2.lvl, format.mintick), style=label.style_label_left, color=color.new(f_col(L2.tr), 85), textcolor=f_col(L2.tr), size=size.small))
+    0
+
+if barstate.islast
+    while array.size(LNS) > 0
+        line.delete(array.pop(LNS))
+    while array.size(LBS) > 0
+        label.delete(array.pop(LBS))
+    d1 = f_drawZZ(L, zzW)
+    d2 = f_drawLvl(L)
+    if drawMSB and array.size(DXB) > 0
+        i0 = math.max(0, array.size(DXB) - 10)
+        for i = i0 to array.size(DXB) - 1
+            db = array.get(DXB, i)
+            if last_bar_index - db <= winBars
+                dp = array.get(DXP, i)
+                dt = array.get(DXT, i)
+                array.push(LBS, label.new(db, dp, "слом", style=dt == 1 ? label.style_label_up : label.style_label_down, color=color.new(f_col(dt == 1 ? -1 : 1), 30), textcolor=color.white, size=size.tiny))
+
+// ══════════════ ТАБЛИЦА ══════════════
+tss = sizeT == "tiny" ? size.tiny : sizeT == "normal" ? size.normal : size.small
+tpos = posT == "верх-лево" ? position.top_left : posT == "низ-право" ? position.bottom_right : posT == "низ-лево" ? position.bottom_left : position.top_right
+var table T = table.new(tpos, 2, 10, bgcolor=color.new(#12121c, 8), border_color=color.new(color.gray, 70), border_width=1, frame_color=color.new(color.gray, 50), frame_width=1)
+
+f_row(_r, _k, _v, _c, _tip) =>
+    table.cell(T, 0, _r, _k, text_color=color.new(color.silver, 25), text_halign=text.align_left, text_size=tss, tooltip=_tip)
+    table.cell(T, 1, _r, _v, text_color=_c, text_halign=text.align_left, text_size=tss)
+    _r
+
+f_trend(L2) =>
+    L2.inTrans ? "ПЕРЕХОД, был " + (L2.pTr == 1 ? "восх" : "нисх") : L2.tr == 1 ? "ВОСХОДЯЩИЙ, " + str.tostring(bar_index - L2.trFrom) + "б" : L2.tr == -1 ? "НИСХОДЯЩИЙ, " + str.tostring(bar_index - L2.trFrom) + "б" : "не определён"
+
+f_lvlTxt(L2) =>
+    L2.inTrans ? "— пробит" : na(L2.lvl) ? "—" : (L2.lvlProv ? "смерть " : L2.tr == 1 ? "HL " : "LH ") + str.tostring(L2.lvl, format.mintick) + (L2.lvlProv ? " провиз" : "")
+
+f_roomTxt(L2) =>
+    r = f_room(L2)
+    na(r) ? "—" : str.tostring(r, "#.##") + " имп · " + (r < 0.25 ? "73%" : r < 0.5 ? "42%" : r < 1.0 ? "17%" : r < 2.0 ? "6%" : "1%")
+
+f_mud(L2, _cs) =>
+    nk = array.size(L2.KM)
+    mudC = 0
+    cnt = 0
+    if _cs >= 0
+        for q = _cs to nk - 1
+            cnt += 1
+            if array.get(L2.KM, q) >= 2
+                mudC += 1
+    last = nk > 0 ? array.get(L2.KM, nk - 1) : 1
+    (last >= 2 ? "МУТНОЕ x" + str.tostring(last) + " · " : "чистое · ") + str.tostring(mudC) + " из " + str.tostring(cnt)
+
+if showT and barstate.islast
+    table.cell(T, 0, 0, "━━  МЕТКИ  ━━", text_color=color.new(color.silver, 5), bgcolor=color.new(#1a1a2e, 0), text_halign=text.align_left, text_size=size.tiny)
+    table.cell(T, 1, 0, str.tostring(LB) + "/" + str.tostring(LB), text_color=color.new(color.aqua, 0), bgcolor=color.new(#1a1a2e, 0), text_halign=text.align_left, text_size=size.tiny)
+
+    cs = f_cstart(L)
+    cd = f_cdir(L, cs)
+    cn = array.size(L.KN) > 0 ? array.get(L.KN, array.size(L.KN) - 1) : -1
+    lm = array.size(L.KM) > 0 ? array.get(L.KM, array.size(L.KM) - 1) : 1
+    r  = f_room(L)
+
+    r1 = f_row(1, "тренд", f_trend(L), L.inTrans ? color.new(color.orange, 0) : L.tr == 0 ? color.gray : f_col(L.tr), "Рождается на двух подряд однонаправленных коленах. Умирает, когда тело закрытой свечи прошло уровень на выбранную долю импульса.")
+    r2 = f_row(2, "держится на", f_lvlTxt(L), L.inTrans or L.lvlProv ? color.new(color.orange, 0) : color.white, "Последнее колено-опора со стороны тренда. В ПЕРЕХОДЕ строка гасится: движок не воскрешает старый уровень.")
+    r3 = f_row(3, "запас", f_roomTxt(L), na(r) ? color.gray : r < 0.25 ? cDn : r < 0.5 ? color.new(color.orange, 0) : r < 1.0 ? color.new(color.silver, 20) : cUp, "Оставшийся ход до порога смерти, в импульсных коленах. Проценты — вероятность смерти тренда за 10 баров по замеру на 9675 барах: меньше 0.25 импульса — 73%, 0.25-0.50 — 42%, 0.50-1.00 — 17%, 1.00-2.00 — 6%, дальше — 1%. В среднем по рынку 16%.")
+    r4 = f_row(4, "счёт", cn < 0 ? "вне счёта" : "(" + str.tostring(cn) + ") из 5 " + (cd == 1 ? "↑" : cd == -1 ? "↓" : "") + (cn <= 0 ? "" : cn % 2 == 1 ? " импульс" : " коррекция"), cd == 0 ? color.gray : f_col(cd), "Нечётная точка — импульс, чётная — коррекция. До точки (5) доходит примерно каждый пятый счёт, и это не зависит от глубины пивота.")
+
+    string z = "—"
+    if cs >= 0
+        zl = array.get(L.KL, cs)
+        z := zl + " " + str.tostring(array.get(L.KP, cs), format.mintick) + " · " + ((cd == 1 ? zl == "LL" : cd == -1 ? zl == "HH" : false) ? "разворот" : "продолж")
+    r5 = f_row(5, "счёт от", z, cd == 0 ? color.gray : f_col(cd), "Метка нуля счёта. Направление счёта берётся по стороне нуля — проверено на 464 счётах, совпадает во всех 464. Ноль LL при счёте вверх или HH при счёте вниз — движение разворотное, иначе продолжение.")
+    r6 = f_row(6, "цепочка", f_chainCur(L, cs, 4), cd == 0 ? color.gray : f_col(cd), "Фактическая последовательность подписей колен. Черта отделяет ноль счёта от остального.")
+    r7 = f_row(7, "чистота", f_mud(L, cs), lm >= 2 ? cMud : color.new(color.silver, 30), "Первая часть — про последнее колено, вторая — сколько мутных внутри текущего счёта. Мутность около 21% на 1H и 18% на 5m и от глубины пивота не зависит. Ничего не предсказывает: связь оказалась тавтологией и исчезла при нормировке. Строка описательная.")
+    r8 = f_row(8, "прошлый тренд", L.pTr == 0 ? "—" : (L.pTr == 1 ? "восх" : "нисх") + " " + str.tostring(L.pD, format.mintick) + ", " + str.tostring(bar_index - L.pDb) + "б назад", color.new(color.silver, 30), "Какой был предыдущий тренд, по какой цене умер, сколько баров прошло.")
+    r9 = f_row(9, "пауза", L.inTrans ? str.tostring(math.min(L.marks, 2)) + " из 2 колен" : "—", L.inTrans ? color.new(color.orange, 0) : color.gray, "После смерти тренда нужны два колена, чтобы родился новый. Рывок подтверждает досрочно.")
