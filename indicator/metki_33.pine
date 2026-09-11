@@ -393,6 +393,43 @@ if barstate.isconfirmed
 plotshape(showRaw and not na(pvH) ? pvH : na, title="сырой верх", style=shape.triangledown, location=location.absolute, color=color.new(cDn, 35), size=size.tiny, offset=-LB)
 plotshape(showRaw and not na(pvL) ? pvL : na, title="сырой низ",  style=shape.triangleup,   location=location.absolute, color=color.new(cUp, 35), size=size.tiny, offset=-LB)
 
+// ══════════════ ТРИГГЕРНАЯ СВЕЧА ══════════════
+// Форма свечи в долях диапазона: тело, верхняя тень, нижняя тень.
+// Совпала с одним из 40 шаблонов при допуске — свеча триггерная.
+//
+// Сама по себе свеча — монетка: на 2199 срабатываниях за два года вход
+// по закрытию со стопом за экстремумом даёт от -0.23R до +0.05R. Это
+// сигнал «здесь можно смотреть», а не вход. Встречается на 18% баров
+// на 1H и на 16% на 5m.
+gT = "⑤ Триггерная свеча"
+trOn  = input.bool(true, "Отмечать триггерные свечи", group=gT)
+trTol = input.float(4.0, "Допуск формы ±%", 1.0, 15.0, group=gT)
+cTrig = input.color(#ffd54f, "Цвет отметки", group=gT)
+
+// ── БЛОК ШАБЛОНОВ: заменяемый ─────────────────────────────────────
+// Текущий набор из 40 форм, перенесённый из Тренажёра. Когда пропишем
+// новые формы, меняется только эта тройка массивов.
+tb_ = array.from(12.6,14.7,17.0,32.0,20.2,4.1,23.0,27.9,30.7,35.2,24.5,41.9,26.0,25.9,11.6,23.3,49.3,14.0,18.3,25.4,27.9,45.7,29.2,40.6,41.9,10.4,41.5,23.6,32.2,18.8,35.5,32.2,54.2,10.8,47.3,16.0,21.6,19.8,9.9,27.5)
+tu_ = array.from(33.7,37.3,37.7,27.8,29.4,40.4,35.7,35.3,41.0,35.7,28.4,22.0,39.6,37.4,46.0,31.5,21.5,27.5,47.3,35.6,26.2,24.8,36.3,36.7,26.8,35.6,20.7,34.5,36.4,46.2,38.6,33.6,21.6,44.1,22.9,45.2,42.8,45.2,41.5,30.7)
+tl_ = array.from(53.7,48.0,45.3,40.2,50.4,55.5,41.3,36.8,28.3,29.1,47.1,36.0,34.5,36.7,42.5,45.2,29.2,58.5,34.4,39.0,46.0,29.5,34.5,22.6,31.3,54.0,37.9,41.9,31.4,34.9,25.8,34.2,24.2,45.1,29.8,38.8,35.5,35.0,48.6,41.8)
+
+rng_ = high - low
+bod_ = math.abs(close - open)
+up_  = open > close ? high - open : high - close
+low_ = open > close ? close - low : open - low
+bp_  = rng_ > 0 ? bod_ / rng_ * 100 : 0.0
+upp_ = rng_ > 0 ? up_  / rng_ * 100 : 0.0
+lop_ = rng_ > 0 ? low_ / rng_ * 100 : 0.0
+
+int trIdx = -1
+if trOn and rng_ > 0
+    for ti = 0 to 39
+        if math.abs(bp_ - array.get(tb_, ti)) <= trTol and math.abs(upp_ - array.get(tu_, ti)) <= trTol and math.abs(lop_ - array.get(tl_, ti)) <= trTol
+            trIdx := ti
+            break
+trig_ok = trIdx >= 0
+plotshape(trig_ok, title="Триггерная свеча", style=shape.circle, location=location.belowbar, color=cTrig, size=size.tiny)
+
 // ══════════════ ОТРИСОВКА ══════════════
 var line[]  LNS = array.new<line>()
 var label[] LBS = array.new<label>()
@@ -477,7 +514,7 @@ if barstate.islast
 // ══════════════ ТАБЛИЦА ══════════════
 tss = sizeT == "tiny" ? size.tiny : sizeT == "normal" ? size.normal : size.small
 tpos = posT == "верх-лево" ? position.top_left : posT == "низ-право" ? position.bottom_right : posT == "низ-лево" ? position.bottom_left : position.top_right
-var table T = table.new(tpos, 2, 10, bgcolor=color.new(#12121c, 8), border_color=color.new(color.gray, 70), border_width=1, frame_color=color.new(color.gray, 50), frame_width=1)
+var table T = table.new(tpos, 2, 11, bgcolor=color.new(#12121c, 8), border_color=color.new(color.gray, 70), border_width=1, frame_color=color.new(color.gray, 50), frame_width=1)
 
 f_row(_r, _k, _v, _c, _tip) =>
     table.cell(T, 0, _r, _k, text_color=color.new(color.silver, 25), text_halign=text.align_left, text_size=tss, tooltip=_tip)
@@ -530,3 +567,4 @@ if showT and barstate.islast
     r7 = f_row(7, "чистота", f_mud(L, cs), lm >= 2 ? cMud : color.new(color.silver, 30), "Первая часть — про последнее колено, вторая — сколько мутных внутри текущего счёта. Мутность около 21% на 1H и 18% на 5m и от глубины пивота не зависит. Ничего не предсказывает: связь оказалась тавтологией и исчезла при нормировке. Строка описательная.")
     r8 = f_row(8, "прошлый тренд", L.pTr == 0 ? "—" : (L.pTr == 1 ? "восх" : "нисх") + " " + str.tostring(L.pD, format.mintick) + ", " + str.tostring(bar_index - L.pDb) + "б назад", color.new(color.silver, 30), "Какой был предыдущий тренд, по какой цене умер, сколько баров прошло.")
     r9 = f_row(9, "пауза", L.inTrans ? str.tostring(math.min(L.marks, 2)) + " из 2 колен" : "—", L.inTrans ? color.new(color.orange, 0) : color.gray, "После смерти тренда нужны два колена, чтобы родился новый. Рывок подтверждает досрочно.")
+    r10 = f_row(10, "свеча", trig_ok ? "ТРИГГЕРНАЯ · шаблон " + str.tostring(trIdx + 1) : "обычная", trig_ok ? cTrig : color.gray, "Форма свечи совпала с одним из 40 шаблонов при допуске. Сама по себе свеча — монетка: на 2199 срабатываниях за два года вход по закрытию со стопом за экстремумом даёт от -0.23R до +0.05R. Это сигнал «здесь можно смотреть», а не вход.")
