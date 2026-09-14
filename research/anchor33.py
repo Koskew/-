@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
-"""Проверка правки: после слома счёт всегда начинается с нуля.
+"""Проверка правки: номер точки живёт вместе с коленом.
 
-Берём прежний движок (core.py) и добавляем ровно то, что внесено в
-metki_33.pine: якорь счёта. После смерти тренда первое появившееся
-колено становится точкой (0), нумерация идёт от него.
+Счёт идёт по коленам подряд 0..5 и снова 0. После слома отсчёт
+начинается заново: первое появившееся колено становится точкой (0).
+Номер присваивается при рождении колена и задним числом не меняется —
+поэтому вся история остаётся пронумерованной.
 """
-import sys, csv, statistics as st, collections
+import sys, csv, collections, statistics as st
 sys.path.insert(0, 'research')
 import core
 from core import Core
@@ -29,76 +30,67 @@ def pivots_n(rows, N):
 class Anch(Core):
     def __init__(self, *a, **k):
         super().__init__(*a, **k)
-        self.cz = -1; self.czWait = False
-        self.pZb = None; self.pZp = None; self.pZl = ''
-        self.zeros = []          # бары, на которых вставал ноль
-        self.deaths = []         # бары смертей
+        self.czWait = False
+        self.curB = 0
+        self.born = []        # (номер, бар) каждого созданного колена
+        self.deaths = []
 
     def _recount(self):
-        n = len(self.KL)
-        self.KN[:] = [-1] * n
-        if 0 <= self.cz < n:
-            for k in range(6):
-                if self.cz + k < n:
-                    self.KN[self.cz + k] = k
-        elif n >= 2:
-            super()._recount()
+        pass                  # счёт больше не пересчитывается
 
     def _push(self, bar, price, isHi):
-        before = len(self.KP)
-        fresh = super()._push(bar, price, isHi)
-        if fresh:
-            if self.czWait:
-                self.cz = len(self.KP) - 1
-                self.czWait = False
-                self.zeros.append(bar)
-            if len(self.KP) == core.MAXK and before == core.MAXK:
-                self.cz = self.cz - 1 if self.cz > 0 else (-1 if self.cz == 0 else self.cz)
-            self._recount()
-        return fresh
+        n = len(self.KP)
+        same = n > 0 and self.KH[n-1] == isHi
+        if same:
+            old = self.KP[n-1]
+            better = price > old if isHi else price < old
+            self.KM[n-1] += 1
+            if better: self.KP[n-1] = price; self.KB[n-1] = bar
+            self._relabel()
+            return False
+        prevN = self.KN[-1] if self.KN else -1
+        newN = 0
+        if self.czWait:
+            newN = 0; self.czWait = False
+        elif 0 <= prevN < 5:
+            newN = prevN + 1
+        self.KP.append(price); self.KB.append(bar); self.KH.append(isHi)
+        self.KM.append(1)
+        self.KT.append(self.tr); self.KX.append(self.inTrans)
+        self.KN.append(newN)
+        self.born.append((newN, bar, self.curB))
+        if len(self.KP) > core.MAXK:
+            for a in (self.KP, self.KB, self.KH, self.KM, self.KT, self.KX, self.KN):
+                a.pop(0)
+        self._relabel()
+        return True
 
     def step(self, b):
-        was = self.tr
-        lvlBefore = self.lvl
+        self.curB = b
         super().step(b)
-        # смерть определяем по переходу в inTrans на этом баре
         if self.pDb == b:
-            zi = -1
-            for q in range(len(self.KN) - 1, -1, -1):
-                if self.KN[q] == 0: zi = q; break
-            if zi >= 0:
-                self.pZb, self.pZp, self.pZl = self.KB[zi], self.KP[zi], self.KL[zi]
             self.czWait = True
-            self.cz = -1
             self.deaths.append(b)
-            self._recount()
 
 for tag, path in (('2 года', 'data/XAUUSD_1h_2y.csv'), ('9 лет', 'data/XAUUSD_1h_9y.csv')):
     rows = load(path)
-    for N in (3,):
-        e = Anch(rows, fib=0.33, jump=0.5); e.at = pivots_n(rows, N)
-        depth = []; cur = None
-        for b in range(len(rows)):
-            e.step(b)
-            cn = e.KN[-1] if e.KN else -1
-            if cn >= 0:
-                if cur is None or cn < cur: 
-                    if cur is not None: depth.append(cur)
-                    cur = cn
-                else: cur = max(cur, cn)
-        if cur is not None: depth.append(cur)
-        d = collections.Counter(depth)
-        # сколько смертей получили свой ноль
-        print(f'══ {tag} · {N}/{N}')
-        print(f'   сломов {len(e.deaths)} · нулей поставлено {len(e.zeros)} · '
-              f'разница {len(e.deaths) - len(e.zeros)}')
-        print(f'   глубина счёта: ' + '  '.join(f'({k}) {d[k]} ({d[k]/max(len(depth),1):.0%})' for k in sorted(d)))
-        lag = []
-        zi = 0
-        for db in e.deaths:
-            while zi < len(e.zeros) and e.zeros[zi] < db: zi += 1
-            if zi < len(e.zeros): lag.append(e.zeros[zi] - db)
-        if lag:
-            print(f'   ноль появляется после слома через: медиана {st.median(lag):.0f} баров, '
-                  f'максимум {max(lag)}')
-        print()
+    e = Anch(rows, fib=0.33, jump=0.5); e.at = pivots_n(rows, 3)
+    for b in range(len(rows)):
+        e.step(b)
+    nums = [n for n, _, _ in e.born]
+    c = collections.Counter(nums)
+    tot = len(nums)
+    # после каждого слома первое колено должно быть нулём
+    ok = bad = 0
+    for db in e.deaths:
+        nxt = next(((n, cb) for n, _, cb in e.born if cb > db), None)
+        if nxt is None: continue
+        if nxt[0] == 0: ok += 1
+        else: bad += 1
+    print('══ %s · 3/3' % tag)
+    print('   колен %d · без номера %d' % (tot, sum(1 for n in nums if n < 0)))
+    print('   номера: ' + '  '.join('(%d) %d (%d%%)' % (k, c[k], round(c[k]/tot*100)) for k in sorted(c)))
+    same = sum(1 for db in e.deaths if any(cb == db for _, _, cb in e.born))
+    print('   сломов %d · первое колено ПОСЛЕ слома = (0): %d, не ноль: %d' % (len(e.deaths), ok, bad))
+    print('   сломов, у которых колено родилось НА ТОМ ЖЕ баре: %d' % same)
+    print()

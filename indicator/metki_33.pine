@@ -75,7 +75,6 @@ type Layer
     int      pTr
     float    pD
     int      pDb
-    int      cz        // колено, на котором стоит ноль счёта; -1 — якоря ещё нет
     bool     czWait    // был слом, ждём первое колено — оно станет нулём
     int      pZb       // бар нуля прошлого тренда
     float    pZp       // цена нуля прошлого тренда
@@ -88,7 +87,7 @@ f_new(_lb, _fib, _jump) =>
               lb = _lb, fib = _fib, jump = _jump,
               tr = 0, lvl = na, imp = 0.0, trFrom = na, inTrans = false, marks = 0,
               lastD = na, lvlProv = false, pTr = 0, pD = na, pDb = na,
-              cz = -1, czWait = false, pZb = na, pZp = na, pZl = "")
+              czWait = false, pZb = na, pZp = na, pZl = "")
 
 f_isUp(_l) => _l == "HH" or _l == "HL"
 
@@ -109,54 +108,14 @@ f_relabel(L) =>
             array.push(L.KL, na(prev) ? "?" : hi ? (cur > prev ? "HH" : "LH") : (cur > prev ? "HL" : "LL"))
     n
 
-// Счёт нумеруется от якоря: после слома ноль всегда встаёт заново.
-// Пока слома ещё не было, работает прежний разбор по подписям.
-f_recount(L) =>
-    n = array.size(L.KL)
-    array.clear(L.KN)
-    if n > 0
-        for i = 0 to n - 1
-            array.push(L.KN, -1)
-    if L.cz >= 0 and L.cz < n
-        for k = 0 to 5
-            if L.cz + k < n
-                array.set(L.KN, L.cz + k, k)
-    else if n >= 2
-        int o = 0
-        int d = f_isUp(array.get(L.KL, 1)) ? 1 : -1
-        int guard = 0
-        bool go = true
-        while go and guard < 500
-            guard += 1
-            int pts = 0
-            i = o + 1
-            while i < n and pts < 5
-                lbl = array.get(L.KL, i)
-                ok = d > 0 ? f_isUp(lbl) : not f_isUp(lbl)
-                if not ok
-                    break
-                pts += 1
-                i += 1
-            for k = 0 to pts
-                if o + k < n
-                    array.set(L.KN, o + k, k)
-            e = o + pts
-            x = e + 1
-            if x >= n
-                go := false
-            else
-                nd = pts == 5 ? d : (f_isUp(array.get(L.KL, x)) ? 1 : -1)
-                needHi = nd < 0
-                j = x
-                while j >= 0
-                    if array.get(L.KH, j) == needHi
-                        break
-                    j -= 1
-                if j <= o
-                    j := x
-                o := j
-                d := nd
-    n
+// Счёт идёт по коленам подряд: 0 1 2 3 4 5, потом снова 0.
+// После слома отсчёт начинается заново — первое появившееся колено
+// становится точкой (0). Номер живёт вместе с коленом и задним числом
+// не переписывается, поэтому вся история остаётся пронумерованной.
+//
+// Подписи HH/LH/HL/LL счёт не рвут: они описывают, что получилось,
+// а не задают, где считать. Проверено на 9 годах — эталонная
+// последовательность подписей ничего не предсказывает.
 
 f_push(L, _price, _bar, _hi) =>
     n = array.size(L.KP)
@@ -182,9 +141,19 @@ f_push(L, _price, _bar, _hi) =>
         array.push(L.KT, L.tr)
         array.push(L.KX, L.inTrans)
         fresh := true
+        // номер точки присваивается один раз, при рождении колена, и
+        // больше не пересчитывается — поэтому история их не теряет
+        int prevN = -1
+        np = array.size(L.KN)
+        if np > 0
+            prevN := array.get(L.KN, np - 1)
+        int newN = 0
         if L.czWait
-            L.cz := array.size(L.KP) - 1
+            newN := 0
             L.czWait := false
+        else if prevN >= 0 and prevN < 5
+            newN := prevN + 1
+        array.push(L.KN, newN)
         if array.size(L.KP) > MAXK
             array.shift(L.KP)
             array.shift(L.KB)
@@ -193,9 +162,8 @@ f_push(L, _price, _bar, _hi) =>
             array.shift(L.KA)
             array.shift(L.KT)
             array.shift(L.KX)
-            L.cz := L.cz > 0 ? L.cz - 1 : (L.cz == 0 ? -1 : L.cz)
+            array.shift(L.KN)
     d1 = f_relabel(L)
-    d2 = f_recount(L)
     fresh
 
 // ══════════════ ШАГ БАРА ══════════════
@@ -235,7 +203,6 @@ f_step(L, _pvH, _pvL, _hiPx, _loPx) =>
             L.pZp := array.get(L.KP, zi)
             L.pZl := array.get(L.KL, zi)
         L.czWait := true
-        L.cz := -1
         L.pTr := L.tr
         L.pD := L.lvl
         L.pDb := bar_index
