@@ -76,7 +76,10 @@ type Layer
     int      pTr
     float    pD
     int      pDb
-    int      czIdx     // колено, на котором стоит ноль действующего счёта
+    int      czIdx     // колено-ноль в массиве; -1 если уехало за обрезку
+    int      czBar     // бар нуля — живёт, даже когда колено обрезано
+    float    czPrice   // цена нуля
+    string   czLab     // подпись нуля
     int      lastTr    // тренд на прошлом баре — чтобы поймать смену
     bool     lastTrans  // был ли ПЕРЕХОД на прошлом баре
     int      pCdir     // направление прошлого счёта
@@ -92,7 +95,8 @@ f_new(_lb, _fib, _jump) =>
               lb = _lb, fib = _fib, jump = _jump,
               tr = 0, lvl = na, imp = 0.0, trFrom = na, inTrans = false, marks = 0,
               lastD = na, lvlProv = false, pTr = 0, pD = na, pDb = na,
-              czIdx = -1, lastTr = 0, lastTrans = false, pCdir = 0, pCmax = 0,
+              czIdx = -1, czBar = na, czPrice = na, czLab = "",
+              lastTr = 0, lastTrans = false, pCdir = 0, pCmax = 0,
               pZb = na, pZp = na, pZl = "")
 
 f_isUp(_l) => _l == "HH" or _l == "HL"
@@ -209,6 +213,9 @@ f_setZero(L, _dir) =>
     // считаются от якоря на лету, см. f_curN.
     if z >= 0
         L.czIdx := z
+        L.czBar := array.get(L.KB, z)
+        L.czPrice := array.get(L.KP, z)
+        L.czLab := array.get(L.KL, z)
     z
 
 // ══════════════ ШАГ БАРА ══════════════
@@ -362,19 +369,15 @@ f_step(L, _pvH, _pvL, _hiPx, _loPx) =>
 // Ноль действующего счёта — это якорь, поставленный при смене тренда.
 // Искать последний KN==0 нельзя: после перенумеровки нули повторяются
 // каждые шесть колен, и поиск находил бы не тот.
+// Ноль действующего счёта — только якорь. Прежде, когда колено-ноль
+// уезжало за обрезку массива, функция искала последний KN==0 и находила
+// не ноль счёта, а очередной ноль цикла нумерации: в таблице появлялся
+// чужой уровень и завышенный возраст тренда. Теперь в таком случае
+// честно возвращается -1, а подпись и цена нуля берутся из памяти.
 f_cstart(L) =>
     int o = -1
     if L.czIdx >= 0 and L.czIdx < array.size(L.KN)
         o := L.czIdx
-    else
-        n = array.size(L.KN)
-        if n > 0
-            i = n - 1
-            while i >= 0
-                if array.get(L.KN, i) == 0
-                    o := i
-                    break
-                i -= 1
     o
 
 // Номер колена в действующем счёте: от якоря, 0..5. Историю не трогает.
@@ -387,14 +390,19 @@ f_curN(L, _i) =>
             v := k
     v
 
+// Направление счёта берётся ПО СТОРОНЕ НУЛЯ и только по ней.
+// Ноль на вершине (HH или LH) — счёт вниз, ноль на низу (LL или HL) —
+// счёт вверх. Прежде направление брали по подписи СЛЕДУЮЩЕГО колена;
+// с новой постановкой нуля это расходилось со стороной на 40% баров,
+// и в таблице выходило «НИСХОДЯЩИЙ» со стрелкой вверх.
 f_cdir(L, _o) =>
-    n = array.size(L.KL)
     int d = 0
-    if _o >= 0
-        if _o + 1 < n
-            d := f_isUp(array.get(L.KL, _o + 1)) ? 1 : -1
-        else if _o < array.size(L.KH)
-            d := array.get(L.KH, _o) ? -1 : 1
+    if _o >= 0 and _o < array.size(L.KH)
+        d := array.get(L.KH, _o) ? -1 : 1
+    else if L.czLab == "HH" or L.czLab == "LH"
+        d := -1
+    else if L.czLab == "LL" or L.czLab == "HL"
+        d := 1
     d
 
 f_kdir(L, _i) =>
@@ -765,13 +773,13 @@ f_row(_r, _k, _v, _c, _tip) =>
 // возраст тренда и возраст счёта — одно и то же число.
 f_trend(L2) =>
     string s0 = "не определён"
-    z = f_cstart(L2)
+    // подпись, цена и бар нуля берутся из памяти слоя, а не из массива:
+    // колено-ноль может уехать за обрезку, а тренд от него всё ещё идёт
     string anc = ""
     int ab = na
-    if z >= 0
-        if z < array.size(L2.KP)
-            anc := " · от " + array.get(L2.KL, z) + " " + str.tostring(array.get(L2.KP, z), format.mintick)
-            ab := array.get(L2.KB, z)
+    if not na(L2.czPrice)
+        anc := " · от " + L2.czLab + " " + str.tostring(L2.czPrice, format.mintick)
+        ab := L2.czBar
     age = na(ab) ? (na(L2.trFrom) ? 0 : bar_index - L2.trFrom) : bar_index - ab
     if L2.inTrans
         s0 := "ПЕРЕХОД, был " + (L2.pTr == 1 ? "восх" : "нисх")
@@ -823,10 +831,12 @@ if showT and barstate.islast
     r4 = f_row(4, "счёт", cn < 0 ? "счёт кончился" : "(" + str.tostring(cn) + ") из 5 " + (cd == 1 ? "↑" : cd == -1 ? "↓" : "") + (cn <= 0 ? "" : cn % 2 == 1 ? " импульс" : " коррекция"), cd == 0 ? color.gray : f_col(cd), "Нечётная точка — импульс, чётная — коррекция. До точки (5) доходит примерно каждый пятый счёт, и это не зависит от глубины пивота.")
 
     string z = "—"
-    if cs >= 0
-        zl = array.get(L.KL, cs)
-        z := zl + " " + str.tostring(array.get(L.KP, cs), format.mintick) + " · " + ((cd == 1 ? zl == "LL" : cd == -1 ? zl == "HH" : false) ? "разворот" : "продолж")
-    r5 = f_row(5, "счёт от", z, cd == 0 ? color.gray : f_col(cd), "Метка нуля счёта. Направление счёта берётся по стороне нуля — проверено на 464 счётах, совпадает во всех 464. Ноль LL при счёте вверх или HH при счёте вниз — движение разворотное, иначе продолжение.")
+    if not na(L.czPrice)
+        zl = L.czLab
+        z := zl + " " + str.tostring(L.czPrice, format.mintick) + " · " + ((cd == 1 ? zl == "LL" : cd == -1 ? zl == "HH" : false) ? "разворот" : "продолж")
+        if cs < 0
+            z := z + " · колено ушло за окно"
+    r5 = f_row(5, "счёт от", z, cd == 0 ? color.gray : f_col(cd), "Метка нуля счёта. Направление берётся ПО СТОРОНЕ НУЛЯ: вершина — счёт вниз, низ — счёт вверх. Ноль LL при счёте вверх или HH при счёте вниз — движение разворотное, LH и HL — продолжение. Подпись и цена нуля хранятся отдельно, поэтому видны и когда колено ушло за окно в 80 колен.")
     r6 = f_row(6, "цепочка", f_chainCur(L, cs, 4), cd == 0 ? color.gray : f_col(cd), "Фактическая последовательность подписей колен. Черта отделяет ноль счёта от остального.")
     // Подписи от нуля против направления тренда. Движок считает тренд по
     // своему правилу (два однонаправленных колена, смерть по уровню), а

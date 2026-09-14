@@ -101,3 +101,40 @@ for tag, path in (('2 года', 'data/XAUUSD_1h_2y.csv'), ('9 лет', 'data/XA
     print('   баров, где ноль НЕ совпал с трендом: %d' % bad)
     print('   не нашли ноль: %d' % len(e.fails))
     print()
+
+# ── проверка двух подозрений по таблице ──────────────────────────
+print('=' * 74)
+print('ПРОВЕРКА ТАБЛИЦЫ: направление счёта и потеря якоря')
+print('=' * 74)
+for tag, path in (('2 года', 'data/XAUUSD_1h_2y.csv'), ('9 лет', 'data/XAUUSD_1h_9y.csv')):
+    rows = load(path)
+    e = Z(rows, fib=0.33, jump=0.5); e.at = pivots_n(rows, 3)
+    disagree = 0; checked = 0
+    lost = 0; barsWhenLost = []
+    ageBig = 0
+    for b in range(len(rows)):
+        e.step(b)
+        n = len(e.KL)
+        if e.tr == 0 or e.inTrans: continue
+        checked += 1
+        if e.czIdx < 0 or e.czIdx >= n:
+            lost += 1
+            continue
+        # как считает f_cdir: по подписи СЛЕДУЮЩЕГО колена
+        if e.czIdx + 1 < n:
+            byNext = 1 if e.KL[e.czIdx + 1] in ('HH', 'HL') else -1
+        else:
+            byNext = -1 if e.KH[e.czIdx] else 1
+        # как должно быть: по стороне нуля
+        bySide = -1 if e.KH[e.czIdx] else 1
+        if byNext != bySide: disagree += 1
+        # возраст тренда от нуля
+        if b - e.KB[e.czIdx] > 400: ageBig += 1
+    print('── %s' % tag)
+    print('   баров с живым трендом: %d' % checked)
+    print('   направление по следующей подписи РАСХОДИТСЯ со стороной нуля: %d (%.0f%%)'
+          % (disagree, disagree / max(checked, 1) * 100))
+    print('   после правки направление = сторона нуля, расхождений быть не может')
+    print('   якорь потерян обрезкой массива: %d (%.0f%%)' % (lost, lost / max(checked, 1) * 100))
+    print('   баров, где тренду больше 400 от нуля: %d' % ageBig)
+    print()
