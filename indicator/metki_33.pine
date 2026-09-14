@@ -75,7 +75,11 @@ type Layer
     int      pTr
     float    pD
     int      pDb
-    bool     czWait    // был слом, ждём первое колено — оно станет нулём
+    int      czIdx     // колено, на котором стоит ноль действующего счёта
+    int      lastTr    // тренд на прошлом баре — чтобы поймать смену
+    bool     lastTrans  // был ли ПЕРЕХОД на прошлом баре
+    int      pCdir     // направление прошлого счёта
+    int      pCmax     // до какой точки прошлый счёт дошёл
     int      pZb       // бар нуля прошлого тренда
     float    pZp       // цена нуля прошлого тренда
     string   pZl       // подпись нуля прошлого тренда
@@ -87,7 +91,8 @@ f_new(_lb, _fib, _jump) =>
               lb = _lb, fib = _fib, jump = _jump,
               tr = 0, lvl = na, imp = 0.0, trFrom = na, inTrans = false, marks = 0,
               lastD = na, lvlProv = false, pTr = 0, pD = na, pDb = na,
-              czWait = false, pZb = na, pZp = na, pZl = "")
+              czIdx = -1, lastTr = 0, lastTrans = false, pCdir = 0, pCmax = 0,
+              pZb = na, pZp = na, pZl = "")
 
 f_isUp(_l) => _l == "HH" or _l == "HL"
 
@@ -148,10 +153,7 @@ f_push(L, _price, _bar, _hi) =>
         if np > 0
             prevN := array.get(L.KN, np - 1)
         int newN = 0
-        if L.czWait
-            newN := 0
-            L.czWait := false
-        else if prevN >= 0 and prevN < 5
+        if prevN >= 0 and prevN < 5
             newN := prevN + 1
         array.push(L.KN, newN)
         if array.size(L.KP) > MAXK
@@ -163,8 +165,49 @@ f_push(L, _price, _bar, _hi) =>
             array.shift(L.KT)
             array.shift(L.KX)
             array.shift(L.KN)
+            L.czIdx := L.czIdx > 0 ? L.czIdx - 1 : (L.czIdx == 0 ? -1 : L.czIdx)
     d1 = f_relabel(L)
     fresh
+
+// Ноль счёта ставится по подписи, а не по порядку появления.
+// Восходящий тренд считается от LL, нисходящий от HH — идём НАЗАД по
+// коленам до первого подходящего. Исключение на продолжение: если
+// прошлый счёт был того же направления и дошёл минимум до третьей
+// точки, годится и HL (для восходящего) или LH (для нисходящего),
+// если встретилось раньше.
+//
+// Колена от нуля перенумеровываются: 0 1 2 3 4 5, потом снова 0.
+// Это переписывает несколько последних номеров — иначе ноль нельзя
+// поставить назад, а он должен стоять именно там.
+f_setZero(L, _dir) =>
+    n = array.size(L.KL)
+    // СНАЧАЛА закрываем прошлый счёт: его направление и то, до какой
+    // точки он дошёл. Если читать это после — условие на продолжение
+    // проверяется против позапрошлого счёта, а не прошлого.
+    if L.czIdx >= 0 and L.czIdx < n
+        L.pCmax := array.get(L.KN, n - 1)
+        L.pCdir := L.lastTr
+    int z = -1
+    if n > 0
+        want  = _dir == 1 ? "LL" : "HH"
+        want2 = _dir == 1 ? "HL" : "LH"
+        // продолжение: прошлый счёт шёл в ту же сторону и дошёл до (3)
+        bool cont = L.pCdir == _dir and L.pCmax >= 3
+        i = n - 1
+        while i >= 0
+            lb = array.get(L.KL, i)
+            if lb == want
+                z := i
+                break
+            if cont and lb == want2
+                z := i
+                break
+            i -= 1
+    if z >= 0
+        L.czIdx := z
+        for k = 0 to n - 1 - z
+            array.set(L.KN, z + k, k % 6)
+    z
 
 // ══════════════ ШАГ БАРА ══════════════
 // Порядок ровно как в v5, он сверен репликой строка в строку.
@@ -188,21 +231,12 @@ f_step(L, _pvH, _pvL, _hiPx, _loPx) =>
             if math.abs(L.lvl - L.lastD) < syminfo.mintick
                 died := false
     if died
-        // ноль умершего тренда — колено, с которого шёл его счёт
-        int zi = -1
-        nz0 = array.size(L.KN)
-        if nz0 > 0
-            q = nz0 - 1
-            while q >= 0
-                if array.get(L.KN, q) == 0
-                    zi := q
-                    break
-                q -= 1
-        if zi >= 0
-            L.pZb := array.get(L.KB, zi)
-            L.pZp := array.get(L.KP, zi)
-            L.pZl := array.get(L.KL, zi)
-        L.czWait := true
+        // ноль умершего тренда — берём прямо якорь, а не поиск KN==0:
+        // после перенумеровки нули повторяются каждые шесть колен
+        if L.czIdx >= 0 and L.czIdx < array.size(L.KP)
+            L.pZb := array.get(L.KB, L.czIdx)
+            L.pZp := array.get(L.KP, L.czIdx)
+            L.pZl := array.get(L.KL, L.czIdx)
         L.pTr := L.tr
         L.pD := L.lvl
         L.pDb := bar_index
@@ -312,19 +346,33 @@ f_step(L, _pvH, _pvL, _hiPx, _loPx) =>
         if fresh and array.size(L.KT) > 0
             array.set(L.KT, array.size(L.KT) - 1, L.tr)
             array.set(L.KX, array.size(L.KX) - 1, L.inTrans)
+    // 7. тренд родился или сменился — ставим ноль по подписи, назад по
+    // коленам. Ловим и возрождение в ТУ ЖЕ сторону после ПЕРЕХОДА:
+    // движок не обнуляет tr на смерти, поэтому по одному лишь сравнению
+    // направлений такой случай был бы пропущен.
+    if L.tr != 0 and not L.inTrans and (L.tr != L.lastTr or L.lastTrans)
+        zz = f_setZero(L, L.tr)
+    L.lastTr := L.tr
+    L.lastTrans := L.inTrans
     fresh
 
 // ══════════════ ПРОИЗВОДНЫЕ ══════════════
+// Ноль действующего счёта — это якорь, поставленный при смене тренда.
+// Искать последний KN==0 нельзя: после перенумеровки нули повторяются
+// каждые шесть колен, и поиск находил бы не тот.
 f_cstart(L) =>
-    n = array.size(L.KN)
     int o = -1
-    if n > 0
-        i = n - 1
-        while i >= 0
-            if array.get(L.KN, i) == 0
-                o := i
-                break
-            i -= 1
+    if L.czIdx >= 0 and L.czIdx < array.size(L.KN)
+        o := L.czIdx
+    else
+        n = array.size(L.KN)
+        if n > 0
+            i = n - 1
+            while i >= 0
+                if array.get(L.KN, i) == 0
+                    o := i
+                    break
+                i -= 1
     o
 
 f_cdir(L, _o) =>
