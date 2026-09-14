@@ -203,10 +203,11 @@ f_setZero(L, _dir) =>
                 z := i
                 break
             i -= 1
+    // Номера прошлого счёта НЕ переписываем: кусок старого тренда должен
+    // остаться таким, каким был. Новый счёт рисуется поверх — его номера
+    // считаются от якоря на лету, см. f_curN.
     if z >= 0
         L.czIdx := z
-        for k = 0 to n - 1 - z
-            array.set(L.KN, z + k, k % 6)
     z
 
 // ══════════════ ШАГ БАРА ══════════════
@@ -375,6 +376,16 @@ f_cstart(L) =>
                 i -= 1
     o
 
+// Номер колена в действующем счёте: от якоря, 0..5. Историю не трогает.
+// -1 значит «колено вне действующего счёта».
+f_curN(L, _i) =>
+    int v = -1
+    if L.czIdx >= 0 and _i >= L.czIdx
+        k = _i - L.czIdx
+        if k <= 5
+            v := k
+    v
+
 f_cdir(L, _o) =>
     n = array.size(L.KL)
     int d = 0
@@ -523,6 +534,12 @@ f_drawZZ(L2, _w) =>
                     txt := lbb + arr + (mud ? " м" : "")
                 else if labMode == "номер и метка"
                     txt := (num0 >= 0 ? "(" + str.tostring(num0) + ") " : "") + lbb + arr + (mud ? " м" : "")
+                // новый счёт рисуется ПОВЕРХ старого, на бар правее,
+                // чтобы не затирать прежнюю подпись
+                cn2 = f_curN(L2, i)
+                if cn2 >= 0
+                    string ov = (cn2 == 0 ? "◆ 0" : str.tostring(cn2))
+                    array.push(LBS, label.new(x2 + 1, pr, ov, style=hh ? label.style_label_down : label.style_label_up, color=color.new(color.black, 100), textcolor=cZero, size=cn2 == 0 ? size.normal : size.small, tooltip="действующий счёт · точка (" + str.tostring(cn2) + ") из 5 · ноль на " + (L2.czIdx >= 0 and L2.czIdx < array.size(L2.KL) ? array.get(L2.KL, L2.czIdx) : "?")))
                 if not na(txt)
                     lc0 = kd == 0 ? color.gray : f_col(kd)
                     lc  = act ? lc0 : color.new(lc0, 62)
@@ -735,7 +752,7 @@ if barstate.islast
 // ══════════════ ТАБЛИЦА ══════════════
 tss = sizeT == "tiny" ? size.tiny : sizeT == "normal" ? size.normal : size.small
 tpos = posT == "верх-лево" ? position.top_left : posT == "низ-право" ? position.bottom_right : posT == "низ-лево" ? position.bottom_left : position.top_right
-var table T = table.new(tpos, 2, 11, bgcolor=color.new(#12121c, 8), border_color=color.new(color.gray, 70), border_width=1, frame_color=color.new(color.gray, 50), frame_width=1)
+var table T = table.new(tpos, 2, 12, bgcolor=color.new(#12121c, 8), border_color=color.new(color.gray, 70), border_width=1, frame_color=color.new(color.gray, 50), frame_width=1)
 
 f_row(_r, _k, _v, _c, _tip) =>
     table.cell(T, 0, _r, _k, text_color=color.new(color.silver, 25), text_halign=text.align_left, text_size=tss, tooltip=_tip)
@@ -774,7 +791,7 @@ f_mud(L2, _cs) =>
     nk = array.size(L2.KM)
     mudC = 0
     cnt = 0
-    if _cs >= 0
+    if _cs >= 0 and _cs <= nk - 1
         for q = _cs to nk - 1
             cnt += 1
             if array.get(L2.KM, q) >= 2
@@ -790,9 +807,10 @@ if showT and barstate.islast
 
     cs = f_cstart(L)
     cd = f_cdir(L, cs)
+    // номер берём у действующего счёта, от якоря, а не из истории
     int cn = -1
-    if array.size(L.KN) > 0
-        cn := array.get(L.KN, array.size(L.KN) - 1)
+    if array.size(L.KP) > 0
+        cn := f_curN(L, array.size(L.KP) - 1)
     int lm = 1
     if array.size(L.KM) > 0
         lm := array.get(L.KM, array.size(L.KM) - 1)
@@ -801,7 +819,7 @@ if showT and barstate.islast
     r1 = f_row(1, "тренд", f_trend(L), L.inTrans ? color.new(color.orange, 0) : L.tr == 0 ? color.gray : f_col(L.tr), "Считается от нуля своего счёта — подпись и цена нуля показаны здесь же. После слома ноль всегда встаёт заново: первое появившееся колено становится точкой (0).")
     r2 = f_row(2, "держится на", f_lvlTxt(L), L.inTrans or L.lvlProv ? color.new(color.orange, 0) : color.white, "Последнее колено-опора со стороны тренда. В ПЕРЕХОДЕ строка гасится: движок не воскрешает старый уровень.")
     r3 = f_row(3, "запас", f_roomTxt(L), na(r) ? color.gray : r < 0.25 ? cDn : r < 0.5 ? color.new(color.orange, 0) : r < 1.0 ? color.new(color.silver, 20) : cUp, "Оставшийся ход до порога смерти, в импульсных коленах. Проценты — вероятность смерти тренда за 10 баров по замеру на 9675 барах: меньше 0.25 импульса — 73%, 0.25-0.50 — 42%, 0.50-1.00 — 17%, 1.00-2.00 — 6%, дальше — 1%. В среднем по рынку 16%.")
-    r4 = f_row(4, "счёт", cn < 0 ? "вне счёта" : "(" + str.tostring(cn) + ") из 5 " + (cd == 1 ? "↑" : cd == -1 ? "↓" : "") + (cn <= 0 ? "" : cn % 2 == 1 ? " импульс" : " коррекция"), cd == 0 ? color.gray : f_col(cd), "Нечётная точка — импульс, чётная — коррекция. До точки (5) доходит примерно каждый пятый счёт, и это не зависит от глубины пивота.")
+    r4 = f_row(4, "счёт", cn < 0 ? "счёт кончился" : "(" + str.tostring(cn) + ") из 5 " + (cd == 1 ? "↑" : cd == -1 ? "↓" : "") + (cn <= 0 ? "" : cn % 2 == 1 ? " импульс" : " коррекция"), cd == 0 ? color.gray : f_col(cd), "Нечётная точка — импульс, чётная — коррекция. До точки (5) доходит примерно каждый пятый счёт, и это не зависит от глубины пивота.")
 
     string z = "—"
     if cs >= 0
@@ -809,12 +827,38 @@ if showT and barstate.islast
         z := zl + " " + str.tostring(array.get(L.KP, cs), format.mintick) + " · " + ((cd == 1 ? zl == "LL" : cd == -1 ? zl == "HH" : false) ? "разворот" : "продолж")
     r5 = f_row(5, "счёт от", z, cd == 0 ? color.gray : f_col(cd), "Метка нуля счёта. Направление счёта берётся по стороне нуля — проверено на 464 счётах, совпадает во всех 464. Ноль LL при счёте вверх или HH при счёте вниз — движение разворотное, иначе продолжение.")
     r6 = f_row(6, "цепочка", f_chainCur(L, cs, 4), cd == 0 ? color.gray : f_col(cd), "Фактическая последовательность подписей колен. Черта отделяет ноль счёта от остального.")
-    r7 = f_row(7, "чистота", f_mud(L, cs), lm >= 2 ? cMud : color.new(color.silver, 30), "Первая часть — про последнее колено, вторая — сколько мутных внутри текущего счёта. Мутность около 21% на 1H и 18% на 5m и от глубины пивота не зависит. Ничего не предсказывает: связь оказалась тавтологией и исчезла при нормировке. Строка описательная.")
+    // Подписи от нуля против направления тренда. Движок считает тренд по
+    // своему правилу (два однонаправленных колена, смерть по уровню), а
+    // подписи могут идти против — тогда в таблице «ВОСХОДЯЩИЙ», а метки
+    // структуры шортовые. Эта строка показывает расхождение, а не решает
+    // за вас: проверено, что последовательность подписей ничего не
+    // предсказывает.
+    int sAgr = 0
+    int sTot = 0
+    nkl = array.size(L.KL)
+    if cs >= 0 and cs + 1 <= nkl - 1
+        for q = cs + 1 to math.min(nkl - 1, cs + 5)
+            lq = array.get(L.KL, q)
+            bool up = lq == "HH" or lq == "HL"
+            sTot += 1
+            if (up and L.tr == 1) or (not up and L.tr == -1)
+                sAgr += 1
+    string sTxt = "—"
+    color  sCol = color.gray
+    if sTot > 0
+        sTxt := str.tostring(sAgr) + " из " + str.tostring(sTot) + " по тренду"
+        if sAgr * 2 < sTot
+            sTxt := sTxt + "  ← метки против"
+            sCol := color.new(color.orange, 0)
+        else
+            sCol := color.new(color.silver, 25)
+    r7 = f_row(7, "структура", sTxt, sCol, "Сколько подписей от нуля совпадает с направлением тренда. Тренд считается по своему правилу — два подряд однонаправленных колена и смерть по уровню — а подписи могут идти против. Если их меньше половины, тренд держится не на структуре.")
+    r8 = f_row(8, "чистота", f_mud(L, cs), lm >= 2 ? cMud : color.new(color.silver, 30), "Первая часть — про последнее колено, вторая — сколько мутных внутри текущего счёта. Мутность около 21% на 1H и 18% на 5m и от глубины пивота не зависит. Ничего не предсказывает: связь оказалась тавтологией и исчезла при нормировке. Строка описательная.")
     string p8 = "—"
     if L.pTr != 0
         string pa = na(L.pZp) ? "" : " · от " + L.pZl + " " + str.tostring(L.pZp, format.mintick)
         string pl = na(L.pZb) ? "" : " · прожил " + str.tostring(L.pDb - L.pZb) + "б"
         p8 := (L.pTr == 1 ? "восх" : "нисх") + pa + " · слом " + str.tostring(L.pD, format.mintick) + pl + " · " + str.tostring(bar_index - L.pDb) + "б назад"
-    r8 = f_row(8, "прошлый тренд", p8, L.pTr == 0 ? color.gray : color.new(f_col(L.pTr), 35), "Откуда он считался — подпись и цена его нуля; где сломался; сколько прожил ОТ СВОЕГО НУЛЯ; сколько баров прошло с тех пор.")
-    r9 = f_row(9, "пауза", L.inTrans ? str.tostring(math.min(L.marks, 2)) + " из 2 колен" : "—", L.inTrans ? color.new(color.orange, 0) : color.gray, "После смерти тренда нужны два колена, чтобы родился новый. Рывок подтверждает досрочно.")
-    r10 = f_row(10, "свеча", trig_ok ? "ТРИГГЕРНАЯ · шаблон " + str.tostring(trIdx + 1) : "обычная", trig_ok ? cTrig : color.gray, "Форма свечи совпала с одним из 40 шаблонов при допуске. Сама по себе свеча — монетка: на 2199 срабатываниях за два года вход по закрытию со стопом за экстремумом даёт от -0.23R до +0.05R. Это сигнал «здесь можно смотреть», а не вход.")
+    r9 = f_row(9, "прошлый тренд", p8, L.pTr == 0 ? color.gray : color.new(f_col(L.pTr), 35), "Откуда он считался — подпись и цена его нуля; где сломался; сколько прожил ОТ СВОЕГО НУЛЯ; сколько баров прошло с тех пор.")
+    r10 = f_row(10, "пауза", L.inTrans ? str.tostring(math.min(L.marks, 2)) + " из 2 колен" : "—", L.inTrans ? color.new(color.orange, 0) : color.gray, "После смерти тренда нужны два колена, чтобы родился новый. Рывок подтверждает досрочно.")
+    r11 = f_row(11, "свеча", trig_ok ? "ТРИГГЕРНАЯ · шаблон " + str.tostring(trIdx + 1) : "обычная", trig_ok ? cTrig : color.gray, "Форма свечи совпала с одним из 40 шаблонов при допуске. Сама по себе свеча — монетка: на 2199 срабатываниях за два года вход по закрытию со стопом за экстремумом даёт от -0.23R до +0.05R. Это сигнал «здесь можно смотреть», а не вход.")
