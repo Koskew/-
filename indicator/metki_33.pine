@@ -202,7 +202,11 @@ f_findZero() =>
 // сверху — индексы cz и czPrev двигает уже вызывающий код.
 f_push(_price, _bar, _hi) =>
     n = array.size(KP)
-    bool same = n > 0 and array.get(KH, n - 1) == _hi
+    // Pine не сокращает and: правую часть нельзя писать в одну строку
+    // с проверкой размера, при пустом массиве она всё равно считается
+    bool same = false
+    if n > 0
+        same := array.get(KH, n - 1) == _hi
     bool fresh = false
     bool trimmed = false
     if same
@@ -313,14 +317,17 @@ if barstate.isconfirmed
     imp := Ix
 
     // 7. помечаем колена текущего счёта его направлением
-    if cz >= 0
+    if cz >= 0 and cz < array.size(KD)
         for i = cz to math.min(array.size(KD) - 1, cz + maxPt)
             array.set(KD, i, cdir)
 
 // ══════════════ ПРОИЗВОДНЫЕ ══════════════
 f_curPt() =>
     n = array.size(KN)
-    n > 0 ? array.get(KN, n - 1) : -1
+    int v = -1
+    if n > 0
+        v := array.get(KN, n - 1)
+    v
 
 // оставшийся ход до порога слома, в импульсах
 f_room() =>
@@ -333,7 +340,7 @@ f_room() =>
 f_chain() =>
     n = array.size(KL)
     s = ""
-    if cz >= 0 and n > 0
+    if cz >= 0 and cz < n
         for j = cz to math.min(n - 1, cz + maxPt)
             s := s + (j > cz ? ">" : "") + array.get(KL, j)
     s
@@ -342,12 +349,14 @@ f_mud() =>
     n = array.size(KM)
     mc = 0
     cnt = 0
-    if cz >= 0
+    if cz >= 0 and cz < n
         for q = cz to math.min(n - 1, cz + maxPt)
             cnt += 1
             if array.get(KM, q) >= 2
                 mc += 1
-    last = n > 0 ? array.get(KM, n - 1) : 1
+    int last = 1
+    if n > 0
+        last := array.get(KM, n - 1)
     (last >= 2 ? "МУТНОЕ x" + str.tostring(last) + " · " : "чистое · ") + str.tostring(mc) + " из " + str.tostring(cnt)
 
 // ══════════════ ТРИГГЕРНАЯ СВЕЧА ══════════════
@@ -550,9 +559,14 @@ f_drawZZ() =>
             x2 = array.get(KB, i)
             if last_bar_index - x1 <= winBars
                 num  = array.get(KN, i)
-                d    = i < array.size(KD) ? array.get(KD, i) : 0
+                int d = 0
+                if i < array.size(KD)
+                    d := array.get(KD, i)
                 // нога В НОЛЬ принадлежит прошлому счёту, а не новому
-                dL   = (num == 0 and i > 0 and i - 1 < array.size(KD)) ? array.get(KD, i - 1) : d
+                int dL = d
+                if num == 0 and i > 0
+                    if i - 1 < array.size(KD)
+                        dL := array.get(KD, i - 1)
                 bool inCur = cz >= 0 and i > cz and i <= cz + maxPt
                 bool corr  = num > 0 and num % 2 == 0
                 cc0 = dL == 0 ? color.gray : f_col(dL)
@@ -581,14 +595,18 @@ f_drawZZ() =>
                 if not na(txt)
                     lc0 = isZero and markZero ? cZero : (dL == 0 ? color.gray : f_col(dL))
                     lc  = inCur or isZero ? lc0 : color.new(lc0, 62)
-                    dd  = i < array.size(KD) ? array.get(KD, i) : 0
+                    int dd = 0
+                    if i < array.size(KD)
+                        dd := array.get(KD, i)
                     tip = "колено " + lbb + "  " + str.tostring(pr, format.mintick) + "\n" + (num >= 0 ? (num == 0 ? "НОЛЬ СЧЁТА — отсюда считается тренд" : "точка (" + str.tostring(num) + ") из " + str.tostring(maxPt) + " · " + (num % 2 == 1 ? "импульсная" : "корректирующая")) : "вне счёта") + "\n" + (dd == 1 ? "счёт вверх" : dd == -1 ? "счёт вниз" : "счёт не определён") + "\n" + (mud ? "МУТНОЕ: слилось " + str.tostring(mc) + " меток, поглощена " + str.tostring(ap, format.mintick) : "чистое колено")
                     array.push(LBS, label.new(x2, pr, txt, style=hh ? label.style_label_down : label.style_label_up, color=color.new(color.black, 100), textcolor=mud and not isZero ? cMud : lc, size=isZero and markZero ? size.normal : size.small, tooltip=tip))
     n
 
 f_drawLvl() =>
     if drawLvl and cz >= 0 and not na(lvl) and cdir != 0
-        x0 = cz < array.size(KB) ? array.get(KB, cz) : bar_index - 50
+        int x0 = bar_index - 50
+        if cz >= 0 and cz < array.size(KB)
+            x0 := array.get(KB, cz)
         thr = cdir == 1 ? lvl - imp * fibD : lvl + imp * fibD
         array.push(LNS, line.new(x0, lvl, bar_index + 8, lvl, color=color.new(f_col(cdir), 25), width=2, style=line.style_dashed))
         array.push(LBS, label.new(bar_index + 8, lvl, (cdir == 1 ? "HL " : "LH ") + str.tostring(lvl, format.mintick), style=label.style_label_left, color=color.new(f_col(cdir), 85), textcolor=f_col(cdir), size=size.small))
