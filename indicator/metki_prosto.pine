@@ -1,10 +1,10 @@
 //@version=5
 // ═══════════════════════════════════════════════════════════════════
-// МЕТКИ 3/3 — только структура
+// МЕТКИ — только структура, два слоя
 //
-// Ничего, кроме того, что просили: структурные метки HH / LH / HL / LL
-// по пивотам 3/3 и неперебитые уровни этих же меток с текущего ТФ,
-// 4H и 1D.
+// Ничего, кроме меток и уровней: структурные метки HH / LH / HL / LL
+// на ДВУХ слоях с независимой глубиной пивота, и неперебитые уровни
+// этих же меток с текущего ТФ, 4H и 1D.
 //
 // Здесь НЕТ: счёта (0)-(5), тренда, слома, уровня тренда, запаса,
 // таблицы, триггерных свечей, входов и риска. Всё это живёт в
@@ -16,122 +16,152 @@
 //   вершина выше прошлой вершины — HH, ниже — LH
 //   низ выше прошлого низа      — HL, ниже — LL
 // ═══════════════════════════════════════════════════════════════════
-indicator("МЕТКИ 3/3", overlay = true, max_lines_count = 500, max_labels_count = 500, max_bars_back = 3000)
+indicator("МЕТКИ", overlay = true, max_lines_count = 500, max_labels_count = 500, max_bars_back = 3000)
 
-gA = "① Метки"
-LB      = input.int(3,    "Глубина пивота (3 = метки 3/3)", minval = 2, maxval = 8, group = gA, tooltip = "Сколько баров слева и справа должно быть ниже вершины. Метка появляется через столько же баров после факта — раньше её знать нельзя.")
-showLab = input.bool(true,  "Подписи меток", group = gA)
-showRaw = input.bool(false, "Сырые пивоты", group = gA, tooltip = "Маленькие треугольники на самих пивотах. Если рядом два одной стороны — они слились в одно колено.")
-showZZ  = input.bool(true,  "Зиг-заг по коленам", group = gA)
-winBars = input.int(700,  "Рисовать за последние N баров", minval = 100, group = gA)
+gA = "① Слои"
+drawA  = input.bool(true,  "Рисовать слой A", inline = "a", group = gA)
+lbA    = input.int(3, "глубина", minval = 1, maxval = 10, inline = "a", group = gA, tooltip = "Слой A. 3 = метки 3/3. Метка появляется через столько же баров после факта — раньше её знать нельзя.")
+drawB  = input.bool(false, "Рисовать слой B", inline = "b", group = gA)
+lbB    = input.int(2, "глубина", minval = 1, maxval = 10, inline = "b", group = gA, tooltip = "Слой B. Второй слой поверх первого: быстрая глубина показывает то, что медленная не видит. Выключен по умолчанию.")
+labWho = input.string("A", "Чьи метки подписывать", options = ["A", "B", "оба", "ничьи"], group = gA, tooltip = "Подписи двух слоёв накладываются друг на друга, поэтому обычно подписывают один. Второй виден зиг-загом.")
 
-gC = "② Цвета"
-cHi  = input.color(#e0342c, "Вершина", inline = "c1", group = gC)
-cLo  = input.color(#00b050, "Низ",     inline = "c1", group = gC)
-cZZ  = input.color(color.new(color.gray, 35), "Зиг-заг", group = gC)
-zzW  = input.int(1, "Толщина зиг-зага", minval = 1, maxval = 4, group = gC)
+gB = "② Что рисовать"
+showZZ  = input.bool(true,  "Зиг-заг по коленам", group = gB)
+showRaw = input.bool(false, "Сырые пивоты слоя A", group = gB, tooltip = "Маленькие треугольники на самих пивотах. Если рядом два одной стороны — они слились в одно колено.")
+winBars = input.int(700,  "Рисовать за последние N баров", minval = 100, group = gB)
+
+gC = "③ Цвета"
+cHiA = input.color(#e0342c, "A: вершина / низ", inline = "ca", group = gC)
+cLoA = input.color(#00b050, "",                 inline = "ca", group = gC)
+cHiB = input.color(color.new(#e0342c, 45), "B: вершина / низ", inline = "cb", group = gC)
+cLoB = input.color(color.new(#00b050, 45), "",                 inline = "cb", group = gC)
+cZZA = input.color(color.new(color.gray, 35), "Зиг-заг A / B", inline = "cz", group = gC)
+cZZB = input.color(color.new(color.gray, 70), "",              inline = "cz", group = gC)
+zzWA = input.int(1, "Толщина зиг-зага A / B", minval = 1, maxval = 4, inline = "zw", group = gC)
+zzWB = input.int(1, "", minval = 1, maxval = 4, inline = "zw", group = gC)
 
 MAXK = 200
 
 // ══════════════ КОЛЕНА ══════════════
-var float[] KP = array.new_float()   // цена
-var int[]   KB = array.new_int()     // бар
-var bool[]  KH = array.new_bool()    // вершина или низ
-var string[] KL = array.new_string() // метка
-var int[]   KM = array.new_int()     // сколько сырых меток слилось
+// Массивы передаются в функции по ссылке, поэтому один и тот же код
+// обслуживает оба слоя — копий логики нет.
+var float[]  AP = array.new_float()
+var int[]    AB = array.new_int()
+var bool[]   AH = array.new_bool()
+var string[] AL = array.new_string()
+var int[]    AM = array.new_int()
+
+var float[]  BP = array.new_float()
+var int[]    BB = array.new_int()
+var bool[]   BH = array.new_bool()
+var string[] BL = array.new_string()
+var int[]    BM = array.new_int()
 
 // метка колена: сравнение с предыдущим коленом той же стороны
-f_relabel(_dummy) =>
-    array.clear(KL)
-    n = array.size(KP)
+f_relabel(_P, _H, _L) =>
+    array.clear(_L)
+    n = array.size(_P)
     if n > 0
         for i = 0 to n - 1
-            hi = array.get(KH, i)
+            hi = array.get(_H, i)
             float prev = na
             j = i - 1
             while j >= 0
-                if array.get(KH, j) == hi
-                    prev := array.get(KP, j)
+                if array.get(_H, j) == hi
+                    prev := array.get(_P, j)
                     break
                 j -= 1
-            cur = array.get(KP, i)
-            array.push(KL, na(prev) ? "?" : hi ? (cur > prev ? "HH" : "LH") : (cur > prev ? "HL" : "LL"))
+            cur = array.get(_P, i)
+            array.push(_L, na(prev) ? "?" : hi ? (cur > prev ? "HH" : "LH") : (cur > prev ? "HL" : "LL"))
     n
 
 // серия пивотов одной стороны схлопывается в свой экстремум
-f_push(_price, _bar, _hi) =>
-    n = array.size(KP)
+f_push(_P, _B, _H, _L, _M, _price, _bar, _hi) =>
+    n = array.size(_P)
     bool same = false
     if n > 0
-        same := array.get(KH, n - 1) == _hi
+        same := array.get(_H, n - 1) == _hi
     if same
-        old = array.get(KP, n - 1)
+        old = array.get(_P, n - 1)
         bool better = _hi ? _price > old : _price < old
-        array.set(KM, n - 1, array.get(KM, n - 1) + 1)
+        array.set(_M, n - 1, array.get(_M, n - 1) + 1)
         if better
-            array.set(KP, n - 1, _price)
-            array.set(KB, n - 1, _bar)
+            array.set(_P, n - 1, _price)
+            array.set(_B, n - 1, _bar)
     else
-        array.push(KP, _price)
-        array.push(KB, _bar)
-        array.push(KH, _hi)
-        array.push(KM, 1)
-        if array.size(KP) > MAXK
-            array.shift(KP)
-            array.shift(KB)
-            array.shift(KH)
-            array.shift(KM)
-    d = f_relabel(0)
+        array.push(_P, _price)
+        array.push(_B, _bar)
+        array.push(_H, _hi)
+        array.push(_M, 1)
+        if array.size(_P) > MAXK
+            array.shift(_P)
+            array.shift(_B)
+            array.shift(_H)
+            array.shift(_M)
+    d = f_relabel(_P, _H, _L)
     0
 
-pvH = ta.pivothigh(high, LB, LB)
-pvL = ta.pivotlow (low,  LB, LB)
+pvHA = ta.pivothigh(high, lbA, lbA)
+pvLA = ta.pivotlow (low,  lbA, lbA)
+pvHB = ta.pivothigh(high, lbB, lbB)
+pvLB = ta.pivotlow (low,  lbB, lbB)
 
 if barstate.isconfirmed
-    if not na(pvH)
-        q1 = f_push(high[LB], bar_index - LB, true)
-    if not na(pvL)
-        q2 = f_push(low[LB],  bar_index - LB, false)
+    if not na(pvHA)
+        q1 = f_push(AP, AB, AH, AL, AM, high[lbA], bar_index - lbA, true)
+    if not na(pvLA)
+        q2 = f_push(AP, AB, AH, AL, AM, low[lbA],  bar_index - lbA, false)
+    if not na(pvHB)
+        q3 = f_push(BP, BB, BH, BL, BM, high[lbB], bar_index - lbB, true)
+    if not na(pvLB)
+        q4 = f_push(BP, BB, BH, BL, BM, low[lbB],  bar_index - lbB, false)
 
-plotshape(showRaw and not na(pvH) ? pvH : na, title = "сырая вершина", style = shape.triangledown, location = location.absolute, color = color.new(cHi, 35), size = size.tiny, offset = -LB)
-plotshape(showRaw and not na(pvL) ? pvL : na, title = "сырой низ",     style = shape.triangleup,   location = location.absolute, color = color.new(cLo, 35), size = size.tiny, offset = -LB)
+plotshape(showRaw and not na(pvHA) ? pvHA : na, title = "сырая вершина A", style = shape.triangledown, location = location.absolute, color = color.new(cHiA, 35), size = size.tiny, offset = -lbA)
+plotshape(showRaw and not na(pvLA) ? pvLA : na, title = "сырой низ A",     style = shape.triangleup,   location = location.absolute, color = color.new(cLoA, 35), size = size.tiny, offset = -lbA)
 
 // ══════════════ ОТРИСОВКА МЕТОК ══════════════
 var line[]  LNS = array.new<line>()
 var label[] LBS = array.new<label>()
+
+f_draw(_P, _B, _H, _L, _M, _cHi, _cLo, _cZZ, _w, _tag, _lab) =>
+    n = array.size(_P)
+    if n >= 2
+        for i = 1 to n - 1
+            x1 = array.get(_B, i - 1)
+            x2 = array.get(_B, i)
+            if last_bar_index - x1 <= winBars
+                if showZZ
+                    array.push(LNS, line.new(x1, array.get(_P, i - 1), x2, array.get(_P, i), color = _cZZ, width = _w))
+                if _lab
+                    lb = array.get(_L, i)
+                    pr = array.get(_P, i)
+                    hi = array.get(_H, i)
+                    mc = array.get(_M, i)
+                    array.push(LBS, label.new(x2, pr, lb, style = hi ? label.style_label_down : label.style_label_up, color = color.new(color.black, 100), textcolor = hi ? _cHi : _cLo, size = size.small, tooltip = "слой " + _tag + "   " + lb + "  " + str.tostring(pr, format.mintick) + "\n" + (hi ? "вершина" : "низ") + (mc >= 2 ? "\nслилось сырых меток: " + str.tostring(mc) : "")))
+    n
 
 if barstate.islast
     while array.size(LNS) > 0
         line.delete(array.pop(LNS))
     while array.size(LBS) > 0
         label.delete(array.pop(LBS))
-    n = array.size(KP)
-    if n >= 2
-        for i = 1 to n - 1
-            x1 = array.get(KB, i - 1)
-            x2 = array.get(KB, i)
-            if last_bar_index - x1 <= winBars
-                if showZZ
-                    array.push(LNS, line.new(x1, array.get(KP, i - 1), x2, array.get(KP, i), color = cZZ, width = zzW))
-                if showLab
-                    lb = array.get(KL, i)
-                    pr = array.get(KP, i)
-                    hi = array.get(KH, i)
-                    mc = array.get(KM, i)
-                    array.push(LBS, label.new(x2, pr, lb, style = hi ? label.style_label_down : label.style_label_up, color = color.new(color.black, 100), textcolor = hi ? cHi : cLo, size = size.small, tooltip = lb + "  " + str.tostring(pr, format.mintick) + "\n" + (hi ? "вершина" : "низ") + (mc >= 2 ? "\nслилось сырых меток: " + str.tostring(mc) : "")))
+    if drawB
+        d2 = f_draw(BP, BB, BH, BL, BM, cHiB, cLoB, cZZB, zzWB, str.tostring(lbB) + "/" + str.tostring(lbB), labWho == "B" or labWho == "оба")
+    if drawA
+        d1 = f_draw(AP, AB, AH, AL, AM, cHiA, cLoA, cZZA, zzWA, str.tostring(lbA) + "/" + str.tostring(lbA), labWho == "A" or labWho == "оба")
 
 // ══════════════ УРОВНИ HH/LL/LH/HL — текущий ТФ, 4H, 1D ══════════════
 // Уровень существует, пока не пробит: как только цена его прошла — он
 // умирает и не рисуется. Живых уровней бывает около сотни, поэтому
 // рисуются только N ближайших к цене с каждой стороны на каждом ТФ.
 // HH и LL — пунктир, LH и HL — точки. Толщина растёт с таймфреймом.
-gL = "③ Уровни HH/LL/LH/HL"
+gL = "④ Уровни HH/LL/LH/HL"
 lvOn    = input.bool(true, "Показывать уровни", group = gL)
 lv_tf1  = input.bool(true, "текущий ТФ", inline = "lv", group = gL)
 lv_tf4  = input.bool(true, "4H",         inline = "lv", group = gL)
 lv_tfd  = input.bool(true, "1D",         inline = "lv", group = gL)
 lvLH    = input.bool(true, "Штрихи для LH и HL", group = gL, tooltip = "Неперебитые LH сверху и HL снизу. HH и LL — пунктир, LH и HL — точки.")
-lvLB    = input.int(3, "Глубина пивота уровней", minval = 1, maxval = 8, group = gL, tooltip = "3 — как метки на графике. Поставьте 2, чтобы вернуть глубину Тренажёра.")
+lvLB    = input.int(3, "Глубина пивота уровней", minval = 1, maxval = 8, group = gL, tooltip = "3 — как слой A по умолчанию. Поставьте 2, чтобы вернуть глубину Тренажёра.")
 lv_n    = input.int(3, "Ближайших к цене с каждой стороны", minval = 1, maxval = 10, group = gL)
 lvTransp= input.int(40, "Прозрачность", minval = 0, maxval = 90, group = gL)
 cLvH    = input.color(color.green, "верх / низ", inline = "lc", group = gL)
