@@ -26,6 +26,7 @@ LB      = input.int(3,    "Глубина пивота (3 = метки 3/3)", mi
 fibD    = input.float(0.33,"Глубина слома, импульсов", 0.0, 1.0, 0.01, group=gA, tooltip="Насколько тело закрытой свечи должно уйти за уровень, чтобы тренд считался мёртвым. 0.33 при глубине пивота 3 даёт медиану жизни тренда 32 бара на 1H и 30 на 5m, время в ПЕРЕХОДЕ 18-21%.")
 jumpC   = input.float(0.5, "Досрочное подтверждение, импульсов", 0.0, 3.0, 0.25, group=gA, tooltip="Пауза «жду 2 колена» в одностороннем ходе не двигается: новый экстремум сливается в то же колено. Рывок подтверждает тренд сразу, если цена ушла от уровня смерти дальше этой доли импульса И две последние метки согласны. 0 выключает.")
 provOn  = input.bool(true, "После рывка держать на уровне смерти", group=gA)
+ratchet = input.bool(true, "Храповик опоры", group=gA, tooltip="Опора восходящего тренда может только подниматься, нисходящего — только опускаться. Взято у супертренда. Без храповика нырок под опору, не дотянувший до порога смерти, рождает LL, следующий HL встаёт НИЖЕ прежней опоры — и запас после провала становится больше, чем был до него. Выключите, чтобы сравнить со старым поведением.")
 
 gB = "② Что рисовать"
 showRaw = input.bool(true,  "Сырые пивоты", group=gB, tooltip="Маленькие треугольники на самих пивотах. Если рядом два одной стороны — они слились в одно колено, это и есть мутность.")
@@ -34,6 +35,8 @@ labMode = input.string("номер и метка", "Подпись у колен
 drawMud = input.bool(true,  "Помечать мутные колена", group=gB, tooltip="Колено, собранное из двух и более меток: первая появилась, была перебита, цена сделала второй экстремум. Около 21% на 1H и 18% на 5m — и это не зависит от глубины пивота.")
 drawLvl = input.bool(true,  "Уровень, который держит тренд", group=gB)
 drawMSB = input.bool(true,  "Отметка слома", group=gB)
+stOn   = input.bool(true, "Опора и порог линией", group=gB, tooltip="Сплошная — опора (колено). Пунктир — порог смерти, опора ∓ имп × глубина слома. Разрыв обеих = ПЕРЕХОД.")
+stFill = input.bool(true, "Заливать запас", group=gB, tooltip="Между серединой тела и порогом. Чем тоньше полоса, тем меньше осталось до смерти тренда.")
 winBars = input.int(700,   "Рисовать за последние N баров", minval=100, group=gB)
 
 gC = "③ Цвета"
@@ -330,7 +333,13 @@ f_step(L, _pvH, _pvL, _hiPx, _loPx) =>
         // пишется вторая смерть уже мёртвого тренда.
         if not L.inTrans and L.tr == 1
             if l1 == "HL"
-                L.lvl := p1
+                // храповик: опора восходящего тренда только поднимается.
+                // Провизорный уровень после рывка — не опора, его первое
+                // же настоящее колено вытесняет без условия.
+                if not ratchet or na(L.lvl) or L.lvlProv
+                    L.lvl := p1
+                else if p1 > L.lvl
+                    L.lvl := p1
                 L.lvlProv := false
             if na(L.lvl)
                 j = n - 1
@@ -341,7 +350,11 @@ f_step(L, _pvH, _pvL, _hiPx, _loPx) =>
                     j -= 1
         if not L.inTrans and L.tr == -1
             if l1 == "LH"
-                L.lvl := p1
+                // зеркально: опора нисходящего только опускается
+                if not ratchet or na(L.lvl) or L.lvlProv
+                    L.lvl := p1
+                else if p1 < L.lvl
+                    L.lvl := p1
                 L.lvlProv := false
             if na(L.lvl)
                 j = n - 1
@@ -460,6 +473,31 @@ if barstate.isconfirmed
 plotshape(showRaw and not na(pvH) ? pvH : na, title="сырой верх", style=shape.triangledown, location=location.absolute, color=color.new(cDn, 35), size=size.tiny, offset=-LB)
 plotshape(showRaw and not na(pvL) ? pvL : na, title="сырой низ",  style=shape.triangleup,   location=location.absolute, color=color.new(cUp, 35), size=size.tiny, offset=-LB)
 
+// ══════════════ ОПОРА И ПОРОГ ЛИНИЕЙ ══════════════
+// Взято у супертренда: там линия, за которую держится тренд, идёт через
+// всю историю и меняет цвет на сломе. У нас таких линий ДВЕ, и это не
+// одно и то же:
+//   ОПОРА  — колено HL (вверх) или LH (вниз). Структурная точка.
+//   ПОРОГ  — опора ∓ имп × глубина слома. Вот ЭТО прямой аналог
+//            супертрендовой линии: тренд умирает, когда тело закрылось
+//            за порогом, а не за опорой.
+// Разрыв в линиях — это ПЕРЕХОД. У супертренда разрывов нет, он всегда
+// в тренде; у нас пауза между трендами существует и должна быть видна.
+
+stAlive = stOn and not na(L.lvl) and L.tr != 0 and not L.inTrans
+stSup   = stAlive ? L.lvl : na
+stThr   = stAlive and L.imp > 0 ? (L.tr == 1 ? L.lvl - L.imp * fibD : L.lvl + L.imp * fibD) : na
+
+supUp = plot(L.tr ==  1 ? stSup : na, "Опора восходящего",  color=color.new(cUp, 10), style=plot.style_linebr, linewidth=2)
+supDn = plot(L.tr == -1 ? stSup : na, "Опора нисходящего",  color=color.new(cDn, 10), style=plot.style_linebr, linewidth=2)
+thrUp = plot(L.tr ==  1 ? stThr : na, "Порог восходящего",  color=color.new(cUp, 40), style=plot.style_circles, linewidth=1)
+thrDn = plot(L.tr == -1 ? stThr : na, "Порог нисходящего",  color=color.new(cDn, 40), style=plot.style_circles, linewidth=1)
+midBd = plot(stFill and stAlive ? (open + close) / 2 : na, "Середина тела", display=display.none)
+
+fill(midBd, thrUp, title="Запас восходящего", color=color.new(cUp, 88), fillgaps=false)
+fill(midBd, thrDn, title="Запас нисходящего", color=color.new(cDn, 88), fillgaps=false)
+
+
 // ══════════════ ТРИГГЕРНАЯ СВЕЧА ══════════════
 // Форма свечи в долях диапазона: тело, верхняя тень, нижняя тень.
 // Совпала с одним из 40 шаблонов при допуске — свеча триггерная.
@@ -563,8 +601,6 @@ f_drawZZ(L2, _w) =>
 
 f_drawLvl(L2) =>
     if drawLvl and not na(L2.lvl) and L2.tr != 0 and not L2.inTrans
-        x0 = na(L2.trFrom) ? bar_index - 50 : L2.trFrom
-        array.push(LNS, line.new(x0, L2.lvl, bar_index + 8, L2.lvl, color=color.new(f_col(L2.tr), 25), width=2, style=line.style_dashed))
         array.push(LBS, label.new(bar_index + 8, L2.lvl, (L2.lvlProv ? "провиз " : L2.tr == 1 ? "HL " : "LH ") + str.tostring(L2.lvl, format.mintick), style=label.style_label_left, color=color.new(f_col(L2.tr), 85), textcolor=f_col(L2.tr), size=size.small))
     0
 

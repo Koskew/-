@@ -37,9 +37,12 @@ def pivots(rows):
 
 
 class Core:
-    def __init__(self, rows, fib=0.33, jump=0.5, prov=True, gateLvl=True):
+    def __init__(self, rows, fib=0.33, jump=0.5, prov=True, gateLvl=True, ratchet=True):
         self.rows, self.at = rows, pivots(rows)
         self.fib, self.jump, self.prov, self.gateLvl = fib, jump, prov, gateLvl
+        # храповик опоры — как в metki_33.pine. Замеры ДО его появления
+        # считались с ratchet=False, для их воспроизведения передать False.
+        self.ratchet = ratchet
         self.KP = []; self.KH = []; self.KL = []; self.KN = []
         self.KM = []; self.KT = []; self.KX = []; self.KB = []
         self.tr = 0; self.lvl = None; self.imp = 0.0; self.trFrom = None
@@ -166,11 +169,17 @@ class Core:
             # 5. уровень — каждый бар, но не в ПЕРЕХОДЕ
             gate = (not self.inTrans) if self.gateLvl else True
             if gate and self.tr == 1:
-                if l1 == "HL": self.lvl = p1; self.lvlProv = False
+                if l1 == "HL":
+                    if not self.ratchet or self.lvl is None or self.lvlProv or p1 > self.lvl:
+                        self.lvl = p1
+                    self.lvlProv = False
                 if self.lvl is None:
                     self.lvl = next((self.KP[j] for j in range(n-1, -1, -1) if self.KL[j] == "HL"), None)
             elif gate and self.tr == -1:
-                if l1 == "LH": self.lvl = p1; self.lvlProv = False
+                if l1 == "LH":
+                    if not self.ratchet or self.lvl is None or self.lvlProv or p1 < self.lvl:
+                        self.lvl = p1
+                    self.lvlProv = False
                 if self.lvl is None:
                     self.lvl = next((self.KP[j] for j in range(n-1, -1, -1) if self.KL[j] == "LH"), None)
             # 6. тренд и флаг ПЕРЕХОДА у колена — один раз, на баре появления
