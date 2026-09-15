@@ -105,6 +105,27 @@ class Core:
         self._relabel(); self._recount()
         return fresh
 
+    def _diedNow(self, b, bLo, bHi, c):
+        """Правило смерти тренда. Возвращает (умер, цена слома).
+
+        Это прежняя логика шага 1, вынесенная без изменений: тело закрытой
+        свечи ушло за уровень на imp * fib, с защитой от повторного слома
+        по тому же уровню. Замеры альтернативных правил переопределяют
+        только этот метод, не трогая остальной движок.
+        """
+        if self.lvl is None:
+            return False, None
+        need = self.imp * self.fib
+        died = (self.tr == 1 and bLo < self.lvl - need) or \
+               (self.tr == -1 and bHi > self.lvl + need)
+        if died and self.lastD is not None and abs(self.lvl - self.lastD) < 1e-9:
+            died = False
+        return died, (self.lvl if died else None)
+
+    def _onDeath(self, b, c):
+        """Крючок для замеров: вызывается сразу после записи смерти."""
+        pass
+
     def step(self, b):
         rows = self.rows
         o, h, l, c = rows[b][1], rows[b][2], rows[b][3], rows[b][4]
@@ -112,19 +133,16 @@ class Core:
         if self.inTrans: self.trBars += 1
 
         # 1. смерть
-        if self.lvl is not None and self.tr != 0:
-            need = self.imp * self.fib
-            died = (self.tr == 1 and bLo < self.lvl - need) or \
-                   (self.tr == -1 and bHi > self.lvl + need)
-            if died and self.lastD is not None and abs(self.lvl - self.lastD) < 1e-9:
-                died = False
+        if self.tr != 0:
+            died, dPrice = self._diedNow(b, bLo, bHi, c)
             if died:
-                self.log.append((b, 'СМЕРТЬ', f'{"восх" if self.tr==1 else "нисх"} на {self.lvl:.3f}'))
+                self.log.append((b, 'СМЕРТЬ', f'{"восх" if self.tr==1 else "нисх"} на {dPrice:.3f}'))
                 if self.trFrom is not None: self.lives.append(b - self.trFrom)
-                self.pTr, self.pD, self.pDb = self.tr, self.lvl, b
-                self.lastD = self.lvl
+                self.pTr, self.pD, self.pDb = self.tr, dPrice, b
+                self.lastD = dPrice
                 self.inTrans = True; self.marks = 0; self.lvl = None; self.lvlProv = False
                 self._trStart = b
+                self._onDeath(b, c)
 
         # 1б. рывок
         if self.jump > 0 and self.inTrans and self.imp > 0 and self.lastD is not None and len(self.KL) >= 2:
