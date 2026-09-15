@@ -1,0 +1,294 @@
+//@version=5
+// ═══════════════════════════════════════════════════════════════════
+// МЕТКИ 3/3 — только структура
+//
+// Ничего, кроме того, что просили: структурные метки HH / LH / HL / LL
+// по пивотам 3/3 и неперебитые уровни этих же меток с текущего ТФ,
+// 4H и 1D.
+//
+// Здесь НЕТ: счёта (0)-(5), тренда, слома, уровня тренда, запаса,
+// таблицы, триггерных свечей, входов и риска. Всё это живёт в
+// metki_33.pine и gde_my_v6.pine и сюда намеренно не перенесено.
+//
+// Колено — это пивот. Если подряд идут два пивота одной стороны, они
+// сливаются в один: остаётся экстремальный. Метка ставится сравнением
+// колена с предыдущим коленом ТОЙ ЖЕ стороны:
+//   вершина выше прошлой вершины — HH, ниже — LH
+//   низ выше прошлого низа      — HL, ниже — LL
+// ═══════════════════════════════════════════════════════════════════
+indicator("МЕТКИ 3/3", overlay = true, max_lines_count = 500, max_labels_count = 500, max_bars_back = 3000)
+
+gA = "① Метки"
+LB      = input.int(3,    "Глубина пивота (3 = метки 3/3)", minval = 2, maxval = 8, group = gA, tooltip = "Сколько баров слева и справа должно быть ниже вершины. Метка появляется через столько же баров после факта — раньше её знать нельзя.")
+showLab = input.bool(true,  "Подписи меток", group = gA)
+showRaw = input.bool(false, "Сырые пивоты", group = gA, tooltip = "Маленькие треугольники на самих пивотах. Если рядом два одной стороны — они слились в одно колено.")
+showZZ  = input.bool(true,  "Зиг-заг по коленам", group = gA)
+winBars = input.int(700,  "Рисовать за последние N баров", minval = 100, group = gA)
+
+gC = "② Цвета"
+cHi  = input.color(#e0342c, "Вершина", inline = "c1", group = gC)
+cLo  = input.color(#00b050, "Низ",     inline = "c1", group = gC)
+cZZ  = input.color(color.new(color.gray, 35), "Зиг-заг", group = gC)
+zzW  = input.int(1, "Толщина зиг-зага", minval = 1, maxval = 4, group = gC)
+
+MAXK = 200
+
+// ══════════════ КОЛЕНА ══════════════
+var float[] KP = array.new_float()   // цена
+var int[]   KB = array.new_int()     // бар
+var bool[]  KH = array.new_bool()    // вершина или низ
+var string[] KL = array.new_string() // метка
+var int[]   KM = array.new_int()     // сколько сырых меток слилось
+
+// метка колена: сравнение с предыдущим коленом той же стороны
+f_relabel(_dummy) =>
+    array.clear(KL)
+    n = array.size(KP)
+    if n > 0
+        for i = 0 to n - 1
+            hi = array.get(KH, i)
+            float prev = na
+            j = i - 1
+            while j >= 0
+                if array.get(KH, j) == hi
+                    prev := array.get(KP, j)
+                    break
+                j -= 1
+            cur = array.get(KP, i)
+            array.push(KL, na(prev) ? "?" : hi ? (cur > prev ? "HH" : "LH") : (cur > prev ? "HL" : "LL"))
+    n
+
+// серия пивотов одной стороны схлопывается в свой экстремум
+f_push(_price, _bar, _hi) =>
+    n = array.size(KP)
+    bool same = false
+    if n > 0
+        same := array.get(KH, n - 1) == _hi
+    if same
+        old = array.get(KP, n - 1)
+        bool better = _hi ? _price > old : _price < old
+        array.set(KM, n - 1, array.get(KM, n - 1) + 1)
+        if better
+            array.set(KP, n - 1, _price)
+            array.set(KB, n - 1, _bar)
+    else
+        array.push(KP, _price)
+        array.push(KB, _bar)
+        array.push(KH, _hi)
+        array.push(KM, 1)
+        if array.size(KP) > MAXK
+            array.shift(KP)
+            array.shift(KB)
+            array.shift(KH)
+            array.shift(KM)
+    d = f_relabel(0)
+    0
+
+pvH = ta.pivothigh(high, LB, LB)
+pvL = ta.pivotlow (low,  LB, LB)
+
+if barstate.isconfirmed
+    if not na(pvH)
+        q1 = f_push(high[LB], bar_index - LB, true)
+    if not na(pvL)
+        q2 = f_push(low[LB],  bar_index - LB, false)
+
+plotshape(showRaw and not na(pvH) ? pvH : na, title = "сырая вершина", style = shape.triangledown, location = location.absolute, color = color.new(cHi, 35), size = size.tiny, offset = -LB)
+plotshape(showRaw and not na(pvL) ? pvL : na, title = "сырой низ",     style = shape.triangleup,   location = location.absolute, color = color.new(cLo, 35), size = size.tiny, offset = -LB)
+
+// ══════════════ ОТРИСОВКА МЕТОК ══════════════
+var line[]  LNS = array.new<line>()
+var label[] LBS = array.new<label>()
+
+if barstate.islast
+    while array.size(LNS) > 0
+        line.delete(array.pop(LNS))
+    while array.size(LBS) > 0
+        label.delete(array.pop(LBS))
+    n = array.size(KP)
+    if n >= 2
+        for i = 1 to n - 1
+            x1 = array.get(KB, i - 1)
+            x2 = array.get(KB, i)
+            if last_bar_index - x1 <= winBars
+                if showZZ
+                    array.push(LNS, line.new(x1, array.get(KP, i - 1), x2, array.get(KP, i), color = cZZ, width = zzW))
+                if showLab
+                    lb = array.get(KL, i)
+                    pr = array.get(KP, i)
+                    hi = array.get(KH, i)
+                    mc = array.get(KM, i)
+                    array.push(LBS, label.new(x2, pr, lb, style = hi ? label.style_label_down : label.style_label_up, color = color.new(color.black, 100), textcolor = hi ? cHi : cLo, size = size.small, tooltip = lb + "  " + str.tostring(pr, format.mintick) + "\n" + (hi ? "вершина" : "низ") + (mc >= 2 ? "\nслилось сырых меток: " + str.tostring(mc) : "")))
+
+// ══════════════ УРОВНИ HH/LL/LH/HL — текущий ТФ, 4H, 1D ══════════════
+// Уровень существует, пока не пробит: как только цена его прошла — он
+// умирает и не рисуется. Живых уровней бывает около сотни, поэтому
+// рисуются только N ближайших к цене с каждой стороны на каждом ТФ.
+// HH и LL — пунктир, LH и HL — точки. Толщина растёт с таймфреймом.
+gL = "③ Уровни HH/LL/LH/HL"
+lvOn    = input.bool(true, "Показывать уровни", group = gL)
+lv_tf1  = input.bool(true, "текущий ТФ", inline = "lv", group = gL)
+lv_tf4  = input.bool(true, "4H",         inline = "lv", group = gL)
+lv_tfd  = input.bool(true, "1D",         inline = "lv", group = gL)
+lvLH    = input.bool(true, "Штрихи для LH и HL", group = gL, tooltip = "Неперебитые LH сверху и HL снизу. HH и LL — пунктир, LH и HL — точки.")
+lvLB    = input.int(3, "Глубина пивота уровней", minval = 1, maxval = 8, group = gL, tooltip = "3 — как метки на графике. Поставьте 2, чтобы вернуть глубину Тренажёра.")
+lv_n    = input.int(3, "Ближайших к цене с каждой стороны", minval = 1, maxval = 10, group = gL)
+lvTransp= input.int(40, "Прозрачность", minval = 0, maxval = 90, group = gL)
+cLvH    = input.color(color.green, "верх / низ", inline = "lc", group = gL)
+cLvL    = input.color(color.red,   "",           inline = "lc", group = gL)
+
+lph = ta.pivothigh(high, lvLB, lvLB)
+lpl = ta.pivotlow (low,  lvLB, lvLB)
+lphv = high[lvLB]
+lplv = low[lvLB]
+a1 = ta.valuewhen(not na(lph), lphv, 1)
+a2 = ta.valuewhen(not na(lph), lphv, 0)
+hh1 = na(lph) ? na : a1 < a2 ? lph : na
+lh1 = na(lph) ? na : a1 > a2 ? lph : na
+a3 = ta.valuewhen(not na(lpl), lplv, 1)
+a4 = ta.valuewhen(not na(lpl), lplv, 0)
+ll1 = na(lpl) ? na : a3 > a4 ? lpl : na
+hl1 = na(lpl) ? na : a3 < a4 ? lpl : na
+
+ph4  = request.security(syminfo.tickerid, "240", ta.pivothigh(high, lvLB, lvLB), lookahead = barmerge.lookahead_off)
+pl4  = request.security(syminfo.tickerid, "240", ta.pivotlow (low,  lvLB, lvLB), lookahead = barmerge.lookahead_off)
+ph4v = request.security(syminfo.tickerid, "240", high[lvLB], lookahead = barmerge.lookahead_off)
+pl4v = request.security(syminfo.tickerid, "240", low[lvLB],  lookahead = barmerge.lookahead_off)
+b1 = ta.valuewhen(not na(ph4), ph4v, 1)
+b2 = ta.valuewhen(not na(ph4), ph4v, 0)
+hh4 = na(ph4) ? na : b1 < b2 ? ph4 : na
+lh4 = na(ph4) ? na : b1 > b2 ? ph4 : na
+b3 = ta.valuewhen(not na(pl4), pl4v, 1)
+b4 = ta.valuewhen(not na(pl4), pl4v, 0)
+ll4 = na(pl4) ? na : b3 > b4 ? pl4 : na
+hl4 = na(pl4) ? na : b3 < b4 ? pl4 : na
+
+phd  = request.security(syminfo.tickerid, "D", ta.pivothigh(high, lvLB, lvLB), lookahead = barmerge.lookahead_off)
+pld  = request.security(syminfo.tickerid, "D", ta.pivotlow (low,  lvLB, lvLB), lookahead = barmerge.lookahead_off)
+phdv = request.security(syminfo.tickerid, "D", high[lvLB], lookahead = barmerge.lookahead_off)
+pldv = request.security(syminfo.tickerid, "D", low[lvLB],  lookahead = barmerge.lookahead_off)
+c1 = ta.valuewhen(not na(phd), phdv, 1)
+c2 = ta.valuewhen(not na(phd), phdv, 0)
+hhd = na(phd) ? na : c1 < c2 ? phd : na
+lhd = na(phd) ? na : c1 > c2 ? phd : na
+c3 = ta.valuewhen(not na(pld), pldv, 1)
+c4 = ta.valuewhen(not na(pld), pldv, 0)
+lld = na(pld) ? na : c3 > c4 ? pld : na
+hld = na(pld) ? na : c3 < c4 ? pld : na
+
+var float[] HH1P = array.new_float()
+var int[]   HH1B = array.new_int()
+var float[] LL1P = array.new_float()
+var int[]   LL1B = array.new_int()
+var float[] LH1P = array.new_float()
+var int[]   LH1B = array.new_int()
+var float[] HL1P = array.new_float()
+var int[]   HL1B = array.new_int()
+var float[] HH4P = array.new_float()
+var int[]   HH4B = array.new_int()
+var float[] LL4P = array.new_float()
+var int[]   LL4B = array.new_int()
+var float[] LH4P = array.new_float()
+var int[]   LH4B = array.new_int()
+var float[] HL4P = array.new_float()
+var int[]   HL4B = array.new_int()
+var float[] HHDP = array.new_float()
+var int[]   HHDB = array.new_int()
+var float[] LLDP = array.new_float()
+var int[]   LLDB = array.new_int()
+var float[] LHDP = array.new_float()
+var int[]   LHDB = array.new_int()
+var float[] HLDP = array.new_float()
+var int[]   HLDB = array.new_int()
+
+f_addNow(_p, _b, _v) =>
+    if not na(_v)
+        array.push(_p, _v)
+        array.push(_b, bar_index - lvLB)
+    0
+f_addHTF(_p, _b, _v, _prev) =>
+    if not na(_v) and _v != _prev
+        array.push(_p, _v)
+        array.push(_b, bar_index)
+    0
+
+x1_ = f_addNow(HH1P, HH1B, hh1)
+x2_ = f_addNow(LL1P, LL1B, ll1)
+x3_ = f_addNow(LH1P, LH1B, lh1)
+x4_ = f_addNow(HL1P, HL1B, hl1)
+x5_ = f_addHTF(HH4P, HH4B, hh4, nz(hh4[1]))
+x6_ = f_addHTF(LL4P, LL4B, ll4, nz(ll4[1]))
+x7_ = f_addHTF(LH4P, LH4B, lh4, nz(lh4[1]))
+x8_ = f_addHTF(HL4P, HL4B, hl4, nz(hl4[1]))
+x9_ = f_addHTF(HHDP, HHDB, hhd, nz(hhd[1]))
+xa_ = f_addHTF(LLDP, LLDB, lld, nz(lld[1]))
+xb_ = f_addHTF(LHDP, LHDB, lhd, nz(lhd[1]))
+xc_ = f_addHTF(HLDP, HLDB, hld, nz(hld[1]))
+
+// уровень существует, пока не пробит
+f_purge(_p, _b, _isHi) =>
+    i = 0
+    while i < array.size(_p)
+        if (_isHi and high >= array.get(_p, i)) or (not _isHi and low <= array.get(_p, i))
+            array.remove(_p, i)
+            array.remove(_b, i)
+        else
+            i += 1
+    0
+
+y1_ = f_purge(HH1P, HH1B, true)
+y2_ = f_purge(LL1P, LL1B, false)
+y3_ = f_purge(LH1P, LH1B, true)
+y4_ = f_purge(HL1P, HL1B, false)
+y5_ = f_purge(HH4P, HH4B, true)
+y6_ = f_purge(LL4P, LL4B, false)
+y7_ = f_purge(LH4P, LH4B, true)
+y8_ = f_purge(HL4P, HL4B, false)
+y9_ = f_purge(HHDP, HHDB, true)
+ya_ = f_purge(LLDP, LLDB, false)
+yb_ = f_purge(LHDP, LHDB, true)
+yc_ = f_purge(HLDP, HLDB, false)
+
+var line[] LVL = array.new<line>()
+
+f_nearest(_p, _b, _col, _w, _st) =>
+    if array.size(_p) > 0
+        bool[] used = array.new_bool(array.size(_p), false)
+        for k = 1 to lv_n
+            best = -1
+            float bestd = 1.0e18
+            for i = 0 to array.size(_p) - 1
+                if not array.get(used, i)
+                    d = math.abs(array.get(_p, i) - close)
+                    if d < bestd
+                        bestd := d
+                        best := i
+            if best >= 0
+                array.set(used, best, true)
+                // левый край не дальше буфера истории, иначе в симуляторе
+                // линия просит бар за пределами доступного
+                xl = math.max(array.get(_b, best), bar_index - 2900)
+                array.push(LVL, line.new(xl, array.get(_p, best), bar_index, array.get(_p, best), color = color.new(_col, lvTransp), width = _w, style = _st, extend = extend.right))
+    0
+
+if barstate.islast
+    while array.size(LVL) > 0
+        line.delete(array.pop(LVL))
+    if lvOn and lv_tf1
+        z1 = f_nearest(HH1P, HH1B, cLvH, 1, line.style_dashed)
+        z2 = f_nearest(LL1P, LL1B, cLvL, 1, line.style_dashed)
+        if lvLH
+            z3 = f_nearest(LH1P, LH1B, cLvH, 1, line.style_dotted)
+            z4 = f_nearest(HL1P, HL1B, cLvL, 1, line.style_dotted)
+    if lvOn and lv_tf4
+        z5 = f_nearest(HH4P, HH4B, cLvH, 2, line.style_dashed)
+        z6 = f_nearest(LL4P, LL4B, cLvL, 2, line.style_dashed)
+        if lvLH
+            z7 = f_nearest(LH4P, LH4B, cLvH, 2, line.style_dotted)
+            z8 = f_nearest(HL4P, HL4B, cLvL, 2, line.style_dotted)
+    if lvOn and lv_tfd
+        z9 = f_nearest(HHDP, HHDB, cLvH, 3, line.style_dashed)
+        za = f_nearest(LLDP, LLDB, cLvL, 3, line.style_dashed)
+        if lvLH
+            zb = f_nearest(LHDP, LHDB, cLvH, 3, line.style_dotted)
+            zc = f_nearest(HLDP, HLDB, cLvL, 3, line.style_dotted)
