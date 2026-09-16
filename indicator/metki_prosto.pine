@@ -33,6 +33,8 @@ lvOn   = input.bool(true, "Показывать линии слоёв", group = 
 lvLH   = input.bool(true, "Линии для LH и HL тоже", group = gB)
 lv_n   = input.int(3, "Ближайших к цене с каждой стороны", minval = 1, maxval = 10, group = gB)
 lvTr   = input.int(45, "Прозрачность линий", minval = 0, maxval = 90, group = gB)
+keepBr = input.int(10, "Сколько пробитых линий оставлять", minval = 0, maxval = 40, group = gB, tooltip = "Метка, которая проявилась, не должна пропадать при перебитии. Пробитая линия остаётся, но обрывается на баре, где цена её прошла, и рисуется бледнее. 0 — не показывать пробитые совсем.")
+fillOn = input.bool(true, "Дорисовывать пропущенные колена", group = gB, tooltip = "Слой может не увидеть разворот вовсе: между двумя своими коленами он идёт одной прямой, хотя внутри был отскок. Тогда участок дорисовывается коленами более быстрого слоя и рисуется ШТРИХ-ПУНКТИРОМ, а метка ставится сырая. 5/5 дорисовывается по 3/3, 3/3 — по 2/2. У 2/2 более быстрого слоя нет, он не дорисовывается.")
 
 gD = "③ Уровни 4H и 1D — общие"
 hOn    = input.bool(true, "Показывать", inline = "h", group = gD)
@@ -62,6 +64,7 @@ var bool[]   H5 = array.new_bool()
 var string[] L5 = array.new_string()
 var int[]    M5 = array.new_int()
 var bool[]   X5 = array.new_bool()
+var int[]    D5 = array.new_int()
 
 var float[]  P3 = array.new_float()
 var int[]    B3 = array.new_int()
@@ -69,6 +72,7 @@ var bool[]   H3 = array.new_bool()
 var string[] L3 = array.new_string()
 var int[]    M3 = array.new_int()
 var bool[]   X3 = array.new_bool()
+var int[]    D3 = array.new_int()
 
 var float[]  P2 = array.new_float()
 var int[]    B2 = array.new_int()
@@ -76,6 +80,7 @@ var bool[]   H2 = array.new_bool()
 var string[] L2 = array.new_string()
 var int[]    M2 = array.new_int()
 var bool[]   X2 = array.new_bool()
+var int[]    D2 = array.new_int()
 
 f_relabel(_P, _H, _L) =>
     array.clear(_L)
@@ -94,7 +99,7 @@ f_relabel(_P, _H, _L) =>
             array.push(_L, na(prev) ? "?" : hi ? (cur > prev ? "HH" : "LH") : (cur > prev ? "HL" : "LL"))
     n
 
-f_push(_P, _B, _H, _L, _M, _X, _price, _bar, _hi) =>
+f_push(_P, _B, _H, _L, _M, _X, _D, _price, _bar, _hi) =>
     n = array.size(_P)
     bool same = false
     if n > 0
@@ -108,18 +113,21 @@ f_push(_P, _B, _H, _L, _M, _X, _price, _bar, _hi) =>
             array.set(_B, n - 1, _bar)
             // колено ушло дальше прежнего — прежний пробой не в счёт
             array.set(_X, n - 1, false)
+            array.set(_D, n - 1, na)
     else
         array.push(_P, _price)
         array.push(_B, _bar)
         array.push(_H, _hi)
         array.push(_M, 1)
         array.push(_X, false)
+        array.push(_D, na)
         if array.size(_P) > MAXK
             array.shift(_P)
             array.shift(_B)
             array.shift(_H)
             array.shift(_M)
             array.shift(_X)
+            array.shift(_D)
     d = f_relabel(_P, _H, _L)
     0
 
@@ -132,17 +140,17 @@ pl2 = ta.pivotlow (low,  2, 2)
 
 if barstate.isconfirmed
     if not na(ph5)
-        q1 = f_push(P5, B5, H5, L5, M5, X5, high[5], bar_index - 5, true)
+        q1 = f_push(P5, B5, H5, L5, M5, X5, D5, high[5], bar_index - 5, true)
     if not na(pl5)
-        q2 = f_push(P5, B5, H5, L5, M5, X5, low[5],  bar_index - 5, false)
+        q2 = f_push(P5, B5, H5, L5, M5, X5, D5, low[5],  bar_index - 5, false)
     if not na(ph3)
-        q3 = f_push(P3, B3, H3, L3, M3, X3, high[3], bar_index - 3, true)
+        q3 = f_push(P3, B3, H3, L3, M3, X3, D3, high[3], bar_index - 3, true)
     if not na(pl3)
-        q4 = f_push(P3, B3, H3, L3, M3, X3, low[3],  bar_index - 3, false)
+        q4 = f_push(P3, B3, H3, L3, M3, X3, D3, low[3],  bar_index - 3, false)
     if not na(ph2)
-        q5 = f_push(P2, B2, H2, L2, M2, X2, high[2], bar_index - 2, true)
+        q5 = f_push(P2, B2, H2, L2, M2, X2, D2, high[2], bar_index - 2, true)
     if not na(pl2)
-        q6 = f_push(P2, B2, H2, L2, M2, X2, low[2],  bar_index - 2, false)
+        q6 = f_push(P2, B2, H2, L2, M2, X2, D2, low[2],  bar_index - 2, false)
 
 // ══════════════ ШТРИХ-ЛИНИИ СЛОЯ ══════════════
 // Линии берутся из колен ЭТОГО ЖЕ слоя, поэтому всегда совпадают с его
@@ -154,7 +162,7 @@ var label[] LBS = array.new<label>()
 // Уровень живёт, пока не пробит. Флаг ставится проходом по коленам
 // КАЖДЫЙ бар: ta.highest с переменной длиной внутри цикла в пайне
 // работать не будет, ему нужен ровный вызов на каждом баре.
-f_mark(_P, _B, _H, _X) =>
+f_mark(_P, _B, _H, _X, _D) =>
     n = array.size(_P)
     if n > 0
         for i = 0 to n - 1
@@ -164,57 +172,100 @@ f_mark(_P, _B, _H, _X) =>
                     if array.get(_H, i)
                         if high >= pr
                             array.set(_X, i, true)
+                            array.set(_D, i, bar_index)
                     else
                         if low <= pr
                             array.set(_X, i, true)
+                            array.set(_D, i, bar_index)
     n
 
-// N ближайших к цене неперебитых уровней слоя с каждой стороны
-f_lvlLayer(_P, _B, _H, _L, _X, _cHi, _cLo) =>
+// Линии слоя. Неперебитые тянутся вправо; ПРОБИТАЯ НЕ ИСЧЕЗАЕТ — она
+// обрывается на баре, где цена её прошла, и рисуется бледнее. Метка,
+// которая проявилась, должна остаться видимой.
+f_lvlLayer(_P, _B, _H, _L, _X, _D, _cHi, _cLo) =>
     n = array.size(_P)
     if n > 0
         int upN = 0
         int dnN = 0
+        int brN = 0
         i = n - 1
-        while i >= 0 and (upN < lv_n or dnN < lv_n)
+        while i >= 0
             lb = array.get(_L, i)
             bool isHi = array.get(_H, i)
             bool want = lb == "HH" or lb == "LL" or (lvLH and (lb == "LH" or lb == "HL"))
             if want
                 pr = array.get(_P, i)
-                bool side = isHi
-                bool room = side ? upN < lv_n : dnN < lv_n
-                if room and not array.get(_X, i)
-                    if side
-                        upN += 1
-                    else
-                        dnN += 1
-                    st = lb == "HH" or lb == "LL" ? line.style_dashed : line.style_dotted
-                    xl = math.max(array.get(_B, i), bar_index - 2900)
-                    array.push(LNS, line.new(xl, pr, bar_index, pr, color = color.new(side ? _cHi : _cLo, lvTr), width = 1, style = st, extend = extend.right))
+                st = lb == "HH" or lb == "LL" ? line.style_dashed : line.style_dotted
+                xl = math.max(array.get(_B, i), bar_index - 2900)
+                if array.get(_X, i)
+                    // пробита: культя от метки до бара перебития
+                    if brN < keepBr
+                        xr = array.get(_D, i)
+                        if not na(xr)
+                            brN += 1
+                            array.push(LNS, line.new(xl, pr, math.max(xr, xl + 1), pr, color = color.new(isHi ? _cHi : _cLo, math.min(90, lvTr + 30)), width = 1, style = st))
+                else
+                    bool room = isHi ? upN < lv_n : dnN < lv_n
+                    if room
+                        if isHi
+                            upN += 1
+                        else
+                            dnN += 1
+                        array.push(LNS, line.new(xl, pr, bar_index, pr, color = color.new(isHi ? _cHi : _cLo, lvTr), width = 1, style = st, extend = extend.right))
             i -= 1
     n
 
-f_draw(_P, _B, _H, _L, _M, _cHi, _cLo, _tag, _lab) =>
+// Зиг-заг слоя. Если между двумя своими коленами слой прошёл прямой, а
+// внутри был разворот — участок ДОРИСОВЫВАЕТСЯ коленами более быстрого
+// слоя и рисуется ШТРИХ-ПУНКТИРОМ, метка ставится сырая.
+f_draw(_P, _B, _H, _L, _M, _fP, _fB, _fH, _fL, _hasF, _cHi, _cLo, _tag, _lab) =>
     n = array.size(_P)
     if n >= 2
         for i = 1 to n - 1
             x1 = array.get(_B, i - 1)
             x2 = array.get(_B, i)
             if last_bar_index - x1 <= winBars
+                // сколько колен быстрого слоя попало строго внутрь ноги
+                int f0 = -1
+                int f1 = -1
+                if fillOn and _hasF
+                    fn = array.size(_fB)
+                    if fn > 0
+                        for k = 0 to fn - 1
+                            fb = array.get(_fB, k)
+                            if fb > x1 and fb < x2
+                                if f0 < 0
+                                    f0 := k
+                                f1 := k
+                bool filled = f0 >= 0
                 if showZZ
-                    array.push(LNS, line.new(x1, array.get(_P, i - 1), x2, array.get(_P, i), color = color.new(array.get(_P, i) > array.get(_P, i - 1) ? _cHi : _cLo, 55), width = zzW))
+                    if filled
+                        // штрих-пунктир через дорисованные колена
+                        int px = x1
+                        float pp = array.get(_P, i - 1)
+                        for k = f0 to f1
+                            fx = array.get(_fB, k)
+                            fp = array.get(_fP, k)
+                            array.push(LNS, line.new(px, pp, fx, fp, color = color.new(array.get(_fP, k) > pp ? _cHi : _cLo, 40), width = zzW, style = line.style_dashed))
+                            px := fx
+                            pp := fp
+                        array.push(LNS, line.new(px, pp, x2, array.get(_P, i), color = color.new(array.get(_P, i) > pp ? _cHi : _cLo, 40), width = zzW, style = line.style_dashed))
+                    else
+                        array.push(LNS, line.new(x1, array.get(_P, i - 1), x2, array.get(_P, i), color = color.new(array.get(_P, i) > array.get(_P, i - 1) ? _cHi : _cLo, 55), width = zzW))
                 if _lab
+                    // сырые метки дорисованного участка
+                    if filled
+                        for k = f0 to f1
+                            flb = array.get(_fL, k)
+                            fpr = array.get(_fP, k)
+                            fhi = array.get(_fH, k)
+                            array.push(LBS, label.new(array.get(_fB, k), fpr, flb, style = fhi ? label.style_label_down : label.style_label_up, color = color.new(color.black, 100), textcolor = color.new(fhi ? _cHi : _cLo, 45), size = size.tiny, tooltip = "СЫРАЯ метка — у слоя " + _tag + " колена здесь нет, взято с более быстрого слоя\n" + flb + "  " + str.tostring(fpr, format.mintick)))
                     lb = array.get(_L, i)
                     pr = array.get(_P, i)
                     hi = array.get(_H, i)
                     mc = array.get(_M, i)
                     array.push(LBS, label.new(x2, pr, lb, style = hi ? label.style_label_down : label.style_label_up, color = color.new(color.black, 100), textcolor = hi ? _cHi : _cLo, size = size.small, tooltip = "слой " + _tag + "   " + lb + "  " + str.tostring(pr, format.mintick) + "\n" + (hi ? "вершина" : "низ") + (mc >= 2 ? "\nслилось сырых меток: " + str.tostring(mc) : "")))
     n
-
-m5_ = f_mark(P5, B5, H5, X5)
-m3_ = f_mark(P3, B3, H3, X3)
-m2_ = f_mark(P2, B2, H2, X2)
 
 // ══════════════ УРОВНИ 4H и 1D — ОБЩИЕ ══════════════
 ph4  = request.security(syminfo.tickerid, "240", ta.pivothigh(high, hLB, hLB), lookahead = barmerge.lookahead_off)
@@ -336,15 +387,16 @@ if barstate.islast
             zb = f_nearest(LHDP, LHDB, cHiH, 3, line.style_dotted)
             zc = f_nearest(HLDP, HLDB, cLoH, 3, line.style_dotted)
 
+    // 5/5 дорисовывается по 3/3, 3/3 — по 2/2, у 2/2 быстрее нет
     if on5
         if lvOn
-            w5 = f_lvlLayer(P5, B5, H5, L5, X5, c5H, c5L)
-        d5 = f_draw(P5, B5, H5, L5, M5, c5H, c5L, "5/5", labWho == "5/5" or labWho == "все")
+            w5 = f_lvlLayer(P5, B5, H5, L5, X5, D5, c5H, c5L)
+        d5 = f_draw(P5, B5, H5, L5, M5, P3, B3, H3, L3, true,  c5H, c5L, "5/5", labWho == "5/5" or labWho == "все")
     if on2
         if lvOn
-            w2 = f_lvlLayer(P2, B2, H2, L2, X2, c2H, c2L)
-        d2 = f_draw(P2, B2, H2, L2, M2, c2H, c2L, "2/2", labWho == "2/2" or labWho == "все")
+            w2 = f_lvlLayer(P2, B2, H2, L2, X2, D2, c2H, c2L)
+        d2 = f_draw(P2, B2, H2, L2, M2, P2, B2, H2, L2, false, c2H, c2L, "2/2", labWho == "2/2" or labWho == "все")
     if on3
         if lvOn
-            w3 = f_lvlLayer(P3, B3, H3, L3, X3, c3H, c3L)
-        d3 = f_draw(P3, B3, H3, L3, M3, c3H, c3L, "3/3", labWho == "3/3" or labWho == "все")
+            w3 = f_lvlLayer(P3, B3, H3, L3, X3, D3, c3H, c3L)
+        d3 = f_draw(P3, B3, H3, L3, M3, P2, B2, H2, L2, true,  c3H, c3L, "3/3", labWho == "3/3" or labWho == "все")
