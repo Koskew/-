@@ -3,20 +3,32 @@
 // МЕТКИ — только структура. Три слоя на выбор
 //
 // Метки HH / LH / HL / LL на трёх слоях: 5/5, 3/3, 2/2. Каждый
-// включается отдельно, и у КАЖДОГО свои штрих-линии по своей глубине:
-// неперебитые HH и LL пунктиром, LH и HL точками.
-//
-// Уровни 4H и 1D — ОБЩИЕ, один набор на всех, со своей глубиной пивота.
+// включается отдельно, и у КАЖДОГО свои штрих-линии по своей глубине.
+// Уровни 4H и 1D — общие, один набор на всех.
 //
 // Здесь НЕТ: счёта (0)-(5), тренда, слома, уровня тренда, запаса,
-// таблицы, триггерных свечей, входов и риска. Всё это живёт в
-// metki_33.pine и gde_my_v6.pine и сюда намеренно не перенесено.
+// таблицы, триггерных свечей, входов и риска.
 //
-// Колено — это пивот. Если подряд идут два пивота одной стороны, они
-// сливаются в один: остаётся экстремальный. Метка ставится сравнением
-// колена с предыдущим коленом ТОЙ ЖЕ стороны:
-//   вершина выше прошлой вершины — HH, ниже — LH
-//   низ выше прошлого низа      — HL, ниже — LL
+// ── ДВА ПРАВИЛА, КОТОРЫЕ ЗДЕСЬ ГЛАВНЫЕ ──
+//
+// 1. МЕТКА не пропадает никогда. Подпись HH/LH/HL/LL остаётся на своём
+//    месте, что бы цена дальше ни делала.
+//
+// 2. ЛИНИЯ от метки живёт, пока цена её не коснулась. Коснулась —
+//    линия УДАЛЯЕТСЯ совсем. Механизм взят из Тренажёра v9 один в один:
+//    уровень это СЫРОЙ ПИВОТ со своей ценой, лежит в массиве, при
+//    касании вычёркивается.
+//
+//    Раньше я брал уровень из КОЛЕНА. Колено при слиянии переезжает на
+//    новый экстремум, и я вместе с ценой сбрасывал флаг перебития —
+//    линия оживала. Сырые пивоты не переезжают, поэтому пробитый
+//    уровень мёртв навсегда.
+//
+// ── ДОРИСОВКА ──
+// Слой может не увидеть разворот вовсе: между двумя своими коленами он
+// идёт прямой, хотя внутри был отскок. Такой участок дорисовывается
+// коленами более быстрого слоя, рисуется ШТРИХ-ПУНКТИРОМ, а метка
+// ставится сырая, с точкой спереди: ·LH. 5/5 берёт у 3/3, 3/3 у 2/2.
 // ═══════════════════════════════════════════════════════════════════
 indicator("МЕТКИ", overlay = true, max_lines_count = 500, max_labels_count = 500, max_bars_back = 3000)
 
@@ -29,19 +41,18 @@ showZZ = input.bool(true,  "Зиг-заг по коленам", group = gA)
 winBars= input.int(400, "Рисовать за последние N баров", minval = 100, maxval = 2000, group = gA, tooltip = "Чем больше окно и чем больше слоёв включено, тем ближе к пределу TradingView в 500 линий. Если разметка обрывается — уменьшите окно или выключите лишний слой.")
 
 gB = "② Штрих-линии слоёв"
-lvOn   = input.bool(true, "Показывать линии слоёв", group = gB, tooltip = "У каждого включённого слоя свои линии, по его собственной глубине. Уровень живёт, пока не пробит. HH и LL — пунктир, LH и HL — точки.")
-lvLH   = input.bool(true, "Линии для LH и HL тоже", group = gB)
+lvOn   = input.bool(true, "Показывать линии слоёв", group = gB, tooltip = "У каждого включённого слоя свои линии, по его собственной глубине. Линия живёт, пока цена её не коснулась; коснулась — пропадает совсем. Сама метка при этом остаётся.")
+lvLH   = input.bool(true, "Линии для LH и HL тоже", group = gB, tooltip = "HH и LL — пунктир, LH и HL — точки.")
 lv_n   = input.int(3, "Ближайших к цене с каждой стороны", minval = 1, maxval = 10, group = gB)
 lvTr   = input.int(45, "Прозрачность линий", minval = 0, maxval = 90, group = gB)
-absOn  = input.bool(false, "Показывать поглощённые метки", group = gB, tooltip = "Когда два пивота одной стороны идут подряд, они схлопываются в одно колено. Прежде подпись проигравшего просто исчезала с графика. Теперь она остаётся на своём месте, бледная и мелкая, с точкой на уровне. Метка, которая проявилась, не пропадает.")
-fillLv = input.bool(true, "Линии и у дорисованных меток", group = gB, tooltip = "Сырая метка, взятая с более быстрого слоя, получает свою штрих-пунктирную линию и живёт по тем же правилам: пока цена её не коснулась — тянется вправо, коснулась — линия пропадает. Сама метка остаётся. Флаг касания берётся у того слоя, откуда метка одолжена.")
-fillOn = input.bool(true, "Дорисовывать пропущенные колена", group = gB, tooltip = "Слой может не увидеть разворот вовсе: между двумя своими коленами он идёт одной прямой, хотя внутри был отскок. Тогда участок дорисовывается коленами более быстрого слоя и рисуется ШТРИХ-ПУНКТИРОМ, а метка ставится сырая. 5/5 дорисовывается по 3/3, 3/3 — по 2/2. У 2/2 более быстрого слоя нет, он не дорисовывается.")
+fillOn = input.bool(true, "Дорисовывать пропущенные колена", group = gB, tooltip = "Слой может не увидеть разворот вовсе. Тогда участок дорисовывается коленами более быстрого слоя, рисуется ШТРИХ-ПУНКТИРОМ, метка ставится сырая с точкой спереди. 5/5 берёт у 3/3, 3/3 у 2/2. У 2/2 более быстрого слоя нет.")
+fillLv = input.bool(true, "Линии и у дорисованных меток", group = gB, tooltip = "Сырая метка получает свою линию по тем же правилам: пока цена её не коснулась — тянется вправо, коснулась — пропадает. Живость проверяется по слою, откуда метка одолжена.")
 
 gD = "③ Уровни 4H и 1D — общие"
 hOn    = input.bool(true, "Показывать", inline = "h", group = gD)
 h_tf4  = input.bool(true, "4H",         inline = "h", group = gD)
 h_tfd  = input.bool(true, "1D",         inline = "h", group = gD)
-hLB    = input.int(3, "Глубина пивота старших ТФ", minval = 1, maxval = 8, group = gD, tooltip = "Одна на оба старших ТФ. 3 — как слой 3/3. Поставьте 2, чтобы вернуть глубину Тренажёра.")
+hLB    = input.int(3, "Глубина пивота старших ТФ", minval = 1, maxval = 8, group = gD)
 cHiH   = input.color(color.green, "верх / низ", inline = "hc", group = gD)
 cLoH   = input.color(color.red,   "",           inline = "hc", group = gD)
 
@@ -56,44 +67,25 @@ zzW = input.int(1, "Толщина зиг-зага", minval = 1, maxval = 4, gro
 
 MAXK = 100
 
-// ══════════════ КОЛЕНА ══════════════
-// Массивы передаются в функции по ссылке, поэтому один и тот же код
-// обслуживает все три слоя — копий логики нет.
+// ══════════════ КОЛЕНА (для зиг-зага и подписей) ══════════════
+// Колено — пивот; подряд идущие одной стороны схлопываются в экстремум.
 var float[]  P5 = array.new_float()
 var int[]    B5 = array.new_int()
 var bool[]   H5 = array.new_bool()
 var string[] L5 = array.new_string()
 var int[]    M5 = array.new_int()
-var bool[]   X5 = array.new_bool()
-var int[]    D5 = array.new_int()
-var float[]  G5 = array.new_float()   // поглощённые метки: цена
-var int[]    Y5 = array.new_int()     // их бар
-var bool[]   Z5 = array.new_bool()    // вершина или низ
-var string[] W5 = array.new_string()  // подпись на момент поглощения
 
 var float[]  P3 = array.new_float()
 var int[]    B3 = array.new_int()
 var bool[]   H3 = array.new_bool()
 var string[] L3 = array.new_string()
 var int[]    M3 = array.new_int()
-var bool[]   X3 = array.new_bool()
-var int[]    D3 = array.new_int()
-var float[]  G3 = array.new_float()   // поглощённые метки: цена
-var int[]    Y3 = array.new_int()     // их бар
-var bool[]   Z3 = array.new_bool()    // вершина или низ
-var string[] W3 = array.new_string()  // подпись на момент поглощения
 
 var float[]  P2 = array.new_float()
 var int[]    B2 = array.new_int()
 var bool[]   H2 = array.new_bool()
 var string[] L2 = array.new_string()
 var int[]    M2 = array.new_int()
-var bool[]   X2 = array.new_bool()
-var int[]    D2 = array.new_int()
-var float[]  G2 = array.new_float()   // поглощённые метки: цена
-var int[]    Y2 = array.new_int()     // их бар
-var bool[]   Z2 = array.new_bool()    // вершина или низ
-var string[] W2 = array.new_string()  // подпись на момент поглощения
 
 f_relabel(_P, _H, _L) =>
     array.clear(_L)
@@ -112,67 +104,28 @@ f_relabel(_P, _H, _L) =>
             array.push(_L, na(prev) ? "?" : hi ? (cur > prev ? "HH" : "LH") : (cur > prev ? "HL" : "LL"))
     n
 
-// Метка, которая проявилась, НЕ ДОЛЖНА ПРОПАДАТЬ. Когда два пивота
-// одной стороны идут подряд, они схлопываются в одно колено — и подпись
-// проигравшего раньше просто исчезала с графика. Теперь она уходит в
-// отдельный список поглощённых и рисуется бледнее на своём месте.
-f_absorb(_G, _Y, _Z, _W, _P, _H, _price, _bar, _hi) =>
-    // подпись поглощённой считаем от ПРЕДЫДУЩЕГО колена той же стороны,
-    // не от того, в которое она влилась
-    n = array.size(_P)
-    float prev = na
-    j = n - 2
-    while j >= 0
-        if array.get(_H, j) == _hi
-            prev := array.get(_P, j)
-            break
-        j -= 1
-    array.push(_G, _price)
-    array.push(_Y, _bar)
-    array.push(_Z, _hi)
-    array.push(_W, na(prev) ? "?" : _hi ? (_price > prev ? "HH" : "LH") : (_price > prev ? "HL" : "LL"))
-    if array.size(_G) > MAXK
-        array.shift(_G)
-        array.shift(_Y)
-        array.shift(_Z)
-        array.shift(_W)
-    0
-
-f_push(_P, _B, _H, _L, _M, _X, _D, _G, _Y, _Z, _W, _price, _bar, _hi) =>
+f_push(_P, _B, _H, _L, _M, _price, _bar, _hi) =>
     n = array.size(_P)
     bool same = false
     if n > 0
         same := array.get(_H, n - 1) == _hi
     if same
         old = array.get(_P, n - 1)
-        oldB = array.get(_B, n - 1)
         bool better = _hi ? _price > old : _price < old
         array.set(_M, n - 1, array.get(_M, n - 1) + 1)
         if better
-            // проигрывает прежний экстремум — его и сохраняем
-            a1 = f_absorb(_G, _Y, _Z, _W, _P, _H, old, oldB, _hi)
             array.set(_P, n - 1, _price)
             array.set(_B, n - 1, _bar)
-            // колено ушло дальше прежнего — прежний пробой не в счёт
-            array.set(_X, n - 1, false)
-            array.set(_D, n - 1, na)
-        else
-            // проигрывает новый пивот — сохраняем его
-            a2 = f_absorb(_G, _Y, _Z, _W, _P, _H, _price, _bar, _hi)
     else
         array.push(_P, _price)
         array.push(_B, _bar)
         array.push(_H, _hi)
         array.push(_M, 1)
-        array.push(_X, false)
-        array.push(_D, na)
         if array.size(_P) > MAXK
             array.shift(_P)
             array.shift(_B)
             array.shift(_H)
             array.shift(_M)
-            array.shift(_X)
-            array.shift(_D)
     d = f_relabel(_P, _H, _L)
     0
 
@@ -185,96 +138,151 @@ pl2 = ta.pivotlow (low,  2, 2)
 
 if barstate.isconfirmed
     if not na(ph5)
-        q1 = f_push(P5, B5, H5, L5, M5, X5, D5, G5, Y5, Z5, W5, high[5], bar_index - 5, true)
+        q1 = f_push(P5, B5, H5, L5, M5, high[5], bar_index - 5, true)
     if not na(pl5)
-        q2 = f_push(P5, B5, H5, L5, M5, X5, D5, G5, Y5, Z5, W5, low[5],  bar_index - 5, false)
+        q2 = f_push(P5, B5, H5, L5, M5, low[5],  bar_index - 5, false)
     if not na(ph3)
-        q3 = f_push(P3, B3, H3, L3, M3, X3, D3, G3, Y3, Z3, W3, high[3], bar_index - 3, true)
+        q3 = f_push(P3, B3, H3, L3, M3, high[3], bar_index - 3, true)
     if not na(pl3)
-        q4 = f_push(P3, B3, H3, L3, M3, X3, D3, G3, Y3, Z3, W3, low[3],  bar_index - 3, false)
+        q4 = f_push(P3, B3, H3, L3, M3, low[3],  bar_index - 3, false)
     if not na(ph2)
-        q5 = f_push(P2, B2, H2, L2, M2, X2, D2, G2, Y2, Z2, W2, high[2], bar_index - 2, true)
+        q5 = f_push(P2, B2, H2, L2, M2, high[2], bar_index - 2, true)
     if not na(pl2)
-        q6 = f_push(P2, B2, H2, L2, M2, X2, D2, G2, Y2, Z2, W2, low[2],  bar_index - 2, false)
+        q6 = f_push(P2, B2, H2, L2, M2, low[2],  bar_index - 2, false)
 
-// ══════════════ ШТРИХ-ЛИНИИ СЛОЯ ══════════════
-// Линии берутся из колен ЭТОГО ЖЕ слоя, поэтому всегда совпадают с его
-// метками. Уровень живёт, пока не пробит: вершина умирает, когда цена
-// её достала сверху, низ — когда снизу.
-var line[] LNS = array.new<line>()
+// ══════════════ ЖИВЫЕ УРОВНИ СЛОЯ ══════════════
+// Механизм Тренажёра v9: уровень — СЫРОЙ пивот, лежит в списке, при
+// касании ценой ВЫЧЁРКИВАЕТСЯ из списка. Пивоты не переезжают, поэтому
+// пробитый уровень мёртв навсегда.
+var float[]  V5P = array.new_float()
+var int[]    V5B = array.new_int()
+var bool[]   V5H = array.new_bool()
+var string[] V5L = array.new_string()
+
+var float[]  V3P = array.new_float()
+var int[]    V3B = array.new_int()
+var bool[]   V3H = array.new_bool()
+var string[] V3L = array.new_string()
+
+var float[]  V2P = array.new_float()
+var int[]    V2B = array.new_int()
+var bool[]   V2H = array.new_bool()
+var string[] V2L = array.new_string()
+
+f_lvPush(_p, _b, _h, _l, _v, _off, _isHi, _lab) =>
+    if not na(_v)
+        array.push(_p, _v)
+        array.push(_b, bar_index - _off)
+        array.push(_h, _isHi)
+        array.push(_l, _lab)
+    0
+
+// уровень существует, пока не пробит. Коснулась цена — удаляем совсем
+f_purgeL(_p, _b, _h, _l) =>
+    i = 0
+    while i < array.size(_p)
+        pr = array.get(_p, i)
+        bool dead = array.get(_h, i) ? high >= pr : low <= pr
+        if dead
+            array.remove(_p, i)
+            array.remove(_b, i)
+            array.remove(_h, i)
+            array.remove(_l, i)
+        else
+            i += 1
+    0
+
+// жив ли уровень с такой ценой — для линий у сырых меток
+f_alive(_p, _v) =>
+    bool r = false
+    n = array.size(_p)
+    if n > 0
+        for i = 0 to n - 1
+            if math.abs(array.get(_p, i) - _v) <= syminfo.mintick
+                r := true
+                break
+    r
+
+// подпись сырого пивота: сравнение с предыдущим пивотом той же стороны
+a51 = ta.valuewhen(not na(ph5), high[5], 1)
+a52 = ta.valuewhen(not na(ph5), high[5], 0)
+hh5 = na(ph5) ? na : a51 < a52 ? ph5 : na
+lh5 = na(ph5) ? na : a51 > a52 ? ph5 : na
+a53 = ta.valuewhen(not na(pl5), low[5], 1)
+a54 = ta.valuewhen(not na(pl5), low[5], 0)
+ll5 = na(pl5) ? na : a53 > a54 ? pl5 : na
+hl5 = na(pl5) ? na : a53 < a54 ? pl5 : na
+
+a31 = ta.valuewhen(not na(ph3), high[3], 1)
+a32 = ta.valuewhen(not na(ph3), high[3], 0)
+hh3 = na(ph3) ? na : a31 < a32 ? ph3 : na
+lh3 = na(ph3) ? na : a31 > a32 ? ph3 : na
+a33 = ta.valuewhen(not na(pl3), low[3], 1)
+a34 = ta.valuewhen(not na(pl3), low[3], 0)
+ll3 = na(pl3) ? na : a33 > a34 ? pl3 : na
+hl3 = na(pl3) ? na : a33 < a34 ? pl3 : na
+
+a21 = ta.valuewhen(not na(ph2), high[2], 1)
+a22 = ta.valuewhen(not na(ph2), high[2], 0)
+hh2 = na(ph2) ? na : a21 < a22 ? ph2 : na
+lh2 = na(ph2) ? na : a21 > a22 ? ph2 : na
+a23 = ta.valuewhen(not na(pl2), low[2], 1)
+a24 = ta.valuewhen(not na(pl2), low[2], 0)
+ll2 = na(pl2) ? na : a23 > a24 ? pl2 : na
+hl2 = na(pl2) ? na : a23 < a24 ? pl2 : na
+
+u01 = f_lvPush(V5P, V5B, V5H, V5L, hh5, 5, true,  "HH")
+u02 = f_lvPush(V5P, V5B, V5H, V5L, lh5, 5, true,  "LH")
+u03 = f_lvPush(V5P, V5B, V5H, V5L, hl5, 5, false, "HL")
+u04 = f_lvPush(V5P, V5B, V5H, V5L, ll5, 5, false, "LL")
+u05 = f_lvPush(V3P, V3B, V3H, V3L, hh3, 3, true,  "HH")
+u06 = f_lvPush(V3P, V3B, V3H, V3L, lh3, 3, true,  "LH")
+u07 = f_lvPush(V3P, V3B, V3H, V3L, hl3, 3, false, "HL")
+u08 = f_lvPush(V3P, V3B, V3H, V3L, ll3, 3, false, "LL")
+u09 = f_lvPush(V2P, V2B, V2H, V2L, hh2, 2, true,  "HH")
+u10 = f_lvPush(V2P, V2B, V2H, V2L, lh2, 2, true,  "LH")
+u11 = f_lvPush(V2P, V2B, V2H, V2L, hl2, 2, false, "HL")
+u12 = f_lvPush(V2P, V2B, V2H, V2L, ll2, 2, false, "LL")
+
+v01 = f_purgeL(V5P, V5B, V5H, V5L)
+v02 = f_purgeL(V3P, V3B, V3H, V3L)
+v03 = f_purgeL(V2P, V2B, V2H, V2L)
+
+// ══════════════ ОТРИСОВКА ══════════════
+var line[]  LNS = array.new<line>()
 var label[] LBS = array.new<label>()
 
-// Уровень живёт, пока не пробит. Флаг ставится проходом по коленам
-// КАЖДЫЙ бар: ta.highest с переменной длиной внутри цикла в пайне
-// работать не будет, ему нужен ровный вызов на каждом баре.
-f_mark(_P, _B, _H, _X, _D) =>
-    n = array.size(_P)
+f_lvlLayer(_p, _b, _h, _l, _cHi, _cLo) =>
+    n = array.size(_p)
     if n > 0
-        for i = 0 to n - 1
-            if not array.get(_X, i)
-                if bar_index > array.get(_B, i)
-                    pr = array.get(_P, i)
-                    if array.get(_H, i)
-                        if high >= pr
-                            array.set(_X, i, true)
-                            array.set(_D, i, bar_index)
-                    else
-                        if low <= pr
-                            array.set(_X, i, true)
-                            array.set(_D, i, bar_index)
-    n
-
-// Линии слоя. Неперебитые тянутся вправо; ПРОБИТАЯ НЕ ИСЧЕЗАЕТ — она
-// обрывается на баре, где цена её прошла, и рисуется бледнее. Метка,
-// которая проявилась, должна остаться видимой.
-f_lvlLayer(_P, _B, _H, _L, _X, _D, _cHi, _cLo) =>
-    n = array.size(_P)
-    if n > 0
-        int upN = 0
-        int dnN = 0
-        i = n - 1
-        while i >= 0
-            lb = array.get(_L, i)
-            bool isHi = array.get(_H, i)
-            bool want = lb == "HH" or lb == "LL" or (lvLH and (lb == "LH" or lb == "HL"))
-            if want
-                pr = array.get(_P, i)
-                // Линия живёт, пока её не коснулась цена. Коснулась —
-                // линия пропадает совсем. САМА МЕТКА при этом остаётся:
-                // подпись HH/LH/HL/LL с графика не исчезает никогда.
-                if not array.get(_X, i)
-                    bool room = isHi ? upN < lv_n : dnN < lv_n
-                    if room
-                        if isHi
-                            upN += 1
-                        else
-                            dnN += 1
-                        st = lb == "HH" or lb == "LL" ? line.style_dashed : line.style_dotted
-                        xl = math.max(array.get(_B, i), bar_index - 2900)
-                        array.push(LNS, line.new(xl, pr, bar_index, pr, color = color.new(isHi ? _cHi : _cLo, lvTr), width = 1, style = st, extend = extend.right))
-            i -= 1
-    n
-
-// Поглощённые метки: остаются на своём месте, бледные и мелкие, с
-// короткой точкой на своём уровне. Так видно, что метка была.
-f_drawAbs(_G, _Y, _Z, _W, _cHi, _cLo, _tag) =>
-    n = array.size(_G)
-    if n > 0
-        for i = 0 to n - 1
-            yb = array.get(_Y, i)
-            if last_bar_index - yb <= winBars
-                pr = array.get(_G, i)
-                hi = array.get(_Z, i)
-                lb = array.get(_W, i)
-                array.push(LNS, line.new(yb, pr, yb + 4, pr, color = color.new(hi ? _cHi : _cLo, 55), width = 1, style = line.style_dotted))
-                array.push(LBS, label.new(yb, pr, lb, style = hi ? label.style_label_down : label.style_label_up, color = color.new(color.black, 100), textcolor = color.new(hi ? _cHi : _cLo, 55), size = size.tiny, tooltip = "ПОГЛОЩЁННАЯ метка слоя " + _tag + "\n" + lb + "  " + str.tostring(pr, format.mintick) + "\nэта метка появилась, потом цена ушла дальше и колено переехало на новый экстремум. Сама метка никуда не делась."))
+        bool[] used = array.new_bool(n, false)
+        for side = 0 to 1
+            bool isHi = side == 0
+            for k = 1 to lv_n
+                int best = -1
+                float bestd = 1.0e18
+                for i = 0 to n - 1
+                    if not array.get(used, i)
+                        if array.get(_h, i) == isHi
+                            lb = array.get(_l, i)
+                            bool want = lb == "HH" or lb == "LL" or (lvLH and (lb == "LH" or lb == "HL"))
+                            if want
+                                d = math.abs(array.get(_p, i) - close)
+                                if d < bestd
+                                    bestd := d
+                                    best := i
+                if best >= 0
+                    array.set(used, best, true)
+                    lb2 = array.get(_l, best)
+                    st = lb2 == "HH" or lb2 == "LL" ? line.style_dashed : line.style_dotted
+                    xl = math.max(array.get(_b, best), bar_index - 2900)
+                    array.push(LNS, line.new(xl, array.get(_p, best), bar_index, array.get(_p, best), color = color.new(isHi ? _cHi : _cLo, lvTr), width = 1, style = st, extend = extend.right))
     n
 
 // Подпуть более быстрого слоя внутри одной ноги.
-// Берём только то, что реально ЧЕРЕДУЕТСЯ и даёт недостающий разворот:
-// цепочка должна начинаться со стороны, противоположной началу ноги, и
-// не заканчиваться той же стороной, что конец ноги — иначе слой
-// подставит тот же самый экстремум второй раз и получится лишняя метка.
+// Берём только то, что реально ЧЕРЕДУЕТСЯ: цепочка начинается со
+// стороны, противоположной началу ноги, и не кончается стороной её
+// конца — иначе слой подставит тот же экстремум второй раз.
 f_sub(_sB, _sH, _x1, _x2, _s1, _s2) =>
     int[] keep = array.new_int()
     n = array.size(_sB)
@@ -286,19 +294,15 @@ f_sub(_sB, _sH, _x1, _x2, _s1, _s2) =>
                 if array.get(_sH, k) == want
                     array.push(keep, k)
                     want := not want
-    // хвост той же стороны, что конец ноги, не нужен
     while array.size(keep) > 0
         last = array.get(keep, array.size(keep) - 1)
         if array.get(_sH, last) == _s2
-            array.pop(keep)
+            dummy = array.pop(keep)
         else
             break
     keep
 
-// Зиг-заг слоя. Если между двумя своими коленами слой прошёл прямой, а
-// внутри был разворот — участок ДОРИСОВЫВАЕТСЯ коленами более быстрого
-// слоя и рисуется ШТРИХ-ПУНКТИРОМ, метка ставится сырая.
-f_draw(_P, _B, _H, _L, _M, _fP, _fB, _fH, _fL, _fX, _fD, _gP, _gB, _gH, _gL, _gX, _gD, _hasF, _cHi, _cLo, _tag, _lab) =>
+f_draw(_P, _B, _H, _L, _M, _fP, _fB, _fH, _fL, _fV, _gP, _gB, _gH, _gL, _gV, _hasF, _cHi, _cLo, _tag, _lab) =>
     n = array.size(_P)
     if n >= 2
         for i = 1 to n - 1
@@ -341,17 +345,11 @@ f_draw(_P, _B, _H, _L, _M, _fP, _fB, _fH, _fL, _fX, _fD, _gP, _gB, _gH, _gL, _gX
                             fpr = second ? array.get(_gP, k) : array.get(_fP, k)
                             fhi = second ? array.get(_gH, k) : array.get(_fH, k)
                             fbx = second ? array.get(_gB, k) : array.get(_fB, k)
-                            // сырая метка видна так же, как своя: тот же
-                            // размер и цвет. Точка спереди говорит, что
-                            // она взята с более быстрого слоя.
                             array.push(LBS, label.new(fbx, fpr, "·" + flb, style = fhi ? label.style_label_down : label.style_label_up, color = color.new(color.black, 100), textcolor = fhi ? _cHi : _cLo, size = size.small, tooltip = "СЫРАЯ метка — у слоя " + _tag + " колена здесь нет, взято с более быстрого слоя\n" + flb + "  " + str.tostring(fpr, format.mintick) + "\nучасток нарисован штрих-пунктиром"))
-                            // своя линия у сырой метки, по тем же правилам:
-                            // цела — тянется вправо, пробита — обрывается на
-                            // баре перебития и остаётся. Флаг перебития берём
-                            // у того слоя, откуда метка одолжена.
+                            // линия сырой метки: только пока она ЖИВА в
+                            // списке уровней того слоя, откуда одолжена
                             if fillLv and lvOn
-                                bool fbr = second ? array.get(_gX, k) : array.get(_fX, k)
-                                if not fbr
+                                if f_alive(second ? _gV : _fV, fpr)
                                     fst = flb == "HH" or flb == "LL" ? line.style_dashed : line.style_dotted
                                     fxl = math.max(fbx, bar_index - 2900)
                                     array.push(LNS, line.new(fxl, fpr, bar_index, fpr, color = color.new(fhi ? _cHi : _cLo, lvTr), width = 1, style = fst, extend = extend.right))
@@ -366,99 +364,83 @@ ph4  = request.security(syminfo.tickerid, "240", ta.pivothigh(high, hLB, hLB), l
 pl4  = request.security(syminfo.tickerid, "240", ta.pivotlow (low,  hLB, hLB), lookahead = barmerge.lookahead_off)
 ph4v = request.security(syminfo.tickerid, "240", high[hLB], lookahead = barmerge.lookahead_off)
 pl4v = request.security(syminfo.tickerid, "240", low[hLB],  lookahead = barmerge.lookahead_off)
-b1 = ta.valuewhen(not na(ph4), ph4v, 1)
-b2 = ta.valuewhen(not na(ph4), ph4v, 0)
-hh4 = na(ph4) ? na : b1 < b2 ? ph4 : na
-lh4 = na(ph4) ? na : b1 > b2 ? ph4 : na
-b3 = ta.valuewhen(not na(pl4), pl4v, 1)
-b4 = ta.valuewhen(not na(pl4), pl4v, 0)
-ll4 = na(pl4) ? na : b3 > b4 ? pl4 : na
-hl4 = na(pl4) ? na : b3 < b4 ? pl4 : na
+b41 = ta.valuewhen(not na(ph4), ph4v, 1)
+b42 = ta.valuewhen(not na(ph4), ph4v, 0)
+hh4 = na(ph4) ? na : b41 < b42 ? ph4 : na
+lh4 = na(ph4) ? na : b41 > b42 ? ph4 : na
+b43 = ta.valuewhen(not na(pl4), pl4v, 1)
+b44 = ta.valuewhen(not na(pl4), pl4v, 0)
+ll4 = na(pl4) ? na : b43 > b44 ? pl4 : na
+hl4 = na(pl4) ? na : b43 < b44 ? pl4 : na
 
 phd  = request.security(syminfo.tickerid, "D", ta.pivothigh(high, hLB, hLB), lookahead = barmerge.lookahead_off)
 pld  = request.security(syminfo.tickerid, "D", ta.pivotlow (low,  hLB, hLB), lookahead = barmerge.lookahead_off)
 phdv = request.security(syminfo.tickerid, "D", high[hLB], lookahead = barmerge.lookahead_off)
 pldv = request.security(syminfo.tickerid, "D", low[hLB],  lookahead = barmerge.lookahead_off)
-c1 = ta.valuewhen(not na(phd), phdv, 1)
-c2 = ta.valuewhen(not na(phd), phdv, 0)
-hhd = na(phd) ? na : c1 < c2 ? phd : na
-lhd = na(phd) ? na : c1 > c2 ? phd : na
-c3 = ta.valuewhen(not na(pld), pldv, 1)
-c4 = ta.valuewhen(not na(pld), pldv, 0)
-lld = na(pld) ? na : c3 > c4 ? pld : na
-hld = na(pld) ? na : c3 < c4 ? pld : na
+bd1 = ta.valuewhen(not na(phd), phdv, 1)
+bd2 = ta.valuewhen(not na(phd), phdv, 0)
+hhd = na(phd) ? na : bd1 < bd2 ? phd : na
+lhd = na(phd) ? na : bd1 > bd2 ? phd : na
+bd3 = ta.valuewhen(not na(pld), pldv, 1)
+bd4 = ta.valuewhen(not na(pld), pldv, 0)
+lld = na(pld) ? na : bd3 > bd4 ? pld : na
+hld = na(pld) ? na : bd3 < bd4 ? pld : na
 
-var float[] HH4P = array.new_float()
-var float[] LL4P = array.new_float()
-var float[] LH4P = array.new_float()
-var float[] HL4P = array.new_float()
-var int[]   HH4B = array.new_int()
-var int[]   LL4B = array.new_int()
-var int[]   LH4B = array.new_int()
-var int[]   HL4B = array.new_int()
-var float[] HHDP = array.new_float()
-var float[] LLDP = array.new_float()
-var float[] LHDP = array.new_float()
-var float[] HLDP = array.new_float()
-var int[]   HHDB = array.new_int()
-var int[]   LLDB = array.new_int()
-var int[]   LHDB = array.new_int()
-var int[]   HLDB = array.new_int()
+var float[]  V4P = array.new_float()
+var int[]    V4B = array.new_int()
+var bool[]   V4H = array.new_bool()
+var string[] V4L = array.new_string()
+var float[]  VDP = array.new_float()
+var int[]    VDB = array.new_int()
+var bool[]   VDH = array.new_bool()
+var string[] VDL = array.new_string()
 
-f_addHTF(_p, _b, _v, _prev) =>
+f_lvPushHTF(_p, _b, _h, _l, _v, _prev, _isHi, _lab) =>
     if not na(_v) and _v != _prev
         array.push(_p, _v)
         array.push(_b, bar_index)
+        array.push(_h, _isHi)
+        array.push(_l, _lab)
     0
 
-x5_ = f_addHTF(HH4P, HH4B, hh4, nz(hh4[1]))
-x6_ = f_addHTF(LL4P, LL4B, ll4, nz(ll4[1]))
-x7_ = f_addHTF(LH4P, LH4B, lh4, nz(lh4[1]))
-x8_ = f_addHTF(HL4P, HL4B, hl4, nz(hl4[1]))
-x9_ = f_addHTF(HHDP, HHDB, hhd, nz(hhd[1]))
-xa_ = f_addHTF(LLDP, LLDB, lld, nz(lld[1]))
-xb_ = f_addHTF(LHDP, LHDB, lhd, nz(lhd[1]))
-xc_ = f_addHTF(HLDP, HLDB, hld, nz(hld[1]))
+w01 = f_lvPushHTF(V4P, V4B, V4H, V4L, hh4, nz(hh4[1]), true,  "HH")
+w02 = f_lvPushHTF(V4P, V4B, V4H, V4L, lh4, nz(lh4[1]), true,  "LH")
+w03 = f_lvPushHTF(V4P, V4B, V4H, V4L, hl4, nz(hl4[1]), false, "HL")
+w04 = f_lvPushHTF(V4P, V4B, V4H, V4L, ll4, nz(ll4[1]), false, "LL")
+w05 = f_lvPushHTF(VDP, VDB, VDH, VDL, hhd, nz(hhd[1]), true,  "HH")
+w06 = f_lvPushHTF(VDP, VDB, VDH, VDL, lhd, nz(lhd[1]), true,  "LH")
+w07 = f_lvPushHTF(VDP, VDB, VDH, VDL, hld, nz(hld[1]), false, "HL")
+w08 = f_lvPushHTF(VDP, VDB, VDH, VDL, lld, nz(lld[1]), false, "LL")
 
-// уровень существует, пока не пробит
-f_purge(_p, _b, _isHi) =>
-    i = 0
-    while i < array.size(_p)
-        if (_isHi and high >= array.get(_p, i)) or (not _isHi and low <= array.get(_p, i))
-            array.remove(_p, i)
-            array.remove(_b, i)
-        else
-            i += 1
-    0
+w09 = f_purgeL(V4P, V4B, V4H, V4L)
+w10 = f_purgeL(VDP, VDB, VDH, VDL)
 
-y5_ = f_purge(HH4P, HH4B, true)
-y6_ = f_purge(LL4P, LL4B, false)
-y7_ = f_purge(LH4P, LH4B, true)
-y8_ = f_purge(HL4P, HL4B, false)
-y9_ = f_purge(HHDP, HHDB, true)
-ya_ = f_purge(LLDP, LLDB, false)
-yb_ = f_purge(LHDP, LHDB, true)
-yc_ = f_purge(HLDP, HLDB, false)
-
-f_nearest(_p, _b, _col, _w, _st) =>
-    if array.size(_p) > 0
-        bool[] used = array.new_bool(array.size(_p), false)
-        for k = 1 to lv_n
-            best = -1
-            float bestd = 1.0e18
-            for i = 0 to array.size(_p) - 1
-                if not array.get(used, i)
-                    d = math.abs(array.get(_p, i) - close)
-                    if d < bestd
-                        bestd := d
-                        best := i
-            if best >= 0
-                array.set(used, best, true)
-                // левый край не дальше буфера истории, иначе в симуляторе
-                // линия просит бар за пределами доступного
-                xl = math.max(array.get(_b, best), bar_index - 2900)
-                array.push(LNS, line.new(xl, array.get(_p, best), bar_index, array.get(_p, best), color = color.new(_col, lvTr), width = _w, style = _st, extend = extend.right))
-    0
+f_lvlHTF(_p, _b, _h, _l, _w) =>
+    n = array.size(_p)
+    if n > 0
+        bool[] used = array.new_bool(n, false)
+        for side = 0 to 1
+            bool isHi = side == 0
+            for k = 1 to lv_n
+                int best = -1
+                float bestd = 1.0e18
+                for i = 0 to n - 1
+                    if not array.get(used, i)
+                        if array.get(_h, i) == isHi
+                            lb = array.get(_l, i)
+                            bool want = lb == "HH" or lb == "LL" or (lvLH and (lb == "LH" or lb == "HL"))
+                            if want
+                                d = math.abs(array.get(_p, i) - close)
+                                if d < bestd
+                                    bestd := d
+                                    best := i
+                if best >= 0
+                    array.set(used, best, true)
+                    lb2 = array.get(_l, best)
+                    st = lb2 == "HH" or lb2 == "LL" ? line.style_dashed : line.style_dotted
+                    xl = math.max(array.get(_b, best), bar_index - 2900)
+                    array.push(LNS, line.new(xl, array.get(_p, best), bar_index, array.get(_p, best), color = color.new(isHi ? cHiH : cLoH, lvTr), width = _w, style = st, extend = extend.right))
+    n
 
 // ══════════════ РИСУЕМ ══════════════
 if barstate.islast
@@ -467,36 +449,21 @@ if barstate.islast
     while array.size(LBS) > 0
         label.delete(array.pop(LBS))
 
-    // старшие ТФ снизу, слои поверх них
     if hOn and h_tf4
-        z5 = f_nearest(HH4P, HH4B, cHiH, 2, line.style_dashed)
-        z6 = f_nearest(LL4P, LL4B, cLoH, 2, line.style_dashed)
-        if lvLH
-            z7 = f_nearest(LH4P, LH4B, cHiH, 2, line.style_dotted)
-            z8 = f_nearest(HL4P, HL4B, cLoH, 2, line.style_dotted)
+        e1 = f_lvlHTF(V4P, V4B, V4H, V4L, 2)
     if hOn and h_tfd
-        z9 = f_nearest(HHDP, HHDB, cHiH, 3, line.style_dashed)
-        za = f_nearest(LLDP, LLDB, cLoH, 3, line.style_dashed)
-        if lvLH
-            zb = f_nearest(LHDP, LHDB, cHiH, 3, line.style_dotted)
-            zc = f_nearest(HLDP, HLDB, cLoH, 3, line.style_dotted)
+        e2 = f_lvlHTF(VDP, VDB, VDH, VDL, 3)
 
-    // 5/5 дорисовывается по 3/3, 3/3 — по 2/2, у 2/2 быстрее нет
+    // 5/5 дорисовывается по 3/3, запасной 2/2; 3/3 по 2/2
     if on5
         if lvOn
-            w5 = f_lvlLayer(P5, B5, H5, L5, X5, D5, c5H, c5L)
-        if absOn and (labWho == "5/5" or labWho == "все")
-            g5 = f_drawAbs(G5, Y5, Z5, W5, c5H, c5L, "5/5")
-        d5 = f_draw(P5, B5, H5, L5, M5, P3, B3, H3, L3, X3, D3, P2, B2, H2, L2, X2, D2, true,  c5H, c5L, "5/5", labWho == "5/5" or labWho == "все")
+            r5 = f_lvlLayer(V5P, V5B, V5H, V5L, c5H, c5L)
+        d5 = f_draw(P5, B5, H5, L5, M5, P3, B3, H3, L3, V3P, P2, B2, H2, L2, V2P, true,  c5H, c5L, "5/5", labWho == "5/5" or labWho == "все")
     if on2
         if lvOn
-            w2 = f_lvlLayer(P2, B2, H2, L2, X2, D2, c2H, c2L)
-        if absOn and (labWho == "2/2" or labWho == "все")
-            g2 = f_drawAbs(G2, Y2, Z2, W2, c2H, c2L, "2/2")
-        d2 = f_draw(P2, B2, H2, L2, M2, P2, B2, H2, L2, X2, D2, P2, B2, H2, L2, X2, D2, false, c2H, c2L, "2/2", labWho == "2/2" or labWho == "все")
+            r2 = f_lvlLayer(V2P, V2B, V2H, V2L, c2H, c2L)
+        d2 = f_draw(P2, B2, H2, L2, M2, P2, B2, H2, L2, V2P, P2, B2, H2, L2, V2P, false, c2H, c2L, "2/2", labWho == "2/2" or labWho == "все")
     if on3
         if lvOn
-            w3 = f_lvlLayer(P3, B3, H3, L3, X3, D3, c3H, c3L)
-        if absOn and (labWho == "3/3" or labWho == "все")
-            g3 = f_drawAbs(G3, Y3, Z3, W3, c3H, c3L, "3/3")
-        d3 = f_draw(P3, B3, H3, L3, M3, P2, B2, H2, L2, X2, D2, P2, B2, H2, L2, X2, D2, true,  c3H, c3L, "3/3", labWho == "3/3" or labWho == "все")
+            r3 = f_lvlLayer(V3P, V3B, V3H, V3L, c3H, c3L)
+        d3 = f_draw(P3, B3, H3, L3, M3, P2, B2, H2, L2, V2P, P2, B2, H2, L2, V2P, true,  c3H, c3L, "3/3", labWho == "3/3" or labWho == "все")
