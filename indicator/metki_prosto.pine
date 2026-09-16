@@ -358,6 +358,22 @@ f_sub(_sB, _sH, _x1, _x2, _s1, _s2) =>
             break
     keep
 
+// ХВОСТ: колена быстрого слоя ПОСЛЕ последнего колена нашего слоя.
+// Здесь конца ноги ещё нет — слой не подтвердил разворот, а быстрый уже
+// подтвердил: 3/3 знает через 3 бара, 5/5 только через 5. Это живой
+// край, и метки здесь нужны не меньше, чем в истории.
+f_subTail(_sB, _sH, _x1, _s1) =>
+    int[] keep = array.new_int()
+    n = array.size(_sB)
+    if n > 0
+        bool want = not _s1
+        for k = 0 to n - 1
+            if array.get(_sB, k) > _x1
+                if array.get(_sH, k) == want
+                    array.push(keep, k)
+                    want := not want
+    keep
+
 f_draw(_P, _B, _H, _L, _M, _fP, _fB, _fH, _fL, _fV, _gP, _gB, _gH, _gL, _gV, _hasF, _cHi, _cLo, _tag, _lab) =>
     n = array.size(_P)
     if n >= 2
@@ -413,6 +429,44 @@ f_draw(_P, _B, _H, _L, _M, _fP, _fB, _fH, _fL, _fV, _gP, _gB, _gH, _gL, _gV, _ha
                     hi = array.get(_H, i)
                     mc = array.get(_M, i)
                     array.push(LBS, label.new(x2, p2, lb, style = hi ? label.style_label_down : label.style_label_up, color = color.new(color.black, 100), textcolor = hi ? _cHi : _cLo, size = size.small, tooltip = "слой " + _tag + "   " + lb + "  " + str.tostring(p2, format.mintick) + "\n" + (hi ? "вершина" : "низ") + (mc >= 2 ? "\nслилось сырых меток: " + str.tostring(mc) : "")))
+
+    // ── ХВОСТ ──
+    if n >= 1 and fillOn and _hasF
+        xt = array.get(_B, n - 1)
+        pt = array.get(_P, n - 1)
+        st = array.get(_H, n - 1)
+        if last_bar_index - xt <= winBars
+            int[] kt = f_subTail(_fB, _fH, xt, st)
+            bool sec2 = false
+            if array.size(kt) == 0
+                kt := f_subTail(_gB, _gH, xt, st)
+                if array.size(kt) > 0
+                    sec2 := true
+            nt = array.size(kt)
+            if nt > 0
+                if showZZ
+                    int px2 = xt
+                    float pp2 = pt
+                    for q = 0 to nt - 1
+                        k = array.get(kt, q)
+                        fx = sec2 ? array.get(_gB, k) : array.get(_fB, k)
+                        fp = sec2 ? array.get(_gP, k) : array.get(_fP, k)
+                        array.push(LNS, line.new(px2, pp2, fx, fp, color = color.new(fp > pp2 ? _cHi : _cLo, 15), width = zzW, style = line.style_dashed))
+                        px2 := fx
+                        pp2 := fp
+                if _lab
+                    for q = 0 to nt - 1
+                        k = array.get(kt, q)
+                        flb = sec2 ? array.get(_gL, k) : array.get(_fL, k)
+                        fpr = sec2 ? array.get(_gP, k) : array.get(_fP, k)
+                        fhi = sec2 ? array.get(_gH, k) : array.get(_fH, k)
+                        fbx = sec2 ? array.get(_gB, k) : array.get(_fB, k)
+                        array.push(LBS, label.new(fbx, fpr, "·" + flb, style = fhi ? label.style_label_down : label.style_label_up, color = color.new(color.black, 100), textcolor = fhi ? _cHi : _cLo, size = size.small, tooltip = "СЫРАЯ метка в ХВОСТЕ — слой " + _tag + " этот разворот ещё не подтвердил, взято с более быстрого слоя\n" + flb + "  " + str.tostring(fpr, format.mintick) + "\nучасток нарисован штрих-пунктиром"))
+                        if fillLv and lvOn
+                            if f_alive(sec2 ? _gV : _fV, fpr)
+                                fst = flb == "HH" or flb == "LL" ? line.style_dashed : line.style_dotted
+                                fxl = math.max(fbx, bar_index - 2900)
+                                array.push(LNS, line.new(fxl, fpr, bar_index, fpr, color = color.new(fhi ? _cHi : _cLo, lvTr), width = 1, style = fst, extend = extend.right))
     n
 
 // ══════════════ УРОВНИ 4H и 1D — ОБЩИЕ ══════════════
