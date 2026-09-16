@@ -33,9 +33,8 @@ lvOn   = input.bool(true, "Показывать линии слоёв", group = 
 lvLH   = input.bool(true, "Линии для LH и HL тоже", group = gB)
 lv_n   = input.int(3, "Ближайших к цене с каждой стороны", minval = 1, maxval = 10, group = gB)
 lvTr   = input.int(45, "Прозрачность линий", minval = 0, maxval = 90, group = gB)
-keepBr = input.int(10, "Сколько пробитых линий оставлять", minval = 0, maxval = 40, group = gB, tooltip = "Метка, которая проявилась, не должна пропадать при перебитии. Пробитая линия остаётся, но обрывается на баре, где цена её прошла, и рисуется бледнее. 0 — не показывать пробитые совсем.")
 absOn  = input.bool(false, "Показывать поглощённые метки", group = gB, tooltip = "Когда два пивота одной стороны идут подряд, они схлопываются в одно колено. Прежде подпись проигравшего просто исчезала с графика. Теперь она остаётся на своём месте, бледная и мелкая, с точкой на уровне. Метка, которая проявилась, не пропадает.")
-fillLv = input.bool(true, "Линии и у дорисованных меток", group = gB, tooltip = "Сырая метка, взятая с более быстрого слоя, получает свою штрих-пунктирную линию и живёт по тем же правилам: пока не пробита — тянется вправо, пробили — обрывается на баре перебития и остаётся видимой. Флаг перебития берётся у того слоя, откуда метка одолжена.")
+fillLv = input.bool(true, "Линии и у дорисованных меток", group = gB, tooltip = "Сырая метка, взятая с более быстрого слоя, получает свою штрих-пунктирную линию и живёт по тем же правилам: пока цена её не коснулась — тянется вправо, коснулась — линия пропадает. Сама метка остаётся. Флаг касания берётся у того слоя, откуда метка одолжена.")
 fillOn = input.bool(true, "Дорисовывать пропущенные колена", group = gB, tooltip = "Слой может не увидеть разворот вовсе: между двумя своими коленами он идёт одной прямой, хотя внутри был отскок. Тогда участок дорисовывается коленами более быстрого слоя и рисуется ШТРИХ-ПУНКТИРОМ, а метка ставится сырая. 5/5 дорисовывается по 3/3, 3/3 — по 2/2. У 2/2 более быстрого слоя нет, он не дорисовывается.")
 
 gD = "③ Уровни 4H и 1D — общие"
@@ -233,7 +232,6 @@ f_lvlLayer(_P, _B, _H, _L, _X, _D, _cHi, _cLo) =>
     if n > 0
         int upN = 0
         int dnN = 0
-        int brN = 0
         i = n - 1
         while i >= 0
             lb = array.get(_L, i)
@@ -241,22 +239,18 @@ f_lvlLayer(_P, _B, _H, _L, _X, _D, _cHi, _cLo) =>
             bool want = lb == "HH" or lb == "LL" or (lvLH and (lb == "LH" or lb == "HL"))
             if want
                 pr = array.get(_P, i)
-                st = lb == "HH" or lb == "LL" ? line.style_dashed : line.style_dotted
-                xl = math.max(array.get(_B, i), bar_index - 2900)
-                if array.get(_X, i)
-                    // пробита: культя от метки до бара перебития
-                    if brN < keepBr
-                        xr = array.get(_D, i)
-                        if not na(xr)
-                            brN += 1
-                            array.push(LNS, line.new(xl, pr, math.max(xr, xl + 1), pr, color = color.new(isHi ? _cHi : _cLo, math.min(90, lvTr + 30)), width = 1, style = st))
-                else
+                // Линия живёт, пока её не коснулась цена. Коснулась —
+                // линия пропадает совсем. САМА МЕТКА при этом остаётся:
+                // подпись HH/LH/HL/LL с графика не исчезает никогда.
+                if not array.get(_X, i)
                     bool room = isHi ? upN < lv_n : dnN < lv_n
                     if room
                         if isHi
                             upN += 1
                         else
                             dnN += 1
+                        st = lb == "HH" or lb == "LL" ? line.style_dashed : line.style_dotted
+                        xl = math.max(array.get(_B, i), bar_index - 2900)
                         array.push(LNS, line.new(xl, pr, bar_index, pr, color = color.new(isHi ? _cHi : _cLo, lvTr), width = 1, style = st, extend = extend.right))
             i -= 1
     n
@@ -357,13 +351,9 @@ f_draw(_P, _B, _H, _L, _M, _fP, _fB, _fH, _fL, _fX, _fD, _gP, _gB, _gH, _gL, _gX
                             // у того слоя, откуда метка одолжена.
                             if fillLv and lvOn
                                 bool fbr = second ? array.get(_gX, k) : array.get(_fX, k)
-                                fst = flb == "HH" or flb == "LL" ? line.style_dashed : line.style_dotted
-                                fxl = math.max(fbx, bar_index - 2900)
-                                if fbr
-                                    fxr = second ? array.get(_gD, k) : array.get(_fD, k)
-                                    if not na(fxr)
-                                        array.push(LNS, line.new(fxl, fpr, math.max(fxr, fxl + 1), fpr, color = color.new(fhi ? _cHi : _cLo, math.min(90, lvTr + 25)), width = 1, style = fst))
-                                else
+                                if not fbr
+                                    fst = flb == "HH" or flb == "LL" ? line.style_dashed : line.style_dotted
+                                    fxl = math.max(fbx, bar_index - 2900)
                                     array.push(LNS, line.new(fxl, fpr, bar_index, fpr, color = color.new(fhi ? _cHi : _cLo, lvTr), width = 1, style = fst, extend = extend.right))
                     lb = array.get(_L, i)
                     hi = array.get(_H, i)
