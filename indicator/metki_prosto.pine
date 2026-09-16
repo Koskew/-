@@ -76,6 +76,9 @@ c2L = input.color(#4fc3f7, "",                   inline = "c2", group = gC)
 zzW = input.int(1, "Толщина зиг-зага", minval = 1, maxval = 4, group = gC)
 
 MAXK = 100
+// типизированный na: пайн не принимает голый na в параметр функции,
+// у которого тип выводится из вызова
+var int NOZERO = na
 
 // ══════════════ КОЛЕНА (для зиг-зага и подписей) ══════════════
 // Колено — пивот; подряд идущие одной стороны схлопываются в экстремум.
@@ -494,13 +497,13 @@ f_draw(_P, _B, _H, _L, _M, _fP, _fB, _fH, _fL, _fV, _gP, _gB, _gH, _gL, _gV, _ha
                 s1 = array.get(_H, i - 1)
                 s2 = array.get(_H, i)
                 int[] keep = array.new_int()
-                bool second = false
+                bool useG = false
                 if fillOn and _hasF
                     keep := f_sub(_fB, _fH, x1, x2, s1, s2)
                     if array.size(keep) == 0
                         keep := f_sub(_gB, _gH, x1, x2, s1, s2)
                         if array.size(keep) > 0
-                            second := true
+                            useG := true
                 nk = array.size(keep)
                 bool filled = nk > 0
                 if showZZ
@@ -509,8 +512,8 @@ f_draw(_P, _B, _H, _L, _M, _fP, _fB, _fH, _fL, _fV, _gP, _gB, _gH, _gL, _gV, _ha
                         float pp = p1
                         for q = 0 to nk - 1
                             k = array.get(keep, q)
-                            fx = second ? array.get(_gB, k) : array.get(_fB, k)
-                            fp = second ? array.get(_gP, k) : array.get(_fP, k)
+                            fx = useG ? array.get(_gB, k) : array.get(_fB, k)
+                            fp = useG ? array.get(_gP, k) : array.get(_fP, k)
                             array.push(LNS, line.new(px, pp, fx, fp, color = color.new(fp > pp ? _cHi : _cLo, 15), width = zzW, style = line.style_dashed))
                             px := fx
                             pp := fp
@@ -524,15 +527,15 @@ f_draw(_P, _B, _H, _L, _M, _fP, _fB, _fH, _fL, _fV, _gP, _gB, _gH, _gL, _gV, _ha
                     if filled
                         for q = 0 to nk - 1
                             k = array.get(keep, q)
-                            flb = second ? array.get(_gL, k) : array.get(_fL, k)
-                            fpr = second ? array.get(_gP, k) : array.get(_fP, k)
-                            fhi = second ? array.get(_gH, k) : array.get(_fH, k)
-                            fbx = second ? array.get(_gB, k) : array.get(_fB, k)
+                            flb = useG ? array.get(_gL, k) : array.get(_fL, k)
+                            fpr = useG ? array.get(_gP, k) : array.get(_fP, k)
+                            fhi = useG ? array.get(_gH, k) : array.get(_fH, k)
+                            fbx = useG ? array.get(_gB, k) : array.get(_fB, k)
                             array.push(LBS, label.new(fbx, fpr, "·" + flb, style = fhi ? label.style_label_down : label.style_label_up, color = color.new(color.black, 100), textcolor = fhi ? _cHi : _cLo, size = size.small, tooltip = "СЫРАЯ метка — у слоя " + _tag + " колена здесь нет, взято с более быстрого слоя\n" + flb + "  " + str.tostring(fpr, format.mintick) + "\nучасток нарисован штрих-пунктиром"))
                             // линия сырой метки: только пока она ЖИВА в
                             // списке уровней того слоя, откуда одолжена
                             if fillLv and lvOn
-                                if f_alive(second ? _gV : _fV, fpr)
+                                if f_alive(useG ? _gV : _fV, fpr)
                                     fst = flb == "HH" or flb == "LL" ? line.style_dashed : line.style_dotted
                                     fxl = math.max(fbx, bar_index - 2900)
                                     array.push(LNS, line.new(fxl, fpr, bar_index, fpr, color = color.new(fhi ? _cHi : _cLo, lvTr), width = 1, style = fst, extend = extend.right))
@@ -558,11 +561,11 @@ f_draw(_P, _B, _H, _L, _M, _fP, _fB, _fH, _fL, _fV, _gP, _gB, _gH, _gL, _gV, _ha
         st = array.get(_H, n - 1)
         if last_bar_index - xt <= winBars
             int[] kt = f_subTail(_fB, _fH, xt, st)
-            bool sec2 = false
+            bool useG2 = false
             if array.size(kt) == 0
                 kt := f_subTail(_gB, _gH, xt, st)
                 if array.size(kt) > 0
-                    sec2 := true
+                    useG2 := true
             nt = array.size(kt)
             if nt > 0
                 if showZZ
@@ -570,21 +573,21 @@ f_draw(_P, _B, _H, _L, _M, _fP, _fB, _fH, _fL, _fV, _gP, _gB, _gH, _gL, _gV, _ha
                     float pp2 = pt
                     for q = 0 to nt - 1
                         k = array.get(kt, q)
-                        fx = sec2 ? array.get(_gB, k) : array.get(_fB, k)
-                        fp = sec2 ? array.get(_gP, k) : array.get(_fP, k)
+                        fx = useG2 ? array.get(_gB, k) : array.get(_fB, k)
+                        fp = useG2 ? array.get(_gP, k) : array.get(_fP, k)
                         array.push(LNS, line.new(px2, pp2, fx, fp, color = color.new(fp > pp2 ? _cHi : _cLo, 15), width = zzW, style = line.style_dashed))
                         px2 := fx
                         pp2 := fp
                 if _lab
                     for q = 0 to nt - 1
                         k = array.get(kt, q)
-                        flb = sec2 ? array.get(_gL, k) : array.get(_fL, k)
-                        fpr = sec2 ? array.get(_gP, k) : array.get(_fP, k)
-                        fhi = sec2 ? array.get(_gH, k) : array.get(_fH, k)
-                        fbx = sec2 ? array.get(_gB, k) : array.get(_fB, k)
+                        flb = useG2 ? array.get(_gL, k) : array.get(_fL, k)
+                        fpr = useG2 ? array.get(_gP, k) : array.get(_fP, k)
+                        fhi = useG2 ? array.get(_gH, k) : array.get(_fH, k)
+                        fbx = useG2 ? array.get(_gB, k) : array.get(_fB, k)
                         array.push(LBS, label.new(fbx, fpr, "·" + flb, style = fhi ? label.style_label_down : label.style_label_up, color = color.new(color.black, 100), textcolor = fhi ? _cHi : _cLo, size = size.small, tooltip = "СЫРАЯ метка в ХВОСТЕ — слой " + _tag + " этот разворот ещё не подтвердил, взято с более быстрого слоя\n" + flb + "  " + str.tostring(fpr, format.mintick) + "\nучасток нарисован штрих-пунктиром"))
                         if fillLv and lvOn
-                            if f_alive(sec2 ? _gV : _fV, fpr)
+                            if f_alive(useG2 ? _gV : _fV, fpr)
                                 fst = flb == "HH" or flb == "LL" ? line.style_dashed : line.style_dotted
                                 fxl = math.max(fbx, bar_index - 2900)
                                 array.push(LNS, line.new(fxl, fpr, bar_index, fpr, color = color.new(fhi ? _cHi : _cLo, lvTr), width = 1, style = fst, extend = extend.right))
@@ -697,7 +700,7 @@ if barstate.islast
             r2 = f_lvlLayer(V2P, V2B, V2H, V2L, c2H, c2L)
         if absOn and (labWho == "2/2" or labWho == "все")
             g2 = f_drawAbs(G2, Y2, Z2, W2, c2H, c2L, "2/2")
-        d2 = f_draw(P2, B2, H2, L2, M2, P2, B2, H2, L2, V2P, P2, B2, H2, L2, V2P, false, c2H, c2L, "2/2", labWho == "2/2" or labWho == "все", na, 0)
+        d2 = f_draw(P2, B2, H2, L2, M2, P2, B2, H2, L2, V2P, P2, B2, H2, L2, V2P, false, c2H, c2L, "2/2", labWho == "2/2" or labWho == "все", NOZERO, 0)
     // ── тренд 5/5: зелёный уровень и красный слом ──
     if trOn5
         if t5tr == 1 and not na(t5lvl)
@@ -713,4 +716,4 @@ if barstate.islast
             r3 = f_lvlLayer(V3P, V3B, V3H, V3L, c3H, c3L)
         if absOn and (labWho == "3/3" or labWho == "все")
             g3 = f_drawAbs(G3, Y3, Z3, W3, c3H, c3L, "3/3")
-        d3 = f_draw(P3, B3, H3, L3, M3, P2, B2, H2, L2, V2P, P2, B2, H2, L2, V2P, true,  c3H, c3L, "3/3", labWho == "3/3" or labWho == "все", na, 0)
+        d3 = f_draw(P3, B3, H3, L3, M3, P2, B2, H2, L2, V2P, P2, B2, H2, L2, V2P, true,  c3H, c3L, "3/3", labWho == "3/3" or labWho == "все", NOZERO, 0)
