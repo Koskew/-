@@ -35,6 +35,7 @@ lv_n   = input.int(3, "Ближайших к цене с каждой сторо
 lvTr   = input.int(45, "Прозрачность линий", minval = 0, maxval = 90, group = gB)
 keepBr = input.int(10, "Сколько пробитых линий оставлять", minval = 0, maxval = 40, group = gB, tooltip = "Метка, которая проявилась, не должна пропадать при перебитии. Пробитая линия остаётся, но обрывается на баре, где цена её прошла, и рисуется бледнее. 0 — не показывать пробитые совсем.")
 absOn  = input.bool(false, "Показывать поглощённые метки", group = gB, tooltip = "Когда два пивота одной стороны идут подряд, они схлопываются в одно колено. Прежде подпись проигравшего просто исчезала с графика. Теперь она остаётся на своём месте, бледная и мелкая, с точкой на уровне. Метка, которая проявилась, не пропадает.")
+fillLv = input.bool(true, "Линии и у дорисованных меток", group = gB, tooltip = "Сырая метка, взятая с более быстрого слоя, получает свою штрих-пунктирную линию и живёт по тем же правилам: пока не пробита — тянется вправо, пробили — обрывается на баре перебития и остаётся видимой. Флаг перебития берётся у того слоя, откуда метка одолжена.")
 fillOn = input.bool(true, "Дорисовывать пропущенные колена", group = gB, tooltip = "Слой может не увидеть разворот вовсе: между двумя своими коленами он идёт одной прямой, хотя внутри был отскок. Тогда участок дорисовывается коленами более быстрого слоя и рисуется ШТРИХ-ПУНКТИРОМ, а метка ставится сырая. 5/5 дорисовывается по 3/3, 3/3 — по 2/2. У 2/2 более быстрого слоя нет, он не дорисовывается.")
 
 gD = "③ Уровни 4H и 1D — общие"
@@ -303,7 +304,7 @@ f_sub(_sB, _sH, _x1, _x2, _s1, _s2) =>
 // Зиг-заг слоя. Если между двумя своими коленами слой прошёл прямой, а
 // внутри был разворот — участок ДОРИСОВЫВАЕТСЯ коленами более быстрого
 // слоя и рисуется ШТРИХ-ПУНКТИРОМ, метка ставится сырая.
-f_draw(_P, _B, _H, _L, _M, _fP, _fB, _fH, _fL, _gP, _gB, _gH, _gL, _hasF, _cHi, _cLo, _tag, _lab) =>
+f_draw(_P, _B, _H, _L, _M, _fP, _fB, _fH, _fL, _fX, _fD, _gP, _gB, _gH, _gL, _gX, _gD, _hasF, _cHi, _cLo, _tag, _lab) =>
     n = array.size(_P)
     if n >= 2
         for i = 1 to n - 1
@@ -350,6 +351,20 @@ f_draw(_P, _B, _H, _L, _M, _fP, _fB, _fH, _fL, _gP, _gB, _gH, _gL, _hasF, _cHi, 
                             // размер и цвет. Точка спереди говорит, что
                             // она взята с более быстрого слоя.
                             array.push(LBS, label.new(fbx, fpr, "·" + flb, style = fhi ? label.style_label_down : label.style_label_up, color = color.new(color.black, 100), textcolor = fhi ? _cHi : _cLo, size = size.small, tooltip = "СЫРАЯ метка — у слоя " + _tag + " колена здесь нет, взято с более быстрого слоя\n" + flb + "  " + str.tostring(fpr, format.mintick) + "\nучасток нарисован штрих-пунктиром"))
+                            // своя линия у сырой метки, по тем же правилам:
+                            // цела — тянется вправо, пробита — обрывается на
+                            // баре перебития и остаётся. Флаг перебития берём
+                            // у того слоя, откуда метка одолжена.
+                            if fillLv and lvOn
+                                bool fbr = second ? array.get(_gX, k) : array.get(_fX, k)
+                                fst = flb == "HH" or flb == "LL" ? line.style_dashed : line.style_dotted
+                                fxl = math.max(fbx, bar_index - 2900)
+                                if fbr
+                                    fxr = second ? array.get(_gD, k) : array.get(_fD, k)
+                                    if not na(fxr)
+                                        array.push(LNS, line.new(fxl, fpr, math.max(fxr, fxl + 1), fpr, color = color.new(fhi ? _cHi : _cLo, math.min(90, lvTr + 25)), width = 1, style = fst))
+                                else
+                                    array.push(LNS, line.new(fxl, fpr, bar_index, fpr, color = color.new(fhi ? _cHi : _cLo, lvTr), width = 1, style = fst, extend = extend.right))
                     lb = array.get(_L, i)
                     hi = array.get(_H, i)
                     mc = array.get(_M, i)
@@ -482,16 +497,16 @@ if barstate.islast
             w5 = f_lvlLayer(P5, B5, H5, L5, X5, D5, c5H, c5L)
         if absOn and (labWho == "5/5" or labWho == "все")
             g5 = f_drawAbs(G5, Y5, Z5, W5, c5H, c5L, "5/5")
-        d5 = f_draw(P5, B5, H5, L5, M5, P3, B3, H3, L3, P2, B2, H2, L2, true,  c5H, c5L, "5/5", labWho == "5/5" or labWho == "все")
+        d5 = f_draw(P5, B5, H5, L5, M5, P3, B3, H3, L3, X3, D3, P2, B2, H2, L2, X2, D2, true,  c5H, c5L, "5/5", labWho == "5/5" or labWho == "все")
     if on2
         if lvOn
             w2 = f_lvlLayer(P2, B2, H2, L2, X2, D2, c2H, c2L)
         if absOn and (labWho == "2/2" or labWho == "все")
             g2 = f_drawAbs(G2, Y2, Z2, W2, c2H, c2L, "2/2")
-        d2 = f_draw(P2, B2, H2, L2, M2, P2, B2, H2, L2, P2, B2, H2, L2, false, c2H, c2L, "2/2", labWho == "2/2" or labWho == "все")
+        d2 = f_draw(P2, B2, H2, L2, M2, P2, B2, H2, L2, X2, D2, P2, B2, H2, L2, X2, D2, false, c2H, c2L, "2/2", labWho == "2/2" or labWho == "все")
     if on3
         if lvOn
             w3 = f_lvlLayer(P3, B3, H3, L3, X3, D3, c3H, c3L)
         if absOn and (labWho == "3/3" or labWho == "все")
             g3 = f_drawAbs(G3, Y3, Z3, W3, c3H, c3L, "3/3")
-        d3 = f_draw(P3, B3, H3, L3, M3, P2, B2, H2, L2, P2, B2, H2, L2, true,  c3H, c3L, "3/3", labWho == "3/3" or labWho == "все")
+        d3 = f_draw(P3, B3, H3, L3, M3, P2, B2, H2, L2, X2, D2, P2, B2, H2, L2, X2, D2, true,  c3H, c3L, "3/3", labWho == "3/3" or labWho == "все")
