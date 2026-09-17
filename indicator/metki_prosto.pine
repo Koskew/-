@@ -205,6 +205,7 @@ var float t5zP   = na       // его цена
 var string t5zL  = ""       // его подпись
 var float t5lvl  = na       // последний HL — уровень, который держит
 var int   t5lvlB = na
+var bool  t5lvlHL = false   // уровень стоит на настоящем HL, а не на нуле-LL
 var int   t5cnt  = -1       // номер последней точки счёта
 var int   t5max  = -1       // докуда счёт дошёл
 var float t5imp  = 0.0      // импульсное колено
@@ -283,9 +284,10 @@ if barstate.isconfirmed
                     t5max := math.max(t5max, t5cnt)
                 // уровень — последний HL, безусловно
                 if not hi5 and lb == "HL"
-                    t5lvl  := pr5
-                    t5lvlB := bb5
-                    t5bel  := 0
+                    t5lvl   := pr5
+                    t5lvlB  := bb5
+                    t5lvlHL := true
+                    t5bel   := 0
             else
                 // рождение: пришла HH, ноль — низ перед ней
                 if hi5 and lb == "HH"
@@ -305,10 +307,14 @@ if barstate.isconfirmed
                             t5zL   := zl
                             t5cnt  := 1
                             t5max  := 1
-                            // ноль, подписанный HL, УЖЕ уровень: правило
-                            // «уровень — последний появившийся HL» его включает
-                            t5lvl  := zl == "HL" ? array.get(P5, j) : na
-                            t5lvlB := zl == "HL" ? array.get(B5, j) : na
+                            // ноль всегда становится уровнем. Если он HL —
+                            // это уже настоящий уровень, правило «последний
+                            // появившийся HL» его включает, рисуется сплошной.
+                            // Если LL — уровень временный, зелёный штрих-пунктир
+                            // без подписи, до первого HL
+                            t5lvl   := array.get(P5, j)
+                            t5lvlB  := array.get(B5, j)
+                            t5lvlHL := zl == "HL"
                             t5bel  := 0
 
 // ══════════════ ЖИВЫЕ УРОВНИ СЛОЯ ══════════════
@@ -727,8 +733,9 @@ if barstate.islast
     if trOn5
         if t5tr == 1 and not na(t5lvl)
             x0 = na(t5lvlB) ? bar_index - 30 : t5lvlB
-            array.push(LNS, line.new(x0, t5lvl, bar_index, t5lvl, color = cTrUp, width = 2, extend = extend.right))
-            array.push(LBS, label.new(bar_index, t5lvl, "держит HL " + str.tostring(t5lvl, format.mintick), style = label.style_label_left, color = color.new(color.black, 100), textcolor = cTrUp, size = size.small, tooltip = "Уровень восходящего 5/5 — последний появившийся HL. Новый HL заменяет его безусловно, выше тот или ниже."))
+            array.push(LNS, line.new(x0, t5lvl, bar_index, t5lvl, color = cTrUp, width = t5lvlHL ? 2 : 1, style = t5lvlHL ? line.style_solid : line.style_dashed, extend = extend.right))
+            if t5lvlHL
+                array.push(LBS, label.new(bar_index, t5lvl, "держит HL " + str.tostring(t5lvl, format.mintick), style = label.style_label_left, color = color.new(color.black, 100), textcolor = cTrUp, size = size.small, tooltip = "Уровень восходящего 5/5 — последний появившийся HL. Новый HL заменяет его безусловно, выше тот или ниже."))
         if trTbl
             bool up = t5tr == 1
             float thrA = na(t5lvl) ? na : t5lvl - t5imp * trFib
@@ -739,7 +746,7 @@ if barstate.islast
             table.cell(TBL, 0, 2, "счёт", text_color = color.gray, text_size = size.small)
             table.cell(TBL, 1, 2, up ? "(" + str.tostring(t5cnt) + ") из 5" : "—", text_color = up ? cTrUp : color.gray, text_size = size.small)
             table.cell(TBL, 0, 3, "уровень", text_color = color.gray, text_size = size.small)
-            table.cell(TBL, 1, 3, not up ? "—" : na(t5lvl) ? "HL ещё не было" : "держит " + str.tostring(t5lvl, format.mintick), text_color = up and not na(t5lvl) ? cTrUp : color.gray, text_size = size.small)
+            table.cell(TBL, 1, 3, not up ? "—" : na(t5lvl) ? "нет" : (t5lvlHL ? "держит HL " : "ноль LL, временно ") + str.tostring(t5lvl, format.mintick), text_color = up and not na(t5lvl) ? cTrUp : color.gray, text_size = size.small)
             table.cell(TBL, 0, 4, "запас до имп × " + str.tostring(trFib), text_color = color.gray, text_size = size.small)
             table.cell(TBL, 1, 4, na(thrA) or not up ? "—" : str.tostring(close - thrA, format.mintick), text_color = color.gray, text_size = size.small)
             table.cell(TBL, 0, 5, "закрытий ниже", text_color = color.gray, text_size = size.small)
