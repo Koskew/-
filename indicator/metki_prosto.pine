@@ -55,6 +55,7 @@ trDeath = input.string("имп × 0.33", "Чем убивается тренд",
 trFib   = input.float(0.33, "Глубина, импульсов", 0.0, 1.0, 0.01, group = gT)
 trNbar  = input.int(4, "Свечей подряд ниже уровня", 1, 10, group = gT, tooltip = "Слово владельца: четыре подряд, считая от первой, которая закрылась ниже уровня. Считается по ЗАКРЫТИЮ — прочтение «всё тело ниже» замер отклонил, оно хуже во всём.")
 trNum   = input.bool(true, "Номера точек (0)-(5)", group = gT)
+trCont  = input.string("только LL", "С чего может начаться восходящий", options = ["только LL", "LL, и HL как продолжение"], group = gT, tooltip = "ВОСХОДЯЩИЙ.md §1: продолжение может начаться с HL, но только если ПРЕДЫДУЩИЙ тренд был восходящий и дошёл до (3)+. Если предыдущий был нисходящий и случился слом — только с LL.\n\nДвижка нисходящего у нас пока нет, поэтому «предыдущий был восходящий» проверить нечем: флаг t5pUp помнит последний восходящий, даже если после него успел пройти нисходящий. Именно на этом индикатор ошибся 17.09.2026. Пока стоит безопасное «только LL». Вторая строчка возвращает старое поведение.")
 trShow5 = input.bool(true, "Пока считаем тренд по 5/5 — показывать этот слой", group = gT, tooltip = "Счёт и зелёный цвет живут на слое 5/5. Если слой выключен переключателем ① или подписываются метки другого слоя, показывать нечего. Этот флаг сам включает 5/5, пока идёт счёт тренда, и подписывает ТОЛЬКО колена счёта — чужие метки не засоряются. Снять флаг — вернётся ручное управление ①.")
 trTbl   = input.bool(true, "Табло состояния", group = gT, tooltip = "Что движок думает про восходящий тренд прямо сейчас. Первый кирпич той таблицы, про которую договаривались: пока одна колонка 5/5, дальше встанут 3/3 и 2/2.")
 cTrUp   = input.color(#00c853, "Восходящий: метки, счёт, уровень", group = gT)
@@ -295,7 +296,7 @@ if barstate.isconfirmed
                         j -= 1
                     if j >= 0
                         zl = array.get(L5, j)
-                        bool ok = zl == "LL" or (zl == "HL" and t5pUp and t5pMax >= 3)
+                        bool ok = zl == "LL" or (trCont != "только LL" and zl == "HL" and t5pUp and t5pMax >= 3)
                         if ok
                             t5tr   := 1
                             t5bB   := bar_index
@@ -304,7 +305,10 @@ if barstate.isconfirmed
                             t5zL   := zl
                             t5cnt  := 1
                             t5max  := 1
-                            t5lvl  := na
+                            // ноль, подписанный HL, УЖЕ уровень: правило
+                            // «уровень — последний появившийся HL» его включает
+                            t5lvl  := zl == "HL" ? array.get(P5, j) : na
+                            t5lvlB := zl == "HL" ? array.get(B5, j) : na
                             t5bel  := 0
 
 // ══════════════ ЖИВЫЕ УРОВНИ СЛОЯ ══════════════
@@ -740,8 +744,8 @@ if barstate.islast
             table.cell(TBL, 1, 4, na(thrA) or not up ? "—" : str.tostring(close - thrA, format.mintick), text_color = color.gray, text_size = size.small)
             table.cell(TBL, 0, 5, "закрытий ниже", text_color = color.gray, text_size = size.small)
             table.cell(TBL, 1, 5, up ? str.tostring(t5bel) + " из " + str.tostring(trNbar) : "—", text_color = color.gray, text_size = size.small)
-            table.cell(TBL, 0, 6, "живёт баров", text_color = color.gray, text_size = size.small)
-            table.cell(TBL, 1, 6, up and not na(t5bB) ? str.tostring(last_bar_index - t5bB) : "—", text_color = color.gray, text_size = size.small)
+            table.cell(TBL, 0, 6, "баров от (0)", text_color = color.gray, text_size = size.small)
+            table.cell(TBL, 1, 6, up and t5zB >= 0 ? str.tostring(last_bar_index - t5zB) : "—", text_color = color.gray, text_size = size.small)
             table.cell(TBL, 0, 7, "прошлый слом", text_color = color.gray, text_size = size.small)
             table.cell(TBL, 1, 7, na(t5dB) ? "—" : str.tostring(last_bar_index - t5dB) + " баров назад, " + str.tostring(t5dP, format.mintick), text_color = na(t5dB) ? color.gray : cTrDie, text_size = size.small)
         if not na(t5dB) and last_bar_index - t5dB <= winBars
