@@ -16,6 +16,13 @@
   C2   то же, но ноль обязан быть LL: если первый низ после LH оказался
        HL, ищем ближе всего стоящую LL назад (но после слома); нет
        такой — рождения нет
+
+ОТКАТ НА СТАРОЕ ПРАВИЛО, согласовано с владельцем 18.09.2026. Если после
+слома последовательность LH -> низ не сложилась — например, первой
+пришла сразу HH, — работает старое правило: ноль на ближайший LL перед
+HH. Без этого движок залипает: без рождения нет тренда, без тренда нет
+слома, а без нового слома правило не перезапускается. На первом прогоне
+C1 и C2 дали 9 трендов вместо 301 именно поэтому.
 """
 import csv, sys, statistics
 from collections import Counter
@@ -60,7 +67,7 @@ def engine(rule):
     REFUSE=[]
     tr=0; lvl=None; cnt=-1; imp=0.0
     dBar=None; dPrice=None          # последний слом
-    zP=None; zB=None; bornBar=None; mx=-1; broke=None
+    zP=None; zB=None; bornBar=None; mx=-1; broke=None; zLab='?'
     out=[]
     for i in range(N):
         nw=False
@@ -70,7 +77,7 @@ def engine(rule):
         if tr==1:
             if broke is None and L[i] < zP: broke = i - bornBar
             if lvl is not None and min(O[i],C[i]) < lvl - imp*FIB:
-                out.append(dict(life=i-bornBar, mx=mx, broke=broke, zP=zP, zB=zB))
+                out.append(dict(life=i-bornBar, mx=mx, broke=broke, zP=zP, zB=zB, zLab=zLab))
                 dBar, dPrice = i, lvl
                 tr=0; cnt=-1; lvl=None; broke=None
         fr = piv(i,True) is not None or piv(i,False) is not None
@@ -95,12 +102,15 @@ def engine(rule):
                     else:
                         s=[k for k in range(n-1) if B[k]>dBar]
                         hs=[k for k in s if Hi[k]]
+                        done=False
                         if not hs:
                             if j>=0 and Lb[j]=='LL' and P[j]<dPrice: zi=j
+                            done=True
                         elif Lb[hs[0]]=='LH':
                             ls=[k for k in s if (not Hi[k]) and k>hs[0]]
                             if ls:
                                 cand=ls[0]
+                                done=True
                                 if rule=='C1': zi=cand
                                 else:
                                     if Lb[cand]=='LL': zi=cand
@@ -108,10 +118,14 @@ def engine(rule):
                                         back=[k for k in range(cand,-1,-1)
                                               if (not Hi[k]) and Lb[k]=='LL' and B[k]>dBar]
                                         zi = back[0] if back else None
+                        if not done:
+                            # последовательность не сложилась — старое правило
+                            if j>=0 and Lb[j]=='LL': zi=j
                 if zi is None and dBar is not None:
                     REFUSE.append((i, dBar))
                 if zi is not None:
                     tr=1; cnt=1; mx=1
+                    zLab=Lb[zi]
                     zP=P[zi]; zB=B[zi]; lvl=zP; bornBar=i; broke=None
                     imp = pr - zP
     return out, REFUSE
@@ -133,6 +147,15 @@ def show(name, res):
     print(f'  счёт дошёл до (5)             {len(to5):4}  ({100*len(to5)/n:5.1f}%)')
     life=[t['life'] for t in tr]
     print(f'  жизнь тренда, баров           медиана {statistics.median(life):.0f}, среднее {statistics.mean(life):.0f}')
+    by=Counter(t['zLab'] for t in tr)
+    if len(by)>1:
+        print('  в разбивке по ПОДПИСИ нуля:')
+        for lab in sorted(by):
+            g=[t for t in tr if t['zLab']==lab]
+            gb=[t for t in g if t['broke'] is not None]
+            med = statistics.median([t['broke'] for t in gb]) if gb else float('nan')
+            g5=len([t for t in g if t['mx']>=5])
+            print(f'    ноль {lab}: {len(g):4} трендов · пробит {100*len(gb)/len(g):5.1f}% (медиана {med:.0f} баров) · до (5) {100*g5/len(g):5.1f}% · жизнь {statistics.median([t["life"] for t in g]):.0f}')
 
 from collections import Counter
 _o, _r = engine('C1')
