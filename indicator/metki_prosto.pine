@@ -59,6 +59,7 @@ trCont  = input.string("только LL", "С чего может начатьс
 trShow5 = input.bool(false, "Показывать 5/5 поверх, как контекст", group = gT, tooltip = "Насильно показывает слой 5/5, даже если он выключен в ①. По умолчанию ВЫКЛЮЧЕНО: раньше этот флаг стоял включённым и накладывал весь слой 5/5 поверх рабочего слоя — от этого метки на графике смазывались. Включать, только если хочется видеть крупную структуру рядом с мелкой.")
 trFull  = input.bool(true, "У слоя 5/5 показывать всё остальное", group = gT, tooltip = "Когда 5/5 включён только ради счёта тренда, у него по умолчанию видны лишь зиг-заг и колена счёта. Этот флаг возвращает остальное: штрих-пунктирные линии слоя 5/5, поглощённые метки и одолженные сырые метки ·LH. Если поверх вашего рабочего слоя это мешает — снять флаг, останется только счёт.")
 trTbl   = input.bool(true, "Табло состояния", group = gT, tooltip = "Что движок думает про восходящий тренд прямо сейчас. Первый кирпич той таблицы, про которую договаривались: пока одна колонка 5/5, дальше встанут 3/3 и 2/2.")
+trBrk   = input.string("HL", "Чем подтверждается зелёный слом", options = ["HL", "имп × 0.33", "4 закрытия выше"], group = gT, tooltip = "Зелёный слом — это слом НИСХОДЯЩЕЙ структуры: цена от LL перебила вершину и сделала HH. Чёрточка появляется СРАЗУ, на цене перебитой вершины. До подтверждения зиг-заг счёта рисуется ТОНКИМ, после — толстым.\n\nЧем подтверждать:\n· HL — пришёл первый HL после HH. Структурно, в том же языке, что и весь слой;\n· имп × 0.33 — цена ушла выше перебитой вершины на треть импульса;\n· 4 закрытия выше — столько же закрытий подряд, сколько стоит в поле «Свечей подряд ниже уровня».\n\nКакое лучше — не проверено. Замер будет, когда линия поживёт на графике.\n\nВАЖНО: нисходящий тренд движком НЕ считается. Зелёная линия отмечает только сам факт «структуру сломали вверх».")
 cTrUp   = input.color(#00c853, "Восходящий: метки, счёт, уровень", group = gT)
 cTrDie  = input.color(#ff1744, "Слом", group = gT)
 
@@ -222,6 +223,13 @@ var float[]  tDP  = array.new_float(3, na)     // цена слома
 var int[]    tDB  = array.new_int(3, -1)       // бар слома
 var int[]    tBB  = array.new_int(3, -1)       // бар рождения
 var int[]    tPZB = array.new_int(3, -1)       // ноль ПРОШЛОГО счёта
+// ЗЕЛЁНЫЙ СЛОМ — слом нисходящей структуры. Цена от LL перебила вершину
+// и сделала HH. Чёрточка встаёт на цене перебитой вершины сразу, а до
+// подтверждения ноги счёта рисуются тонкими
+var float[]  tBP  = array.new_float(3, na)     // цена перебитой вершины
+var int[]    tBB2 = array.new_int(3, -1)       // бар зелёного слома
+var bool[]   tBOK = array.new_bool(3, false)   // подтверждён ли
+var int[]    tBAB = array.new_int(3, 0)        // закрытий подряд выше
 
 var table TBL = table.new(position.top_right, 4, 8, border_width = 1, frame_width = 1, frame_color = color.new(color.gray, 60), border_color = color.new(color.gray, 80))
 
@@ -249,6 +257,20 @@ f_trend(_i, _P, _B, _H, _L, _nw, _fr) =>
             array.set(tPZB, _i, -1)
             array.set(tLVL, _i, na)
             array.set(tBEL, _i, 0)
+            array.set(tBP,  _i, na)
+            array.set(tBB2, _i, -1)
+            array.set(tBOK, _i, false)
+            array.set(tBAB, _i, 0)
+    // 1b. подтверждение ЗЕЛЁНОГО слома — тоже каждый бар
+    if not na(array.get(tBP, _i)) and not array.get(tBOK, _i)
+        bp = array.get(tBP, _i)
+        array.set(tBAB, _i, close > bp ? array.get(tBAB, _i) + 1 : 0)
+        bool bA = math.max(open, close) > bp + array.get(tIMP, _i) * trFib
+        bool bB = array.get(tBAB, _i) >= trNbar
+        if trBrk == "имп × 0.33" and bA
+            array.set(tBOK, _i, true)
+        if trBrk == "4 закрытия выше" and bB
+            array.set(tBOK, _i, true)
     // 2. новое колено: счёт, уровень, рождение
     if _fr and n >= 2
         lb  = array.get(_L, n - 1)
@@ -282,6 +304,9 @@ f_trend(_i, _P, _B, _H, _L, _nw, _fr) =>
                     array.set(tLVB, _i, bbK)
                     array.set(tLHL, _i, true)
                     array.set(tBEL, _i, 0)
+                    // первый HL после HH подтверждает зелёный слом
+                    if trBrk == "HL"
+                        array.set(tBOK, _i, true)
         else
             // рождение: пришла HH, ноль — низ перед ней
             if hiK and lb == "HH"
@@ -307,6 +332,23 @@ f_trend(_i, _P, _B, _H, _L, _nw, _fr) =>
                         array.set(tLVB, _i, array.get(_B, j))
                         array.set(tLHL, _i, zl == "HL")
                         array.set(tBEL, _i, 0)
+                        // ЗЕЛЁНЫЙ СЛОМ: вершина, которую цена перебила по
+                        // дороге от нуля к этой HH. Это колено-вершина
+                        // перед нулём — то самое «LH или HH потом LL»
+                        int v = j - 1
+                        while v >= 0
+                            if array.get(_H, v)
+                                break
+                            v -= 1
+                        if v >= 0
+                            array.set(tBP,  _i, array.get(_P, v))
+                            array.set(tBB2, _i, bar_index)
+                            array.set(tBOK, _i, zl == "HL" and trBrk == "HL")
+                            array.set(tBAB, _i, 0)
+                        else
+                            array.set(tBP,  _i, na)
+                            array.set(tBB2, _i, -1)
+                            array.set(tBOK, _i, false)
     0
 
 ph5 = ta.pivothigh(high, 5, 5)
@@ -533,7 +575,7 @@ f_subTail(_sB, _sH, _x1, _s1) =>
                     want := not want
     keep
 
-f_draw(_P, _B, _H, _L, _M, _fP, _fB, _fH, _fL, _fV, _gP, _gB, _gH, _gL, _gV, _hasF, _cHi, _cLo, _tag, _lab, _labK, _tzB, _tpzB, _ttr) =>
+f_draw(_P, _B, _H, _L, _M, _fP, _fB, _fH, _fL, _fV, _gP, _gB, _gH, _gL, _gV, _hasF, _cHi, _cLo, _tag, _lab, _labK, _tzB, _tpzB, _ttr, _bok) =>
     n = array.size(_P)
     // колено-ноль действующего счёта: первое, чей бар не раньше нуля
     int zi = -1
@@ -579,6 +621,9 @@ f_draw(_P, _B, _H, _L, _M, _fP, _fB, _fH, _fL, _fV, _gP, _gB, _gH, _gL, _gV, _ha
                 // ломается, но нога (4)-(5) с такой вершиной рисуется
                 // ШТРИХ-ПУНКТИРОМ — зелёным, цвет не меняется
                 bool weak5 = (inCnt and i - zi == 5 or inPrv and i - pzi == 5) and array.get(_L, i) == "LH"
+                // пока зелёный слом не подтверждён, нога счёта ТОНКАЯ.
+                // Штрих-пунктир для этого не берём: он занят дорисовкой
+                int wCnt = inCnt ? (_bok ? zzW + 1 : zzW) : zzW
                 if showZZ
                     if filled
                         // участок с дорисовкой остаётся ШТРИХ-ПУНКТИРОМ — это
@@ -593,13 +638,13 @@ f_draw(_P, _B, _H, _L, _M, _fP, _fB, _fH, _fL, _fV, _gP, _gB, _gH, _gL, _gV, _ha
                             fx = useG ? array.get(_gB, k) : array.get(_fB, k)
                             fp = useG ? array.get(_gP, k) : array.get(_fP, k)
                             cseg = inCnt or inPrv ? col0 : (fp > pp ? _cHi : _cLo)
-                            array.push(LNS, line.new(px, pp, fx, fp, color = color.new(cseg, inCnt ? 0 : 15), width = inCnt ? zzW + 1 : zzW, style = line.style_dashed))
+                            array.push(LNS, line.new(px, pp, fx, fp, color = color.new(cseg, inCnt ? 0 : 15), width = wCnt, style = line.style_dashed))
                             px := fx
                             pp := fp
                         cend = inCnt or inPrv ? col0 : (p2 > pp ? _cHi : _cLo)
-                        array.push(LNS, line.new(px, pp, x2, p2, color = color.new(cend, inCnt ? 0 : 15), width = inCnt ? zzW + 1 : zzW, style = line.style_dashed))
+                        array.push(LNS, line.new(px, pp, x2, p2, color = color.new(cend, inCnt ? 0 : 15), width = wCnt, style = line.style_dashed))
                     else
-                        array.push(LNS, line.new(x1, p1, x2, p2, color = color.new(col0, inCnt ? 0 : 55), width = inCnt ? zzW + 1 : zzW, style = weak5 ? line.style_dashed : line.style_solid))
+                        array.push(LNS, line.new(x1, p1, x2, p2, color = color.new(col0, inCnt ? 0 : 55), width = wCnt, style = weak5 ? line.style_dashed : line.style_solid))
                 if _lab
                     if filled and not _labK
                         for q = 0 to nk - 1
@@ -788,13 +833,13 @@ if barstate.islast
             r5 = f_lvlLayer(V5P, V5B, V5H, V5L, c5H, c5L)
         if absOn and (lab5 or trFull)
             g5 = f_drawAbs(G5, Y5, Z5, W5, c5H, c5L, "5/5")
-        d5 = f_draw(P5, B5, H5, L5, M5, P3, B3, H3, L3, V3P, P2, B2, H2, L2, V2P, true,  c5H, c5L, "5/5", lab5 or trShow, not lab5 and not trFull, mainL == 0 ? array.get(tZB, 0) : NOZERO, mainL == 0 ? array.get(tPZB, 0) : NOZERO, mainL == 0 and trOn5 ? array.get(tTR, 0) : 0)
+        d5 = f_draw(P5, B5, H5, L5, M5, P3, B3, H3, L3, V3P, P2, B2, H2, L2, V2P, true,  c5H, c5L, "5/5", lab5 or trShow, not lab5 and not trFull, mainL == 0 ? array.get(tZB, 0) : NOZERO, mainL == 0 ? array.get(tPZB, 0) : NOZERO, mainL == 0 and trOn5 ? array.get(tTR, 0) : 0, array.get(tBOK, 0))
     if on2
         if lvOn
             r2 = f_lvlLayer(V2P, V2B, V2H, V2L, c2H, c2L)
         if absOn and (labWho == "2/2" or labWho == "все")
             g2 = f_drawAbs(G2, Y2, Z2, W2, c2H, c2L, "2/2")
-        d2 = f_draw(P2, B2, H2, L2, M2, P2, B2, H2, L2, V2P, P2, B2, H2, L2, V2P, false, c2H, c2L, "2/2", labWho == "2/2" or labWho == "все", false, mainL == 2 ? array.get(tZB, 2) : NOZERO, mainL == 2 ? array.get(tPZB, 2) : NOZERO, mainL == 2 and trOn5 ? array.get(tTR, 2) : 0)
+        d2 = f_draw(P2, B2, H2, L2, M2, P2, B2, H2, L2, V2P, P2, B2, H2, L2, V2P, false, c2H, c2L, "2/2", labWho == "2/2" or labWho == "все", false, mainL == 2 ? array.get(tZB, 2) : NOZERO, mainL == 2 ? array.get(tPZB, 2) : NOZERO, mainL == 2 and trOn5 ? array.get(tTR, 2) : 0, array.get(tBOK, 2))
     // ── тренд: зелёный уровень и красный слом рисуются по ГЛАВНОМУ слою ──
     if trOn5 and mainL >= 0
         mLvl = array.get(tLVL, mainL)
@@ -804,6 +849,13 @@ if barstate.islast
             array.push(LNS, line.new(x0, mLvl, bar_index, mLvl, color = cTrUp, width = mHL ? 2 : 1, style = mHL ? line.style_solid : line.style_dashed, extend = extend.right))
             if mHL
                 array.push(LBS, label.new(bar_index, mLvl, "держит HL " + str.tostring(mLvl, format.mintick), style = label.style_label_left, color = color.new(color.black, 100), textcolor = cTrUp, size = size.small, tooltip = "Уровень восходящего — последний появившийся HL. Новый HL заменяет его безусловно, выше тот или ниже.\nСлой: " + (mainL == 0 ? "5/5" : mainL == 1 ? "3/3" : "2/2")))
+        // ЗЕЛЁНЫЙ СЛОМ — на цене перебитой вершины, короткой чёрточкой
+        mBB = array.get(tBB2, mainL)
+        if mBB >= 0 and last_bar_index - mBB <= winBars
+            mBP = array.get(tBP, mainL)
+            bok = array.get(tBOK, mainL)
+            array.push(LNS, line.new(mBB - 12, mBP, mBB + 12, mBP, color = cTrUp, width = bok ? 2 : 1))
+            array.push(LBS, label.new(mBB, mBP, bok ? "слом ↑" : "слом ↑ ?", style = label.style_label_up, color = color.new(color.black, 100), textcolor = cTrUp, size = size.tiny, tooltip = "ЗЕЛЁНЫЙ СЛОМ — слом нисходящей структуры на " + str.tostring(mBP, format.mintick) + ".\nЦена от нуля перебила эту вершину и сделала HH.\n" + (bok ? "ПОДТВЕРЖДЁН правилом «" + trBrk + "», зиг-заг счёта толстый." : "НЕ подтверждён правилом «" + trBrk + "», зиг-заг счёта тонкий.") + "\nСлой: " + (mainL == 0 ? "5/5" : mainL == 1 ? "3/3" : "2/2") + "\n\nНисходящий тренд движком НЕ считается — это отметка факта, а не состояние.")
         mDB = array.get(tDB, mainL)
         if mDB >= 0 and last_bar_index - mDB <= winBars
             mDP = array.get(tDP, mainL)
@@ -843,4 +895,4 @@ if barstate.islast
             r3 = f_lvlLayer(V3P, V3B, V3H, V3L, c3H, c3L)
         if absOn and (labWho == "3/3" or labWho == "все")
             g3 = f_drawAbs(G3, Y3, Z3, W3, c3H, c3L, "3/3")
-        d3 = f_draw(P3, B3, H3, L3, M3, P2, B2, H2, L2, V2P, P2, B2, H2, L2, V2P, true,  c3H, c3L, "3/3", labWho == "3/3" or labWho == "все", false, mainL == 1 ? array.get(tZB, 1) : NOZERO, mainL == 1 ? array.get(tPZB, 1) : NOZERO, mainL == 1 and trOn5 ? array.get(tTR, 1) : 0)
+        d3 = f_draw(P3, B3, H3, L3, M3, P2, B2, H2, L2, V2P, P2, B2, H2, L2, V2P, true,  c3H, c3L, "3/3", labWho == "3/3" or labWho == "все", false, mainL == 1 ? array.get(tZB, 1) : NOZERO, mainL == 1 ? array.get(tPZB, 1) : NOZERO, mainL == 1 and trOn5 ? array.get(tTR, 1) : 0, array.get(tBOK, 1))
