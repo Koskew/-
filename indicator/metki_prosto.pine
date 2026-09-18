@@ -49,14 +49,14 @@ absOn  = input.bool(true, "Показывать поглощённые метк�
 fillOn = input.bool(true, "Дорисовывать пропущенные колена", group = gB, tooltip = "Слой может не увидеть разворот вовсе. Тогда участок дорисовывается коленами более быстрого слоя, рисуется ШТРИХ-ПУНКТИРОМ, метка ставится сырая с точкой спереди. 5/5 берёт у 3/3, 3/3 у 2/2. У 2/2 более быстрого слоя нет.")
 fillLv = input.bool(true, "Линии и у дорисованных меток", group = gB, tooltip = "Сырая метка получает свою линию по тем же правилам: пока цена её не коснулась — тянется вправо, коснулась — пропадает. Живость проверяется по слою, откуда метка одолжена.")
 
-gT = "③ Тренд — пока только слой 5/5"
-trOn5  = input.bool(true, "Считать восходящий тренд по 5/5", group = gT, tooltip = "Первое из пяти состояний. Ноль счёта ставится на низ перед первой HH; если прошлый тренд был восходящий и дошёл до (3) и дальше, нулём может быть HL — продолжение. Счёт чередует колена от нуля: нечётная точка вершина, чётная низ. Встречная подпись счёт НЕ обрывает, она помечает точку как манипуляционную.")
+gT = "③ Тренд"
+trOn5  = input.bool(true, "Считать восходящий тренд", group = gT, tooltip = "Считается СРАЗУ ПО ТРЁМ слоям, независимо. В табло три колонки. На графике рисуется тот слой, который включён в ①; если включено несколько — самый медленный из них.\n\nПервое из пяти состояний. Ноль счёта ставится на низ перед первой HH; если прошлый тренд был восходящий и дошёл до (3) и дальше, нулём может быть HL — продолжение. Счёт чередует колена от нуля: нечётная точка вершина, чётная низ. Встречная подпись счёт НЕ обрывает, она помечает точку как манипуляционную.")
 trDeath = input.string("имп × 0.33", "Чем убивается тренд", options = ["имп × 0.33", "4 закрытия ниже", "оба", "любое"], group = gT, tooltip = "Замер Н7 на 9 годах: правила НЕРАЗЛИЧИМЫ, знак разницы меняется между слоями, полторы сигмы. Выбирать глазами. «оба» — нужны оба сразу, «любое» — кто первый.")
 trFib   = input.float(0.33, "Глубина, импульсов", 0.0, 1.0, 0.01, group = gT)
 trNbar  = input.int(4, "Свечей подряд ниже уровня", 1, 10, group = gT, tooltip = "Слово владельца: четыре подряд, считая от первой, которая закрылась ниже уровня. Считается по ЗАКРЫТИЮ — прочтение «всё тело ниже» замер отклонил, оно хуже во всём.")
 trNum   = input.bool(true, "Номера точек (0)-(5)", group = gT)
 trCont  = input.string("только LL", "С чего может начаться восходящий", options = ["только LL", "LL, и HL как продолжение"], group = gT, tooltip = "ВОСХОДЯЩИЙ.md §1: продолжение может начаться с HL, но только если ПРЕДЫДУЩИЙ тренд был восходящий и дошёл до (3)+. Если предыдущий был нисходящий и случился слом — только с LL.\n\nДвижка нисходящего у нас пока нет, поэтому «предыдущий был восходящий» проверить нечем: флаг t5pUp помнит последний восходящий, даже если после него успел пройти нисходящий. Именно на этом индикатор ошибся 17.09.2026. Пока стоит безопасное «только LL». Вторая строчка возвращает старое поведение.")
-trShow5 = input.bool(true, "Пока считаем тренд по 5/5 — показывать этот слой", group = gT, tooltip = "Счёт и зелёный цвет живут на слое 5/5. Если слой выключен переключателем ① или подписываются метки другого слоя, показывать нечего. Этот флаг сам включает 5/5, пока идёт счёт тренда, и подписывает ТОЛЬКО колена счёта — чужие метки не засоряются. Снять флаг — вернётся ручное управление ①.")
+trShow5 = input.bool(false, "Показывать 5/5 поверх, как контекст", group = gT, tooltip = "Насильно показывает слой 5/5, даже если он выключен в ①. По умолчанию ВЫКЛЮЧЕНО: раньше этот флаг стоял включённым и накладывал весь слой 5/5 поверх рабочего слоя — от этого метки на графике смазывались. Включать, только если хочется видеть крупную структуру рядом с мелкой.")
 trFull  = input.bool(true, "У слоя 5/5 показывать всё остальное", group = gT, tooltip = "Когда 5/5 включён только ради счёта тренда, у него по умолчанию видны лишь зиг-заг и колена счёта. Этот флаг возвращает остальное: штрих-пунктирные линии слоя 5/5, поглощённые метки и одолженные сырые метки ·LH. Если поверх вашего рабочего слоя это мешает — снять флаг, останется только счёт.")
 trTbl   = input.bool(true, "Табло состояния", group = gT, tooltip = "Что движок думает про восходящий тренд прямо сейчас. Первый кирпич той таблицы, про которую договаривались: пока одна колонка 5/5, дальше встанут 3/3 и 2/2.")
 cTrUp   = input.color(#00c853, "Восходящий: метки, счёт, уровень", group = gT)
@@ -200,26 +200,114 @@ f_push(_P, _B, _H, _L, _M, _G, _Y, _Z, _W, _price, _bar, _hi) =>
 //     выше тот оказался или ниже. Храповика здесь нет намеренно;
 //   смерть — тело за уровень на имп x 0.33, либо N закрытий подряд ниже
 //     уровня. Замер Н7 их не различил, поэтому переключатель.
-var int   t5tr   = 0        // 0 нет тренда, 1 восходящий
-var int   t5zB   = -1       // бар колена-нуля, -1 = нет
-var float t5zP   = na       // его цена
-var string t5zL  = ""       // его подпись
-var float t5lvl  = na       // последний HL — уровень, который держит
-var int   t5lvlB = na
-var bool  t5lvlHL = false   // уровень стоит на настоящем HL, а не на нуле-LL
-var int   t5cnt  = -1       // номер последней точки счёта
-var int   t5max  = -1       // докуда счёт дошёл
-var float t5imp  = 0.0      // импульсное колено
-var int   t5bel  = 0        // закрытий подряд ниже уровня
-var bool  t5pUp  = false    // прошлый тренд был восходящий
-var int   t5pMax = -1       // докуда дошёл его счёт
-var float t5dP   = na       // цена слома
-var int   t5dB   = na       // бар слома
-var int   t5bB   = na       // бар рождения — для табло
-var int   t5pzB  = -1       // бар нуля ПРОШЛОГО счёта: его номера остаются
-                            // на графике бледными, чтобы видно было, где
-                            // кончился один счёт и начался следующий
-var table TBL = table.new(position.top_right, 2, 8, border_width = 1, frame_width = 1, frame_color = color.new(color.gray, 60), border_color = color.new(color.gray, 80))
+// Состояние держится ПО СЛОЯМ: индекс 0 = 5/5, 1 = 3/3, 2 = 2/2.
+// Движков теперь три, по одному на слой, и считают они независимо друг
+// от друга. В табло стоят три колонки, а на графике рисуется тот слой,
+// который выбран в ① — если включено несколько, самый медленный.
+// Бары держим числом, -1 значит «нет»: пайн капризен с na в массивах.
+var int[]    tTR  = array.new_int(3, 0)        // 0 нет тренда, 1 восходящий
+var int[]    tZB  = array.new_int(3, -1)       // бар колена-нуля
+var float[]  tZP  = array.new_float(3, na)     // его цена
+var string[] tZL  = array.new_string(3, "")    // его подпись
+var float[]  tLVL = array.new_float(3, na)     // уровень — последний HL
+var int[]    tLVB = array.new_int(3, -1)
+var bool[]   tLHL = array.new_bool(3, false)   // уровень на настоящем HL
+var int[]    tCNT = array.new_int(3, -1)       // номер последней точки
+var int[]    tMAX = array.new_int(3, -1)       // докуда счёт дошёл
+var float[]  tIMP = array.new_float(3, 0.0)    // импульсное колено
+var int[]    tBEL = array.new_int(3, 0)        // закрытий подряд ниже
+var bool[]   tPUP = array.new_bool(3, false)   // прошлый был восходящий
+var int[]    tPMX = array.new_int(3, -1)
+var float[]  tDP  = array.new_float(3, na)     // цена слома
+var int[]    tDB  = array.new_int(3, -1)       // бар слома
+var int[]    tBB  = array.new_int(3, -1)       // бар рождения
+var int[]    tPZB = array.new_int(3, -1)       // ноль ПРОШЛОГО счёта
+
+var table TBL = table.new(position.top_right, 4, 8, border_width = 1, frame_width = 1, frame_color = color.new(color.gray, 60), border_color = color.new(color.gray, 80))
+
+// Один шаг движка для слоя _i. Вся логика та же, что была у 5/5, просто
+// состояние читается и пишется по индексу слоя.
+f_trend(_i, _P, _B, _H, _L, _nw, _fr) =>
+    n = array.size(_P)
+    // 1. смерть проверяется КАЖДЫЙ бар, а не только на колене
+    if array.get(tTR, _i) == 1 and not na(array.get(tLVL, _i))
+        lv = array.get(tLVL, _i)
+        im = array.get(tIMP, _i)
+        bLo = math.min(open, close)
+        bool okA = bLo < lv - im * trFib
+        array.set(tBEL, _i, close < lv ? array.get(tBEL, _i) + 1 : 0)
+        bool okB = array.get(tBEL, _i) >= trNbar
+        bool died = trDeath == "имп × 0.33" ? okA : trDeath == "4 закрытия ниже" ? okB : trDeath == "оба" ? (okA and okB) : (okA or okB)
+        if died
+            array.set(tPUP, _i, true)
+            array.set(tPMX, _i, array.get(tMAX, _i))
+            array.set(tDP,  _i, lv)
+            array.set(tDB,  _i, bar_index)
+            array.set(tTR,  _i, 0)
+            array.set(tCNT, _i, -1)
+            array.set(tZB,  _i, -1)
+            array.set(tPZB, _i, -1)
+            array.set(tLVL, _i, na)
+            array.set(tBEL, _i, 0)
+    // 2. новое колено: счёт, уровень, рождение
+    if _fr and n >= 2
+        lb  = array.get(_L, n - 1)
+        hiK = array.get(_H, n - 1)
+        prK = array.get(_P, n - 1)
+        bbK = array.get(_B, n - 1)
+        ppK = array.get(_P, n - 2)
+        if prK > ppK
+            array.set(tIMP, _i, prK - ppK)
+        if array.get(tTR, _i) == 1
+            // §5: первый HL после (5) начинает НОВЫЙ счёт и сам стаёт нулём
+            bool restart = _nw and array.get(tCNT, _i) >= 5 and not hiK and lb == "HL"
+            if restart
+                array.set(tPZB, _i, array.get(tZB, _i))
+                array.set(tZB,  _i, bbK)
+                array.set(tZP,  _i, prK)
+                array.set(tZL,  _i, lb)
+                array.set(tCNT, _i, 0)
+                array.set(tMAX, _i, 0)
+                array.set(tLVL, _i, prK)
+                array.set(tLVB, _i, bbK)
+                array.set(tLHL, _i, true)
+                array.set(tBEL, _i, 0)
+            else
+                if _nw and array.get(tCNT, _i) < 5
+                    array.set(tCNT, _i, array.get(tCNT, _i) + 1)
+                    array.set(tMAX, _i, math.max(array.get(tMAX, _i), array.get(tCNT, _i)))
+                // уровень — последний HL, безусловно
+                if not hiK and lb == "HL"
+                    array.set(tLVL, _i, prK)
+                    array.set(tLVB, _i, bbK)
+                    array.set(tLHL, _i, true)
+                    array.set(tBEL, _i, 0)
+        else
+            // рождение: пришла HH, ноль — низ перед ней
+            if hiK and lb == "HH"
+                int j = n - 2
+                while j >= 0
+                    if not array.get(_H, j)
+                        break
+                    j -= 1
+                if j >= 0
+                    zl = array.get(_L, j)
+                    bool ok = zl == "LL" or (trCont != "только LL" and zl == "HL" and array.get(tPUP, _i) and array.get(tPMX, _i) >= 3)
+                    if ok
+                        array.set(tTR,  _i, 1)
+                        array.set(tBB,  _i, bar_index)
+                        array.set(tZB,  _i, array.get(_B, j))
+                        array.set(tZP,  _i, array.get(_P, j))
+                        array.set(tZL,  _i, zl)
+                        array.set(tCNT, _i, 1)
+                        array.set(tMAX, _i, 1)
+                        // ноль всегда становится уровнем. HL — настоящий,
+                        // сплошной; LL — временный, штрих-пунктир без подписи
+                        array.set(tLVL, _i, array.get(_P, j))
+                        array.set(tLVB, _i, array.get(_B, j))
+                        array.set(tLHL, _i, zl == "HL")
+                        array.set(tBEL, _i, 0)
+    0
 
 ph5 = ta.pivothigh(high, 5, 5)
 pl5 = ta.pivotlow (low,  5, 5)
@@ -229,9 +317,11 @@ ph2 = ta.pivothigh(high, 2, 2)
 pl2 = ta.pivotlow (low,  2, 2)
 
 if barstate.isconfirmed
-    // nw5 — родилось ли на слое 5/5 НОВОЕ колено. Счёт двигается по коленам,
+    // nwN — родилось ли на слое НОВОЕ колено. Счёт двигается по коленам,
     // а не по сырым пивотам: слияние пивота в уже стоящее колено счёт не двигает
     bool nw5 = false
+    bool nw3 = false
+    bool nw2 = false
     if not na(ph5)
         q1 = f_push(P5, B5, H5, L5, M5, G5, Y5, Z5, W5, high[5], bar_index - 5, true)
         nw5 := nw5 or q1
@@ -240,105 +330,25 @@ if barstate.isconfirmed
         nw5 := nw5 or q2
     if not na(ph3)
         q3 = f_push(P3, B3, H3, L3, M3, G3, Y3, Z3, W3, high[3], bar_index - 3, true)
+        nw3 := nw3 or q3
     if not na(pl3)
         q4 = f_push(P3, B3, H3, L3, M3, G3, Y3, Z3, W3, low[3],  bar_index - 3, false)
+        nw3 := nw3 or q4
     if not na(ph2)
         q5 = f_push(P2, B2, H2, L2, M2, G2, Y2, Z2, W2, high[2], bar_index - 2, true)
+        nw2 := nw2 or q5
     if not na(pl2)
         q6 = f_push(P2, B2, H2, L2, M2, G2, Y2, Z2, W2, low[2],  bar_index - 2, false)
+        nw2 := nw2 or q6
 
-    // ── шаг восходящего тренда 5/5 ──
+    // ── шаг восходящего тренда: три слоя, независимо ──
     if trOn5
-        // 1. смерть проверяется КАЖДЫЙ бар, а не только на колене
-        if t5tr == 1 and not na(t5lvl)
-            bLo = math.min(open, close)
-            bool okA = bLo < t5lvl - t5imp * trFib
-            t5bel := close < t5lvl ? t5bel + 1 : 0
-            bool okB = t5bel >= trNbar
-            bool died = trDeath == "имп × 0.33" ? okA : trDeath == "4 закрытия ниже" ? okB : trDeath == "оба" ? (okA and okB) : (okA or okB)
-            if died
-                t5pUp  := true
-                t5pMax := t5max
-                t5dP   := t5lvl
-                t5dB   := bar_index
-                t5tr   := 0
-                t5cnt  := -1
-                t5zB   := -1
-                t5pzB  := -1
-                t5lvl  := na
-                t5bel  := 0
-        // 2. новое колено: счёт, уровень, рождение
-        bool fr5 = false
-        if not na(ph5)
-            fr5 := true
-        if not na(pl5)
-            fr5 := true
-        n5 = array.size(P5)
-        if fr5 and n5 >= 2
-            lb  = array.get(L5, n5 - 1)
-            hi5 = array.get(H5, n5 - 1)
-            pr5 = array.get(P5, n5 - 1)
-            bb5 = array.get(B5, n5 - 1)
-            pp5 = array.get(P5, n5 - 2)
-            // импульс — нога вверх
-            if pr5 > pp5
-                t5imp := pr5 - pp5
-            if t5tr == 1
-                // ВОСХОДЯЩИЙ.md §5: счёт дошёл до (5), и следом пришёл HL —
-                // это НОВЫЙ счёт, и сам этот HL становится его нулём (0).
-                // Тренд при этом не умирает и не рождается заново, он
-                // продолжается. Срабатывает только на ПЕРВОМ HL после (5):
-                // дальше t5cnt уже 0 и условие не выполняется
-                bool restart = nw5 and t5cnt >= 5 and not hi5 and lb == "HL"
-                if restart
-                    t5pzB   := t5zB
-                    t5zB    := bb5
-                    t5zP    := pr5
-                    t5zL    := lb
-                    t5cnt   := 0
-                    t5max   := 0
-                    t5lvl   := pr5
-                    t5lvlB  := bb5
-                    t5lvlHL := true
-                    t5bel   := 0
-                else
-                    if nw5 and t5cnt < 5
-                        t5cnt := t5cnt + 1
-                        t5max := math.max(t5max, t5cnt)
-                    // уровень — последний HL, безусловно
-                    if not hi5 and lb == "HL"
-                        t5lvl   := pr5
-                        t5lvlB  := bb5
-                        t5lvlHL := true
-                        t5bel   := 0
-            else
-                // рождение: пришла HH, ноль — низ перед ней
-                if hi5 and lb == "HH"
-                    int j = n5 - 2
-                    while j >= 0
-                        if not array.get(H5, j)
-                            break
-                        j -= 1
-                    if j >= 0
-                        zl = array.get(L5, j)
-                        bool ok = zl == "LL" or (trCont != "только LL" and zl == "HL" and t5pUp and t5pMax >= 3)
-                        if ok
-                            t5tr   := 1
-                            t5bB   := bar_index
-                            t5zB   := array.get(B5, j)
-                            t5zP   := array.get(P5, j)
-                            t5zL   := zl
-                            t5cnt  := 1
-                            t5max  := 1
-                            // ноль всегда становится уровнем. Если он HL —
-                            // это уже настоящий уровень, правило «последний
-                            // появившийся HL» его включает, рисуется сплошной.
-                            // Если LL — уровень временный, зелёный штрих-пунктир
-                            // без подписи, до первого HL
-                            t5lvl   := array.get(P5, j)
-                            t5lvlB  := array.get(B5, j)
-                            t5lvlHL := zl == "HL"
-                            t5bel  := 0
+        bool fr5 = not na(ph5) or not na(pl5)
+        bool fr3 = not na(ph3) or not na(pl3)
+        bool fr2 = not na(ph2) or not na(pl2)
+        e5 = f_trend(0, P5, B5, H5, L5, nw5, fr5)
+        e3 = f_trend(1, P3, B3, H3, L3, nw3, fr3)
+        e2 = f_trend(2, P2, B2, H2, L2, nw2, fr2)
 
 // ══════════════ ЖИВЫЕ УРОВНИ СЛОЯ ══════════════
 // Механизм Тренажёра v9: уровень — СЫРОЙ пивот, лежит в списке, при
@@ -769,51 +779,68 @@ if barstate.islast
     // и поглощённые метки не рисуем, а подписываем только колена счёта
     bool lab5 = labWho == "5/5" or labWho == "все"
     bool trShow = trOn5 and trShow5
+    // ГЛАВНЫЙ слой: тот, что включён в ①. Включено несколько — берём самый
+    // медленный. Слово владельца: «если выбираю два, основной тот, который
+    // больше». Тренд на графике рисуется только по нему
+    int mainL = on5 ? 0 : on3 ? 1 : on2 ? 2 : -1
     if on5 or trShow
         if lvOn and (on5 or trFull)
             r5 = f_lvlLayer(V5P, V5B, V5H, V5L, c5H, c5L)
         if absOn and (lab5 or trFull)
             g5 = f_drawAbs(G5, Y5, Z5, W5, c5H, c5L, "5/5")
-        d5 = f_draw(P5, B5, H5, L5, M5, P3, B3, H3, L3, V3P, P2, B2, H2, L2, V2P, true,  c5H, c5L, "5/5", lab5 or trShow, not lab5 and not trFull, t5zB, t5pzB, trOn5 ? t5tr : 0)
+        d5 = f_draw(P5, B5, H5, L5, M5, P3, B3, H3, L3, V3P, P2, B2, H2, L2, V2P, true,  c5H, c5L, "5/5", lab5 or trShow, not lab5 and not trFull, mainL == 0 ? array.get(tZB, 0) : NOZERO, mainL == 0 ? array.get(tPZB, 0) : NOZERO, mainL == 0 and trOn5 ? array.get(tTR, 0) : 0)
     if on2
         if lvOn
             r2 = f_lvlLayer(V2P, V2B, V2H, V2L, c2H, c2L)
         if absOn and (labWho == "2/2" or labWho == "все")
             g2 = f_drawAbs(G2, Y2, Z2, W2, c2H, c2L, "2/2")
-        d2 = f_draw(P2, B2, H2, L2, M2, P2, B2, H2, L2, V2P, P2, B2, H2, L2, V2P, false, c2H, c2L, "2/2", labWho == "2/2" or labWho == "все", false, NOZERO, NOZERO, 0)
-    // ── тренд 5/5: зелёный уровень и красный слом ──
-    if trOn5
-        if t5tr == 1 and not na(t5lvl)
-            x0 = na(t5lvlB) ? bar_index - 30 : t5lvlB
-            array.push(LNS, line.new(x0, t5lvl, bar_index, t5lvl, color = cTrUp, width = t5lvlHL ? 2 : 1, style = t5lvlHL ? line.style_solid : line.style_dashed, extend = extend.right))
-            if t5lvlHL
-                array.push(LBS, label.new(bar_index, t5lvl, "держит HL " + str.tostring(t5lvl, format.mintick), style = label.style_label_left, color = color.new(color.black, 100), textcolor = cTrUp, size = size.small, tooltip = "Уровень восходящего 5/5 — последний появившийся HL. Новый HL заменяет его безусловно, выше тот или ниже."))
-        if trTbl
-            bool up = t5tr == 1
-            float thrA = na(t5lvl) ? na : t5lvl - t5imp * trFib
-            table.cell(TBL, 0, 0, "слой 5/5", text_color = color.gray, text_size = size.small)
-            table.cell(TBL, 1, 0, "восходящий тренд", text_color = color.gray, text_size = size.small)
-            table.cell(TBL, 0, 1, "состояние", text_color = color.gray, text_size = size.small)
-            table.cell(TBL, 1, 1, up ? "ВОСХОДЯЩИЙ" : "тренда нет", text_color = up ? cTrUp : color.gray, text_size = size.small)
-            table.cell(TBL, 0, 2, "счёт", text_color = color.gray, text_size = size.small)
-            table.cell(TBL, 1, 2, up ? "(" + str.tostring(t5cnt) + ") из 5" : "—", text_color = up ? cTrUp : color.gray, text_size = size.small)
-            table.cell(TBL, 0, 3, "уровень", text_color = color.gray, text_size = size.small)
-            table.cell(TBL, 1, 3, not up ? "—" : na(t5lvl) ? "нет" : (t5lvlHL ? "держит HL " : "ноль LL, временно ") + str.tostring(t5lvl, format.mintick), text_color = up and not na(t5lvl) ? cTrUp : color.gray, text_size = size.small)
-            table.cell(TBL, 0, 4, "запас до имп × " + str.tostring(trFib), text_color = color.gray, text_size = size.small)
-            table.cell(TBL, 1, 4, na(thrA) or not up ? "—" : str.tostring(close - thrA, format.mintick), text_color = color.gray, text_size = size.small)
-            table.cell(TBL, 0, 5, "закрытий ниже", text_color = color.gray, text_size = size.small)
-            table.cell(TBL, 1, 5, up ? str.tostring(t5bel) + " из " + str.tostring(trNbar) : "—", text_color = color.gray, text_size = size.small)
-            table.cell(TBL, 0, 6, "баров от (0)", text_color = color.gray, text_size = size.small)
-            table.cell(TBL, 1, 6, up and t5zB >= 0 ? str.tostring(last_bar_index - t5zB) : "—", text_color = color.gray, text_size = size.small)
-            table.cell(TBL, 0, 7, "прошлый слом", text_color = color.gray, text_size = size.small)
-            table.cell(TBL, 1, 7, na(t5dB) ? "—" : str.tostring(last_bar_index - t5dB) + " баров назад, " + str.tostring(t5dP, format.mintick), text_color = na(t5dB) ? color.gray : cTrDie, text_size = size.small)
-        if not na(t5dB) and last_bar_index - t5dB <= winBars
-            array.push(LNS, line.new(t5dB - 12, t5dP, t5dB + 12, t5dP, color = cTrDie, width = 2))
-            array.push(LBS, label.new(t5dB, t5dP, "слом", style = label.style_label_down, color = color.new(color.black, 100), textcolor = cTrDie, size = size.tiny, tooltip = "Слом восходящего 5/5 на уровне " + str.tostring(t5dP, format.mintick)))
+        d2 = f_draw(P2, B2, H2, L2, M2, P2, B2, H2, L2, V2P, P2, B2, H2, L2, V2P, false, c2H, c2L, "2/2", labWho == "2/2" or labWho == "все", false, mainL == 2 ? array.get(tZB, 2) : NOZERO, mainL == 2 ? array.get(tPZB, 2) : NOZERO, mainL == 2 and trOn5 ? array.get(tTR, 2) : 0)
+    // ── тренд: зелёный уровень и красный слом рисуются по ГЛАВНОМУ слою ──
+    if trOn5 and mainL >= 0
+        mLvl = array.get(tLVL, mainL)
+        mHL  = array.get(tLHL, mainL)
+        if array.get(tTR, mainL) == 1 and not na(mLvl)
+            x0 = array.get(tLVB, mainL) < 0 ? bar_index - 30 : array.get(tLVB, mainL)
+            array.push(LNS, line.new(x0, mLvl, bar_index, mLvl, color = cTrUp, width = mHL ? 2 : 1, style = mHL ? line.style_solid : line.style_dashed, extend = extend.right))
+            if mHL
+                array.push(LBS, label.new(bar_index, mLvl, "держит HL " + str.tostring(mLvl, format.mintick), style = label.style_label_left, color = color.new(color.black, 100), textcolor = cTrUp, size = size.small, tooltip = "Уровень восходящего — последний появившийся HL. Новый HL заменяет его безусловно, выше тот или ниже.\nСлой: " + (mainL == 0 ? "5/5" : mainL == 1 ? "3/3" : "2/2")))
+        mDB = array.get(tDB, mainL)
+        if mDB >= 0 and last_bar_index - mDB <= winBars
+            mDP = array.get(tDP, mainL)
+            array.push(LNS, line.new(mDB - 12, mDP, mDB + 12, mDP, color = cTrDie, width = 2))
+            array.push(LBS, label.new(mDB, mDP, "слом", style = label.style_label_down, color = color.new(color.black, 100), textcolor = cTrDie, size = size.tiny, tooltip = "Слом восходящего на уровне " + str.tostring(mDP, format.mintick) + "\nСлой: " + (mainL == 0 ? "5/5" : mainL == 1 ? "3/3" : "2/2")))
+
+    // ── ТАБЛО: три колонки, по одной на слой ──
+    if trOn5 and trTbl
+        table.cell(TBL, 0, 0, "восходящий", text_color = color.gray, text_size = size.tiny)
+        for c = 0 to 2
+            nm = c == 0 ? "5/5" : c == 1 ? "3/3" : "2/2"
+            bool isMain = c == mainL
+            table.cell(TBL, c + 1, 0, isMain ? nm + " ◂" : nm, text_color = isMain ? cTrUp : color.gray, text_size = size.tiny)
+            bool up = array.get(tTR, c) == 1
+            lv = array.get(tLVL, c)
+            im = array.get(tIMP, c)
+            float thrA = na(lv) ? na : lv - im * trFib
+            cG = up ? cTrUp : color.gray
+            table.cell(TBL, c + 1, 1, up ? "ВОСХ" : "нет", text_color = cG, text_size = size.tiny)
+            table.cell(TBL, c + 1, 2, up ? "(" + str.tostring(array.get(tCNT, c)) + ")/5" : "—", text_color = cG, text_size = size.tiny)
+            table.cell(TBL, c + 1, 3, not up ? "—" : na(lv) ? "нет" : (array.get(tLHL, c) ? "HL " : "LL ") + str.tostring(lv, format.mintick), text_color = up and not na(lv) ? cTrUp : color.gray, text_size = size.tiny)
+            table.cell(TBL, c + 1, 4, na(thrA) or not up ? "—" : str.tostring(close - thrA, format.mintick), text_color = color.gray, text_size = size.tiny)
+            table.cell(TBL, c + 1, 5, up ? str.tostring(array.get(tBEL, c)) + "/" + str.tostring(trNbar) : "—", text_color = color.gray, text_size = size.tiny)
+            table.cell(TBL, c + 1, 6, up and array.get(tZB, c) >= 0 ? str.tostring(last_bar_index - array.get(tZB, c)) : "—", text_color = color.gray, text_size = size.tiny)
+            db = array.get(tDB, c)
+            table.cell(TBL, c + 1, 7, db < 0 ? "—" : str.tostring(last_bar_index - db) + " / " + str.tostring(array.get(tDP, c), format.mintick), text_color = db < 0 ? color.gray : cTrDie, text_size = size.tiny)
+        table.cell(TBL, 0, 1, "состояние", text_color = color.gray, text_size = size.tiny)
+        table.cell(TBL, 0, 2, "счёт", text_color = color.gray, text_size = size.tiny)
+        table.cell(TBL, 0, 3, "уровень", text_color = color.gray, text_size = size.tiny)
+        table.cell(TBL, 0, 4, "запас имп×" + str.tostring(trFib), text_color = color.gray, text_size = size.tiny)
+        table.cell(TBL, 0, 5, "закр. ниже", text_color = color.gray, text_size = size.tiny)
+        table.cell(TBL, 0, 6, "баров от (0)", text_color = color.gray, text_size = size.tiny)
+        table.cell(TBL, 0, 7, "прошлый слом", text_color = color.gray, text_size = size.tiny)
 
     if on3
         if lvOn
             r3 = f_lvlLayer(V3P, V3B, V3H, V3L, c3H, c3L)
         if absOn and (labWho == "3/3" or labWho == "все")
             g3 = f_drawAbs(G3, Y3, Z3, W3, c3H, c3L, "3/3")
-        d3 = f_draw(P3, B3, H3, L3, M3, P2, B2, H2, L2, V2P, P2, B2, H2, L2, V2P, true,  c3H, c3L, "3/3", labWho == "3/3" or labWho == "все", false, NOZERO, NOZERO, 0)
+        d3 = f_draw(P3, B3, H3, L3, M3, P2, B2, H2, L2, V2P, P2, B2, H2, L2, V2P, true,  c3H, c3L, "3/3", labWho == "3/3" or labWho == "все", false, mainL == 1 ? array.get(tZB, 1) : NOZERO, mainL == 1 ? array.get(tPZB, 1) : NOZERO, mainL == 1 and trOn5 ? array.get(tTR, 1) : 0)
