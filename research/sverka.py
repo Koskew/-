@@ -66,7 +66,35 @@ def signatures(path):
 def show(rows, title):
     print(f'\n=== {title}: {len(rows)} рисующих вызовов ===')
 
+def balance(path):
+    """скобки: пайн не переносит строку без явного продолжения, поэтому
+    незакрытая скобка — это гарантированная ошибка компиляции"""
+    bad = []
+    for i, ln in enumerate(open(path, encoding='utf-8').read().split('\n')):
+        if ln.strip().startswith('//'):
+            continue
+        d = 0; instr = False; esc = False
+        for c in ln:
+            if instr:
+                if esc: esc = False
+                elif c == '\\': esc = True
+                elif c == '"': instr = False
+            else:
+                if c == '"': instr = True
+                elif c in '([': d += 1
+                elif c in ')]': d -= 1
+        if d != 0:
+            bad.append((i + 1, d))
+    return bad
+
 a, b = sys.argv[1], sys.argv[2]
+for f in (a, b):
+    bb = balance(f)
+    if bb:
+        print(f'\n!!! {f}: НЕЗАКРЫТЫЕ СКОБКИ — не компилируется')
+        for ln, d in bb:
+            print(f'    строка {ln}: не хватает {abs(d)} {"закрывающей" if d > 0 else "открывающей"}')
+
 A, B = signatures(a), signatures(b)
 show(A, 'было'); show(B, 'стало')
 

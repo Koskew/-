@@ -855,7 +855,7 @@ if barstate.islast
             mBP = array.get(tBP, mainL)
             bok = array.get(tBOK, mainL)
             array.push(LNS, line.new(mBB - 12, mBP, mBB + 12, mBP, color = cTrUp, width = bok ? 2 : 1))
-            array.push(LBS, label.new(mBB, mBP, bok ? "слом ↑" : "слом ↑ ?", style = label.style_label_up, color = color.new(color.black, 100), textcolor = cTrUp, size = size.tiny, tooltip = "ЗЕЛЁНЫЙ СЛОМ — слом нисходящей структуры на " + str.tostring(mBP, format.mintick) + ".\nЦена от нуля перебила эту вершину и сделала HH.\n" + (bok ? "ПОДТВЕРЖДЁН правилом «" + trBrk + "», зиг-заг счёта толстый." : "НЕ подтверждён правилом «" + trBrk + "», зиг-заг счёта тонкий.") + "\nСлой: " + (mainL == 0 ? "5/5" : mainL == 1 ? "3/3" : "2/2") + "\n\nНисходящий тренд движком НЕ считается — это отметка факта, а не состояние.")
+            array.push(LBS, label.new(mBB, mBP, bok ? "слом ↑" : "слом ↑ ?", style = label.style_label_up, color = color.new(color.black, 100), textcolor = cTrUp, size = size.tiny, tooltip = "ЗЕЛЁНЫЙ СЛОМ — слом нисходящей структуры на " + str.tostring(mBP, format.mintick) + ".\nЦена от нуля перебила эту вершину и сделала HH.\n" + (bok ? "ПОДТВЕРЖДЁН правилом «" + trBrk + "», зиг-заг счёта толстый." : "НЕ подтверждён правилом «" + trBrk + "», зиг-заг счёта тонкий.") + "\nСлой: " + (mainL == 0 ? "5/5" : mainL == 1 ? "3/3" : "2/2") + "\n\nНисходящий тренд движком НЕ считается — это отметка факта, а не состояние."))
         mDB = array.get(tDB, mainL)
         if mDB >= 0 and last_bar_index - mDB <= winBars
             mDP = array.get(tDP, mainL)
