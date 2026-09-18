@@ -226,12 +226,35 @@ var int[]    tPZB = array.new_int(3, -1)       // ноль ПРОШЛОГО сч
 // ЗЕЛЁНЫЙ СЛОМ — слом нисходящей структуры. Цена от LL перебила вершину
 // и сделала HH. Чёрточка встаёт на цене перебитой вершины сразу, а до
 // подтверждения ноги счёта рисуются тонкими
+// ИСТОРИЯ СЛОМОВ, плоскими списками: бар, цена, слой. Рисуем все, что
+// попали в окно, а не только последний. Слой 5/5 показывается всегда,
+// как контекст; 3/3 и 2/2 — только когда выбраны основным
+var int[]   RDB = array.new_int()      // красный слом: бар
+var float[] RDP = array.new_float()    //               цена
+var int[]   RDL = array.new_int()      //               слой
+var int[]   GDB = array.new_int()      // зелёный слом: бар
+var float[] GDP = array.new_float()    //               цена
+var int[]   GDL = array.new_int()      //               слой
+var bool[]  GOK = array.new_bool()     //               подтверждён
+MAXSL = 300
+
 var float[]  tBP  = array.new_float(3, na)     // цена перебитой вершины
 var int[]    tBB2 = array.new_int(3, -1)       // бар зелёного слома
 var bool[]   tBOK = array.new_bool(3, false)   // подтверждён ли
 var int[]    tBAB = array.new_int(3, 0)        // закрытий подряд выше
 
 var table TBL = table.new(position.top_right, 4, 8, border_width = 1, frame_width = 1, frame_color = color.new(color.gray, 60), border_color = color.new(color.gray, 80))
+
+// последний зелёный слом слоя _i в истории, -1 если нет
+f_lastG(_i) =>
+    int r = -1
+    n = array.size(GDL)
+    if n > 0
+        for k = n - 1 to 0
+            if array.get(GDL, k) == _i
+                r := k
+                break
+    r
 
 // Один шаг движка для слоя _i. Вся логика та же, что была у 5/5, просто
 // состояние читается и пишется по индексу слоя.
@@ -257,20 +280,28 @@ f_trend(_i, _P, _B, _H, _L, _nw, _fr) =>
             array.set(tPZB, _i, -1)
             array.set(tLVL, _i, na)
             array.set(tBEL, _i, 0)
-            array.set(tBP,  _i, na)
-            array.set(tBB2, _i, -1)
-            array.set(tBOK, _i, false)
             array.set(tBAB, _i, 0)
+            // красный слом уходит в историю. Зелёную метку НЕ гасим:
+            // она отмечает событие, которое было, а событие не отменяется
+            // тем, что тренд потом умер
+            array.push(RDB, bar_index)
+            array.push(RDP, lv)
+            array.push(RDL, _i)
+            if array.size(RDB) > MAXSL
+                array.shift(RDB)
+                array.shift(RDP)
+                array.shift(RDL)
     // 1b. подтверждение ЗЕЛЁНОГО слома — тоже каждый бар
-    if not na(array.get(tBP, _i)) and not array.get(tBOK, _i)
+    if array.get(tTR, _i) == 1 and not na(array.get(tBP, _i)) and not array.get(tBOK, _i)
         bp = array.get(tBP, _i)
         array.set(tBAB, _i, close > bp ? array.get(tBAB, _i) + 1 : 0)
         bool bA = math.max(open, close) > bp + array.get(tIMP, _i) * trFib
         bool bB = array.get(tBAB, _i) >= trNbar
-        if trBrk == "имп × 0.33" and bA
+        if (trBrk == "имп × 0.33" and bA) or (trBrk == "4 закрытия выше" and bB)
             array.set(tBOK, _i, true)
-        if trBrk == "4 закрытия выше" and bB
-            array.set(tBOK, _i, true)
+            gi = f_lastG(_i)
+            if gi >= 0
+                array.set(GOK, gi, true)
     // 2. новое колено: счёт, уровень, рождение
     if _fr and n >= 2
         lb  = array.get(_L, n - 1)
@@ -307,6 +338,9 @@ f_trend(_i, _P, _B, _H, _L, _nw, _fr) =>
                     // первый HL после HH подтверждает зелёный слом
                     if trBrk == "HL"
                         array.set(tBOK, _i, true)
+                        gj = f_lastG(_i)
+                        if gj >= 0
+                            array.set(GOK, gj, true)
         else
             // рождение: пришла HH, ноль — низ перед ней
             if hiK and lb == "HH"
@@ -345,6 +379,15 @@ f_trend(_i, _P, _B, _H, _L, _nw, _fr) =>
                             array.set(tBB2, _i, bar_index)
                             array.set(tBOK, _i, zl == "HL" and trBrk == "HL")
                             array.set(tBAB, _i, 0)
+                            array.push(GDB, bar_index)
+                            array.push(GDP, array.get(_P, v))
+                            array.push(GDL, _i)
+                            array.push(GOK, zl == "HL" and trBrk == "HL")
+                            if array.size(GDB) > MAXSL
+                                array.shift(GDB)
+                                array.shift(GDP)
+                                array.shift(GDL)
+                                array.shift(GOK)
                         else
                             array.set(tBP,  _i, na)
                             array.set(tBB2, _i, -1)
@@ -849,18 +892,36 @@ if barstate.islast
             array.push(LNS, line.new(x0, mLvl, bar_index, mLvl, color = cTrUp, width = mHL ? 2 : 1, style = mHL ? line.style_solid : line.style_dashed, extend = extend.right))
             if mHL
                 array.push(LBS, label.new(bar_index, mLvl, "держит HL " + str.tostring(mLvl, format.mintick), style = label.style_label_left, color = color.new(color.black, 100), textcolor = cTrUp, size = size.small, tooltip = "Уровень восходящего — последний появившийся HL. Новый HL заменяет его безусловно, выше тот или ниже.\nСлой: " + (mainL == 0 ? "5/5" : mainL == 1 ? "3/3" : "2/2")))
-        // ЗЕЛЁНЫЙ СЛОМ — на цене перебитой вершины, короткой чёрточкой
-        mBB = array.get(tBB2, mainL)
-        if mBB >= 0 and last_bar_index - mBB <= winBars
-            mBP = array.get(tBP, mainL)
-            bok = array.get(tBOK, mainL)
-            array.push(LNS, line.new(mBB - 12, mBP, mBB + 12, mBP, color = cTrUp, width = bok ? 2 : 1))
-            array.push(LBS, label.new(mBB, mBP, bok ? "слом ↑" : "слом ↑ ?", style = label.style_label_up, color = color.new(color.black, 100), textcolor = cTrUp, size = size.tiny, tooltip = "ЗЕЛЁНЫЙ СЛОМ — слом нисходящей структуры на " + str.tostring(mBP, format.mintick) + ".\nЦена от нуля перебила эту вершину и сделала HH.\n" + (bok ? "ПОДТВЕРЖДЁН правилом «" + trBrk + "», зиг-заг счёта толстый." : "НЕ подтверждён правилом «" + trBrk + "», зиг-заг счёта тонкий.") + "\nСлой: " + (mainL == 0 ? "5/5" : mainL == 1 ? "3/3" : "2/2") + "\n\nНисходящий тренд движком НЕ считается — это отметка факта, а не состояние."))
-        mDB = array.get(tDB, mainL)
-        if mDB >= 0 and last_bar_index - mDB <= winBars
-            mDP = array.get(tDP, mainL)
-            array.push(LNS, line.new(mDB - 12, mDP, mDB + 12, mDP, color = cTrDie, width = 2))
-            array.push(LBS, label.new(mDB, mDP, "слом", style = label.style_label_down, color = color.new(color.black, 100), textcolor = cTrDie, size = size.tiny, tooltip = "Слом восходящего на уровне " + str.tostring(mDP, format.mintick) + "\nСлой: " + (mainL == 0 ? "5/5" : mainL == 1 ? "3/3" : "2/2")))
+        // ── СЛОМЫ: все, что попали в окно ──
+        // Слой 5/5 рисуется ВСЕГДА, как контекст. 3/3 и 2/2 — только когда
+        // выбраны основным. Сломы основного слоя идут в полный цвет и с
+        // подписью, контекстные 5/5 — бледные и без подписи, чтобы глаз
+        // сразу отделял рабочее от фона
+        nR = array.size(RDB)
+        if nR > 0
+            for k = 0 to nR - 1
+                lr = array.get(RDL, k)
+                bool okShow = lr == mainL or lr == 0
+                if okShow and last_bar_index - array.get(RDB, k) <= winBars
+                    bool isMain = lr == mainL
+                    rb = array.get(RDB, k)
+                    rp = array.get(RDP, k)
+                    array.push(LNS, line.new(rb - 12, rp, rb + 12, rp, color = color.new(cTrDie, isMain ? 0 : 65), width = isMain ? 2 : 1))
+                    if isMain
+                        array.push(LBS, label.new(rb, rp, "слом", style = label.style_label_down, color = color.new(color.black, 100), textcolor = cTrDie, size = size.tiny, tooltip = "Слом восходящего на уровне " + str.tostring(rp, format.mintick) + "\nСлой: " + (lr == 0 ? "5/5" : lr == 1 ? "3/3" : "2/2")))
+        nG = array.size(GDB)
+        if nG > 0
+            for k = 0 to nG - 1
+                lg = array.get(GDL, k)
+                bool okShowG = lg == mainL or lg == 0
+                if okShowG and last_bar_index - array.get(GDB, k) <= winBars
+                    bool isMainG = lg == mainL
+                    gb = array.get(GDB, k)
+                    gp = array.get(GDP, k)
+                    bool gok = array.get(GOK, k)
+                    array.push(LNS, line.new(gb - 12, gp, gb + 12, gp, color = color.new(cTrUp, isMainG ? 0 : 65), width = isMainG and gok ? 2 : 1))
+                    if isMainG
+                        array.push(LBS, label.new(gb, gp, gok ? "слом ↑" : "слом ↑ ?", style = label.style_label_up, color = color.new(color.black, 100), textcolor = cTrUp, size = size.tiny, tooltip = "ЗЕЛЁНЫЙ СЛОМ — слом нисходящей структуры на " + str.tostring(gp, format.mintick) + ".\nЦена от нуля перебила эту вершину и сделала HH.\n" + (gok ? "ПОДТВЕРЖДЁН правилом «" + trBrk + "»." : "НЕ подтверждён правилом «" + trBrk + "».") + "\nСлой: " + (lg == 0 ? "5/5" : lg == 1 ? "3/3" : "2/2") + "\n\nНисходящий тренд движком НЕ считается — это отметка факта, а не состояние."))
 
     // ── ТАБЛО: три колонки, по одной на слой ──
     if trOn5 and trTbl
