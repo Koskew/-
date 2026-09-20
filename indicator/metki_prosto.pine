@@ -243,7 +243,18 @@ var int[]    tBB2 = array.new_int(3, -1)       // бар зелёного сло
 var bool[]   tBOK = array.new_bool(3, false)   // подтверждён ли
 var int[]    tBAB = array.new_int(3, 0)        // закрытий подряд выше
 
-var table TBL = table.new(position.top_right, 4, 8, border_width = 1, frame_width = 1, frame_color = color.new(color.gray, 60), border_color = color.new(color.gray, 80))
+// ══════════════ СПРАВОЧНИК ПОСЛЕДОВАТЕЛЬНОСТЕЙ ══════════════
+// Перепись 9 лет часовика, research/spisok.py. Низы в восходящем всегда
+// HL — иначе это не восходящий, — поэтому свободны только вершины и
+// вариантов ровно восемь. Ноль пишется первым: LL у рождения, HL у
+// продолжения. Индикатор НЕ предсказывает: он узнаёт форму и называет
+// её номером, как шаблон триггерной свечи.
+var string[] PAT = array.from("LH·HL·HH·HL·HH","LH·HL·HH·HL·LH","HH·HL·HH·HL·HH","HH·HL·HH·HL·LH","HH·HL·LH·HL·HH","LH·HL·LH·HL·HH","HH·HL·LH·HL·LH","LH·HL·LH·HL·LH")
+var string[] PNM = array.from("П1","П5","П6","П12","П16","П20","П25","П29")
+// сколько раз встретилось за 9 лет: [рождения 5/5, 3/3, 2/2, продолжения 5/5, 3/3, 2/2]
+var int[] PFR = array.from(99,74,58,44,30,28,13,2, 134,95,97,65,69,39,31,12, 187,114,127,104,94,63,37,26, 9,3,16,18,8,0,5,0, 10,9,23,20,17,2,5,1, 14,10,35,22,18,3,4,1)
+
+var table TBL = table.new(position.top_right, 4, 9, border_width = 1, frame_width = 1, frame_color = color.new(color.gray, 60), border_color = color.new(color.gray, 80))
 
 // последний зелёный слом слоя _i в истории, -1 если нет
 f_lastG(_i) =>
@@ -255,6 +266,41 @@ f_lastG(_i) =>
                 r := k
                 break
     r
+
+// Текущая последовательность слоя _i: подпись нуля и хвост от (1).
+// Возвращает [подпись нуля, хвост, сколько точек в хвосте]
+f_seqNow(_P, _B, _H, _L, _i) =>
+    string zlab = ""
+    string tail = ""
+    int np = 0
+    if array.get(tTR, _i) == 1 and array.get(tZB, _i) >= 0
+        n = array.size(_P)
+        int zi = -1
+        if n > 0
+            for k = 0 to n - 1
+                if array.get(_B, k) >= array.get(tZB, _i)
+                    zi := k
+                    break
+        if zi >= 0
+            zlab := array.get(_L, zi)
+            int last = math.min(zi + 5, n - 1)
+            if last >= zi + 1
+                for k = zi + 1 to last
+                    tail := tail + (np == 0 ? "" : "·") + array.get(_L, k)
+                    np += 1
+    [zlab, tail, np]
+
+// Сколько эталонов ещё подходят под этот хвост и как они называются
+f_match(_tail) =>
+    int cnt = 0
+    int idx = -1
+    string nms = ""
+    for p = 0 to 7
+        if str.startswith(array.get(PAT, p), _tail)
+            cnt += 1
+            idx := p
+            nms := nms + (cnt == 1 ? "" : "/") + array.get(PNM, p)
+    [cnt, idx, nms]
 
 // Один шаг движка для слоя _i. Вся логика та же, что была у 5/5, просто
 // состояние читается и пишется по индексу слоя.
@@ -925,6 +971,11 @@ if barstate.islast
 
     // ── ТАБЛО: три колонки, по одной на слой ──
     if trOn5 and trTbl
+        // строки последовательностей считаем ДО цикла: пайн не умеет
+        // тернарник, возвращающий кортеж
+        [zlA, tlA, npA] = f_seqNow(P5, B5, H5, L5, 0)
+        [zlB, tlB, npB] = f_seqNow(P3, B3, H3, L3, 1)
+        [zlC, tlC, npC] = f_seqNow(P2, B2, H2, L2, 2)
         table.cell(TBL, 0, 0, "восходящий", text_color = color.gray, text_size = size.tiny)
         for c = 0 to 2
             nm = c == 0 ? "5/5" : c == 1 ? "3/3" : "2/2"
@@ -943,6 +994,16 @@ if barstate.islast
             table.cell(TBL, c + 1, 6, up and array.get(tZB, c) >= 0 ? str.tostring(last_bar_index - array.get(tZB, c)) : "—", text_color = color.gray, text_size = size.tiny)
             db = array.get(tDB, c)
             table.cell(TBL, c + 1, 7, db < 0 ? "—" : str.tostring(last_bar_index - db) + " / " + str.tostring(array.get(tDP, c), format.mintick), text_color = db < 0 ? color.gray : cTrDie, text_size = size.tiny)
+            // ── последовательность: узнаём форму и называем номером ──
+            zl = c == 0 ? zlA : c == 1 ? zlB : zlC
+            tl = c == 0 ? tlA : c == 1 ? tlB : tlC
+            np = c == 0 ? npA : c == 1 ? npB : npC
+            [mc, mi, mn] = f_match(tl)
+            bool rojd = zl == "LL"
+            int fr = mi >= 0 and np >= 5 ? array.get(PFR, mi + 8 * c + (rojd ? 0 : 24)) : -1
+            string cell = not up ? "—" : np < 5 ? (mc <= 3 ? mn : str.tostring(mc) + " вар.") : mn
+            string tip = not up ? "Тренда нет." : "Слой " + nm + ", " + (rojd ? "РОЖДЕНИЕ, ноль LL" : "ПРОДОЛЖЕНИЕ, ноль HL") + "\n\nсейчас на графике:  " + zl + (np > 0 ? "·" + tl : "") + "\n" + (np < 5 ? "счёт не дошёл до (5): подходят ещё " + str.tostring(mc) + " из 8 — " + mn : "это " + mn + ", за 9 лет часовика встретилась " + str.tostring(fr) + " раз") + "\n\nИндикатор ничего не предсказывает. Он узнаёт форму и называет её номером, как шаблон триггерной свечи."
+            table.cell(TBL, c + 1, 8, cell, text_color = up ? (np >= 5 ? cTrUp : color.gray) : color.gray, text_size = size.tiny, tooltip = tip)
         table.cell(TBL, 0, 1, "состояние", text_color = color.gray, text_size = size.tiny)
         table.cell(TBL, 0, 2, "счёт", text_color = color.gray, text_size = size.tiny)
         table.cell(TBL, 0, 3, "уровень", text_color = color.gray, text_size = size.tiny)
@@ -950,6 +1011,7 @@ if barstate.islast
         table.cell(TBL, 0, 5, "закр. ниже", text_color = color.gray, text_size = size.tiny)
         table.cell(TBL, 0, 6, "баров от (0)", text_color = color.gray, text_size = size.tiny)
         table.cell(TBL, 0, 7, "прошлый слом", text_color = color.gray, text_size = size.tiny)
+        table.cell(TBL, 0, 8, "посл-ть", text_color = color.gray, text_size = size.tiny, tooltip = "Номер последовательности из справочника на девяти годах часовика.\n\nВосходящий всегда начинается с LL — это ноль (0). Низы в нём всегда HL, иначе это не восходящий. Поэтому свободны только вершины, и вариантов ровно восемь.\n\nПока счёт не дошёл до (5), показано, сколько эталонов ещё подходят. Дошёл — показан номер, в подсказке колонки написано, сколько раз он встречался.\n\nПродолжение отличается нулём: у него он HL, а не LL, и свои частоты.")
 
     if on3
         if lvOn
