@@ -278,7 +278,11 @@ f_seqNow(_P, _B, _H, _L, _i) =>
         int zi = -1
         if n > 0
             for k = 0 to n - 1
-                if array.get(_B, k) >= array.get(tZB, _i)
+                // ноль ищется не только по бару, но и ПО СТОРОНЕ. Он всегда
+                // НИЗ: LL при рождении, HL при продолжении. Большая свеча
+                // умеет сделать и вершину, и низ сразу — тогда два колена
+                // сидят на одном баре, и поиск «по бару» хватал вершину
+                if array.get(_B, k) >= array.get(tZB, _i) and not array.get(_H, k)
                     zi := k
                     break
         if zi >= 0
@@ -684,18 +688,27 @@ f_subTail(_sB, _sH, _x1, _s1) =>
 
 f_draw(_P, _B, _H, _L, _M, _fP, _fB, _fH, _fL, _fV, _gP, _gB, _gH, _gL, _gV, _hasF, _cHi, _cLo, _tag, _lab, _labK, _tzB, _tpzB, _ttr, _bok) =>
     n = array.size(_P)
-    // колено-ноль действующего счёта: первое, чей бар не раньше нуля
+    // колено-ноль действующего счёта: первый НИЗ, чей бар не раньше нуля.
+    //
+    // Сторона здесь обязательна. Ноль всегда низ — LL при рождении, HL при
+    // продолжении, — а большая свеча умеет сделать и вершину, и низ сразу:
+    // 6 янв 2026, 07:00 на 2/2 колена 4474.265 и 4449.510 сели на один бар.
+    // Поиск «по бару» хватал вершину, и весь счёт на экране съезжал на
+    // единицу: на графике (5), в таблице (4). За два года часовика такая
+    // свеча-накрышка встречается 49 раз на 2565 колен 2/2 (1.9%), 21 на
+    // 1827 у 3/3, 5 на 1221 у 5/5
     int zi = -1
     if _ttr == 1 and _tzB >= 0 and n > 0
         for i = 0 to n - 1
-            if array.get(_B, i) >= _tzB
+            if array.get(_B, i) >= _tzB and not array.get(_H, i)
                 zi := i
                 break
-    // ноль ПРОШЛОГО счёта: его номера и ноги остаются, но бледными
+    // ноль ПРОШЛОГО счёта: его номера и ноги остаются, но бледными. Он
+    // тоже всегда низ, поэтому ищется так же
     int pzi = -1
     if _ttr == 1 and _tpzB >= 0 and n > 0
         for i = 0 to n - 1
-            if array.get(_B, i) >= _tpzB
+            if array.get(_B, i) >= _tpzB and not array.get(_H, i)
                 pzi := i
                 break
     if n >= 2
@@ -728,6 +741,17 @@ f_draw(_P, _B, _H, _L, _M, _fP, _fB, _fH, _fL, _fV, _gP, _gB, _gH, _gL, _gV, _ha
                 // ломается, но нога (4)-(5) с такой вершиной рисуется
                 // ШТРИХ-ПУНКТИРОМ — зелёным, цвет не меняется
                 bool weak5 = (inCnt and i - zi == 5 or inPrv and i - pzi == 5) and array.get(_L, i) == "LH"
+                // 22.09.2026, слово владельца: то же правило на ЛЮБУЮ
+                // встречную подпись в счёте, «чтобы глаз видел — восходящий,
+                // но через манипуляцию». Идеал: вершина HH, низ HL. Ноль не
+                // проверяется, у него законны и LL, и HL. Счёт не ломается,
+                // цвет остаётся зелёным, меняется только стиль ноги.
+                //
+                // Штрих-пунктир занят дорисовкой, и теперь им рисуются две
+                // разные вещи. Отличать на глаз: у дорисовки на пунктире
+                // стоят метки с точкой спереди (·LH, ·HL), у манипуляции их нет
+                int kLeg = inCnt ? i - zi : inPrv ? i - pzi : -1
+                bool manip = kLeg >= 1 and (array.get(_H, i) ? array.get(_L, i) != "HH" : array.get(_L, i) != "HL")
                 // пока зелёный слом не подтверждён, нога счёта ТОНКАЯ.
                 // Штрих-пунктир для этого не берём: он занят дорисовкой
                 int wCnt = inCnt ? (_bok ? zzW + 1 : zzW) : zzW
@@ -751,7 +775,7 @@ f_draw(_P, _B, _H, _L, _M, _fP, _fB, _fH, _fL, _fV, _gP, _gB, _gH, _gL, _gV, _ha
                         cend = inCnt or inPrv ? col0 : (p2 > pp ? _cHi : _cLo)
                         array.push(LNS, line.new(px, pp, x2, p2, color = color.new(cend, inCnt ? 0 : 15), width = wCnt, style = line.style_dashed))
                     else
-                        array.push(LNS, line.new(x1, p1, x2, p2, color = color.new(col0, inCnt ? 0 : 55), width = wCnt, style = weak5 ? line.style_dashed : line.style_solid))
+                        array.push(LNS, line.new(x1, p1, x2, p2, color = color.new(col0, inCnt ? 0 : 55), width = wCnt, style = weak5 or manip ? line.style_dashed : line.style_solid))
                 if _lab
                     if filled and not _labK
                         for q = 0 to nk - 1
@@ -787,7 +811,7 @@ f_draw(_P, _B, _H, _L, _M, _fP, _fB, _fH, _fL, _fV, _gP, _gB, _gH, _gL, _gV, _ha
                     bool ideal = kk3 < 0 ? false : hi ? lb == "HH" : (kk3 == 0 ? lb == "LL" or lb == "HL" : lb == "HL")
                     txt = kk3 >= 0 and trNum ? "(" + str.tostring(kk3) + ") " + lb : lb
                     col1 = k >= 0 ? cTrUp : pk >= 0 ? color.new(cTrUp, 55) : (hi ? _cHi : _cLo)
-                    tipK = kk3 < 0 ? "" : "\nточка (" + str.tostring(kk3) + ") из 5 · " + (ideal ? "подпись идеальная" : "подпись встречная — МАНИПУЛЯЦИЯ, счёт продолжается") + (pk >= 0 ? "\nПРОШЛЫЙ счёт. Он дошёл до (5), после чего пришёл HL и начался новый счёт с нуля на нём." : "") + (k == 0 and _tpzB >= 0 ? "\nНОВЫЙ счёт: это первый HL после (5) прошлого счёта. Тренд не умирал, он продолжается." : "")
+                    tipK = kk3 < 0 ? "" : "\nточка (" + str.tostring(kk3) + ") из 5 · " + (ideal ? "подпись идеальная" : "подпись встречная — МАНИПУЛЯЦИЯ, счёт продолжается, нога к ней нарисована штрих-пунктиром") + (pk >= 0 ? "\nПРОШЛЫЙ счёт. Он дошёл до (5), после чего пришёл HL и начался новый счёт с нуля на нём." : "") + (k == 0 and _tpzB >= 0 ? "\nНОВЫЙ счёт: это первый HL после (5) прошлого счёта. Тренд не умирал, он продолжается." : "")
                     if not _labK or kk3 >= 0
                         array.push(LBS, label.new(x2, p2, txt, style = hi ? label.style_label_down : label.style_label_up, color = color.new(color.black, 100), textcolor = col1, size = size.small, tooltip = "слой " + _tag + "   " + lb + "  " + str.tostring(p2, format.mintick) + "\n" + (hi ? "вершина" : "низ") + tipK + (mc >= 2 ? "\nслилось сырых меток: " + str.tostring(mc) : "")))
 
