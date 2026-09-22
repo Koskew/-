@@ -80,6 +80,15 @@ c2H = input.color(#7e57c2, "2/2  вершина / низ", inline = "c2", group 
 c2L = input.color(#4fc3f7, "",                   inline = "c2", group = gC)
 zzW = input.int(1, "Толщина зиг-зага", minval = 1, maxval = 4, group = gC)
 
+gS = "⑥ Сломы"
+slOn   = input.bool(true, "Считать сломы", group = gS, tooltip = "Слом — цена взяла ближайший НЕПРОБИТЫЙ пивот слоя. Это тот самый момент, когда живой уровень из ② перестаёт быть живым: механизм работал с самого начала, его просто не считали и не называли.\n\nКолено становится известно задним числом: на 2/2 через два бара, на 5/5 через пять. Слом известен ЗАРАНЕЕ — цена, которую надо пробить, уже нарисована на графике.\n\nЗамер Н14 на девяти годах часовика: сломы НЕ независимы, они слипаются. После серии в одну сторону следующий идёт туда же чаще собственной базовой доли на 7-20 процентных пунктов. Тридцать клеток, все положительные, знак держится в обеих половинах выборки, перемешанный контроль садится в ноль.\n\nСчитаются все четыре метки — HH, LH, HL, LL. Слом засчитывается по КАСАНИЮ: хватает тени. Замер сделан по тому же правилу, поэтому частоты в табло относятся именно к касанию.")
+slLine = input.bool(true, "Линии ближайших сломов", group = gS, tooltip = "Ближайший непробитый уровень сверху и снизу рисуется толще остальных и получает подпись с ценой и расстоянием в процентах. Это две цены, между которыми сейчас находится рынок, и обе видны заранее.\n\nОстальные живые уровни из ② остаются как были.")
+slNum  = input.bool(true, "Номера серии на графике", group = gS, tooltip = "На каждом сломе ТЕКУЩЕЙ серии встаёт метка с его номером: ↑1, ↑2, ↑3. Сменилось направление — счёт с единицы, метки прошлой серии стираются.\n\nПрошлые серии не рисуются намеренно: на 2/2 слом случается раз в 5.4 бара, и вся история в окне превратилась бы в кашу.")
+slTbl  = input.bool(true, "Блок сломов в табло", group = gS)
+slNoCap= input.bool(true, "Счёт без потолка", group = gS, tooltip = "У счёта по коленам потолок пять. У сломов серии доходят до 16-24, и потолок отрезал бы самые длинные десять процентов. Поэтому счёт растёт, сколько идёт.\n\nЧастота в табло для всего, что длиннее пяти, берётся из клетки «5 и больше».")
+cSlUp  = input.color(#26a69a, "Слом вверх / вниз", inline = "cs", group = gS)
+cSlDn  = input.color(#ef5350, "",                  inline = "cs", group = gS)
+
 MAXK = 100
 // «нуля счёта нет». Пайн не принимает na в параметр функции, у которого
 // тип выводится из вызова, — ни голый, ни через int-переменную. Поэтому
@@ -254,7 +263,7 @@ var string[] PNM = array.from("П1","П5","П6","П12","П16","П20","П25","П2
 // сколько раз встретилось за 9 лет: [рождения 5/5, 3/3, 2/2, продолжения 5/5, 3/3, 2/2]
 var int[] PFR = array.from(99,74,58,44,30,28,13,2, 134,95,97,65,69,39,31,12, 187,114,127,104,94,63,37,26, 9,3,16,18,8,0,5,0, 10,9,23,20,17,2,5,1, 14,10,35,22,18,3,4,1)
 
-var table TBL = table.new(position.top_right, 4, 9, border_width = 1, frame_width = 1, frame_color = color.new(color.gray, 60), border_color = color.new(color.gray, 80))
+var table TBL = table.new(position.top_right, 4, 14, border_width = 1, frame_width = 1, frame_color = color.new(color.gray, 60), border_color = color.new(color.gray, 80))
 
 // последний зелёный слом слоя _i в истории, -1 если нет
 f_lastG(_i) =>
@@ -556,6 +565,119 @@ f_alive(_p, _v) =>
                 break
     r
 
+// ══════════════ СЧЁТ ПО СЛОМАМ ══════════════
+// Идея владельца 22.09.2026: «что если счёт вести не по коленам, а по
+// сломам, чтобы понять как сейчас и как будет».
+//
+// Слом = цена взяла ближайший НЕПРОБИТЫЙ пивот слоя. Своего механизма
+// это не требует: живые уровни выше уже так и устроены — пивот лежит в
+// списке, цена коснулась, уровень вычёркивается навсегда. Момент
+// вычёркивания и есть слом.
+//
+// Почему это сильнее колена: колено известно ЗАДНИМ ЧИСЛОМ, на 2/2
+// через два бара, на 5/5 через пять. Слом известен ЗАРАНЕЕ — цена, до
+// которой надо дойти, уже стоит на графике.
+//
+// Замер Н14, девять лет часовика, 52 518 баров. Из трёх значений слова
+// «слом» в основу счёта годится только это: у слома по уровню тренда и
+// по структуре серия почти всегда равна единице, они чередуются по
+// построению. У слома по экстремуму серия: медиана 2, девять десятых
+// до 5-6, максимум 16-24.
+//
+// И главное: сломы НЕ независимы, они слипаются.
+var int[]   sDIR = array.new_int(3, 0)        // сторона серии: +1 вверх, -1 вниз, 0 нет
+var int[]   sRUN = array.new_int(3, 0)        // сколько сломов подряд
+var int[]   sLB  = array.new_int(3, -1)       // бар последнего слома
+var float[] sLP  = array.new_float(3, na)     // его цена
+// метки ТЕКУЩЕЙ серии, плоскими списками: бар, цена, слой, номер
+var int[]   SB = array.new_int()
+var float[] SP = array.new_float()
+var int[]   SL = array.new_int()
+var int[]   SN = array.new_int()
+
+// Н14: доля случаев, когда следующий слом пошёл в ТУ ЖЕ сторону.
+// Порядок: слой 5/5, 3/3, 2/2 × сторона вверх, вниз × длина серии 1..5,
+// где пятая клетка значит «пять и больше». Девять лет часовика.
+var float[] SFQ = array.from(62.6, 65.5, 71.0, 66.1, 66.4,   57.8, 67.9, 63.6, 63.8, 60.0, 62.6, 59.4, 63.8, 67.7, 68.4,   56.2, 61.8, 64.8, 65.4, 60.6, 61.4, 62.3, 59.1, 64.4, 65.5,   56.8, 59.2, 63.1, 61.6, 62.1)
+// размеры выборок к тем же клеткам
+var int[]   SFN = array.from(842, 527, 345, 245, 479,   841, 486, 330, 210, 335, 1360, 852, 505, 322, 690,   1359, 764, 472, 306, 507, 1893, 1163, 724, 427, 798,   1892, 1074, 636, 401, 651)
+// базовая доля сломов вверх по слоям — против неё и считается надбавка
+var float[] SFB = array.from(52.6, 52.3, 51.8)
+
+// один слом слоя _i: двигает серию, кладёт метку
+f_slomOne(_i, _dir, _price) =>
+    if array.get(sDIR, _i) != _dir
+        // сменилось направление: метки прошлой серии стираем
+        int k = 0
+        while k < array.size(SL)
+            if array.get(SL, k) == _i
+                array.remove(SB, k)
+                array.remove(SP, k)
+                array.remove(SL, k)
+                array.remove(SN, k)
+            else
+                k += 1
+        array.set(sDIR, _i, _dir)
+        array.set(sRUN, _i, 1)
+    else
+        // потолка у счёта по сломам нет по умолчанию: за девять лет серии
+        // доходили до 16-24, и потолок на пяти отрезал бы самые длинные
+        // десять процентов. Снять галочку — счёт встанет на пяти, как у колен
+        if slNoCap or array.get(sRUN, _i) < 5
+            array.set(sRUN, _i, array.get(sRUN, _i) + 1)
+    array.set(sLB, _i, bar_index)
+    array.set(sLP, _i, _price)
+    array.push(SB, bar_index)
+    array.push(SP, _price)
+    array.push(SL, _i)
+    array.push(SN, array.get(sRUN, _i))
+    if array.size(SB) > MAXSL
+        array.shift(SB)
+        array.shift(SP)
+        array.shift(SL)
+        array.shift(SN)
+    0
+
+// Ищет сломы этого бара по живым уровням слоя. Берётся БЛИЖАЙШИЙ
+// пробитый с каждой стороны. Вызывается ДО того, как в список попадут
+// уровни текущего бара, — ровно так считалось в замере Н14.
+f_slom(_i, _p, _h) =>
+    if slOn
+        n = array.size(_p)
+        float bu = na
+        float bd = na
+        if n > 0
+            for k = 0 to n - 1
+                pr = array.get(_p, k)
+                if array.get(_h, k)
+                    if high >= pr
+                        bu := na(bu) ? pr : math.min(bu, pr)
+                else
+                    if low <= pr
+                        bd := na(bd) ? pr : math.max(bd, pr)
+        if not na(bu)
+            z1 = f_slomOne(_i, 1, bu)
+        if not na(bd)
+            z2 = f_slomOne(_i, -1, bd)
+    0
+
+// ближайший НЕПРОБИТЫЙ уровень слоя сверху и снизу от цены — это и есть
+// две цены, на которых случится следующий слом
+f_nearest(_p, _h) =>
+    float up = na
+    float dn = na
+    n = array.size(_p)
+    if n > 0
+        for k = 0 to n - 1
+            pr = array.get(_p, k)
+            if array.get(_h, k)
+                if pr > close
+                    up := na(up) ? pr : math.min(up, pr)
+            else
+                if pr < close
+                    dn := na(dn) ? pr : math.max(dn, pr)
+    [up, dn]
+
 // подпись сырого пивота: сравнение с предыдущим пивотом той же стороны
 a51 = ta.valuewhen(not na(ph5), high[5], 1)
 a52 = ta.valuewhen(not na(ph5), high[5], 0)
@@ -583,6 +705,11 @@ a23 = ta.valuewhen(not na(pl2), low[2], 1)
 a24 = ta.valuewhen(not na(pl2), low[2], 0)
 ll2 = na(pl2) ? na : a23 > a24 ? pl2 : na
 hl2 = na(pl2) ? na : a23 < a24 ? pl2 : na
+
+// сломы ищутся ПО ПРОШЛЫМ уровням, до того как добавятся сегодняшние
+s01 = f_slom(0, V5P, V5H)
+s02 = f_slom(1, V3P, V3H)
+s03 = f_slom(2, V2P, V2H)
 
 u01 = f_lvPush(V5P, V5B, V5H, V5L, hh5, 5, true,  "HH")
 u02 = f_lvPush(V5P, V5B, V5H, V5L, lh5, 5, true,  "LH")
@@ -1011,6 +1138,37 @@ if barstate.islast
                     if isMainG
                         array.push(LBS, label.new(gb, gp, gok ? "слом ↑" : "слом ↑ ?", style = label.style_label_up, color = color.new(color.black, 100), textcolor = cTrUp, size = size.tiny, tooltip = "ЗЕЛЁНЫЙ СЛОМ — слом нисходящей структуры на " + str.tostring(gp, format.mintick) + ".\nЦена от нуля перебила эту вершину и сделала HH.\n" + (gok ? "ПОДТВЕРЖДЁН правилом «" + trBrk + "»." : "НЕ подтверждён правилом «" + trBrk + "».") + "\nСлой: " + (lg == 0 ? "5/5" : lg == 1 ? "3/3" : "2/2") + "\n\nНисходящий тренд движком НЕ считается — это отметка факта, а не состояние."))
 
+    // ── СЛОМЫ: две цены впереди и номера текущей серии ──
+    // Линии рисуются только по ОСНОВНОМУ слою — тому, что выбран в ①.
+    // Считаются сломы по всем трём, их видно в табло
+    // ближайшие непробитые уровни считаем ОДИН раз на все три слоя:
+    // пайн не умеет ни тернарник по массивам, ни разбор кортежа в цикле
+    [u5n, d5n] = f_nearest(V5P, V5H)
+    [u3n, d3n] = f_nearest(V3P, V3H)
+    [u2n, d2n] = f_nearest(V2P, V2H)
+    if slOn and mainL >= 0
+        float mUp = mainL == 0 ? u5n : mainL == 1 ? u3n : u2n
+        float mDn = mainL == 0 ? d5n : mainL == 1 ? d3n : d2n
+        string mNm = mainL == 0 ? "5/5" : mainL == 1 ? "3/3" : "2/2"
+        if slLine
+            if not na(mUp)
+                array.push(LNS, line.new(bar_index - 60, mUp, bar_index, mUp, color = cSlUp, width = 2, extend = extend.right))
+                array.push(LBS, label.new(bar_index, mUp, "слом ↑ " + str.tostring(mUp, format.mintick) + "   " + str.tostring(100 * (mUp - close) / close, "#.##") + "%", style = label.style_label_left, color = color.new(color.black, 100), textcolor = cSlUp, size = size.small, tooltip = "Ближайший НЕПРОБИТЫЙ уровень слоя " + mNm + " сверху.\nДойдёт сюда цена — будет слом вверх.\n\nЭта цена известна ЗАРАНЕЕ, в отличие от колена: колено становится видно только через " + (mainL == 0 ? "пять" : mainL == 1 ? "три" : "два") + " бара после того, как оно случилось.\n\nСлом засчитывается по КАСАНИЮ — хватает тени."))
+            if not na(mDn)
+                array.push(LNS, line.new(bar_index - 60, mDn, bar_index, mDn, color = cSlDn, width = 2, extend = extend.right))
+                array.push(LBS, label.new(bar_index, mDn, "слом ↓ " + str.tostring(mDn, format.mintick) + "   " + str.tostring(100 * (close - mDn) / close, "#.##") + "%", style = label.style_label_left, color = color.new(color.black, 100), textcolor = cSlDn, size = size.small, tooltip = "Ближайший НЕПРОБИТЫЙ уровень слоя " + mNm + " снизу.\nДойдёт сюда цена — будет слом вниз.\n\nЭта цена известна ЗАРАНЕЕ, в отличие от колена.\n\nСлом засчитывается по КАСАНИЮ — хватает тени."))
+        if slNum
+            int dirM = array.get(sDIR, mainL)
+            nS = array.size(SB)
+            if nS > 0
+                for k = 0 to nS - 1
+                    if array.get(SL, k) == mainL
+                        sb = array.get(SB, k)
+                        if last_bar_index - sb <= winBars
+                            sp = array.get(SP, k)
+                            sn = array.get(SN, k)
+                            array.push(LBS, label.new(sb, sp, (dirM > 0 ? "↑" : "↓") + str.tostring(sn), style = dirM > 0 ? label.style_label_down : label.style_label_up, color = color.new(color.black, 100), textcolor = dirM > 0 ? cSlUp : cSlDn, size = size.tiny, tooltip = "Слом " + (dirM > 0 ? "ВВЕРХ" : "ВНИЗ") + " номер " + str.tostring(sn) + " в текущей серии.\nЦена взяла непробитый уровень " + str.tostring(sp, format.mintick) + " слоя " + mNm + ".\n\nПоказывается только ТЕКУЩАЯ серия. Сменится направление — эти метки уйдут и счёт начнётся с единицы."))
+
     // ── ТАБЛО: три колонки, по одной на слой ──
     if trOn5 and trTbl
         // строки последовательностей считаем ДО цикла: пайн не умеет
@@ -1054,6 +1212,38 @@ if barstate.islast
         table.cell(TBL, 0, 6, "баров от (0)", text_color = color.gray, text_size = size.tiny)
         table.cell(TBL, 0, 7, "прошлый слом", text_color = color.gray, text_size = size.tiny)
         table.cell(TBL, 0, 8, "посл-ть", text_color = color.gray, text_size = size.tiny, tooltip = "Номер последовательности из справочника на девяти годах часовика.\n\nВосходящий всегда начинается с LL — это ноль (0). Низы в нём всегда HL, иначе это не восходящий. Поэтому свободны только вершины, и вариантов ровно восемь.\n\nПока счёт не дошёл до (5), показано, сколько эталонов ещё подходят. Дошёл — показан номер, в подсказке колонки написано, сколько раз он встречался.\n\nПродолжение отличается нулём: у него он HL, а не LL, и свои частоты.")
+
+    // ── СЛОМЫ В ТАБЛО: пять строк под существующими ──
+    // Существующие строки не трогаются, блок встаёт ниже
+    if slOn and slTbl
+        table.cell(TBL, 0, 9,  "сломов подряд", text_color = color.gray, text_size = size.tiny, tooltip = "Сколько сломов подряд ушло в одну сторону. Слом — цена взяла ближайший непробитый пивот слоя, по касанию.\n\nПотолка у этого счёта нет: за девять лет серии доходили до 16-24 сломов, и потолок на пяти отрезал бы самые длинные десять процентов.")
+        table.cell(TBL, 0, 10, "последний слом", text_color = color.gray, text_size = size.tiny)
+        table.cell(TBL, 0, 11, "до слома ↑", text_color = color.gray, text_size = size.tiny, tooltip = "Ближайший непробитый уровень сверху и расстояние до него в процентах от цены. За девять лет медиана этого расстояния: 0.61% на 5/5, 0.48% на 3/3, 0.40% на 2/2.")
+        table.cell(TBL, 0, 12, "до слома ↓", text_color = color.gray, text_size = size.tiny, tooltip = "Ближайший непробитый уровень снизу. Медиана за девять лет: 0.67% на 5/5, 0.53% на 3/3, 0.44% на 2/2.")
+        table.cell(TBL, 0, 13, "раньше шло туда же", text_color = color.gray, text_size = size.tiny, tooltip = "Замер Н14, девять лет часовика. Доля случаев, когда после такой же серии следующий слом уходил В ТУ ЖЕ сторону.\n\nВ скобках — размер выборки и надбавка к собственной базовой доле сломов вверх по этому слою. Надбавка считается не от 50%: на растущем золоте без этой поправки цифра говорила бы про рост, а не про сломы.\n\nТридцать клеток замера, все положительные, знак держится в обеих половинах выборки, перемешанный контроль садится в ноль.\n\nЭто НЕ предсказание. Это частота, снятая с истории, — как шаблон триггерной свечи.")
+        for c = 0 to 2
+            int dr = array.get(sDIR, c)
+            int rn = array.get(sRUN, c)
+            color cS = dr > 0 ? cSlUp : dr < 0 ? cSlDn : color.gray
+            table.cell(TBL, c + 1, 9, dr == 0 ? "—" : (dr > 0 ? "↑" : "↓") + str.tostring(rn), text_color = cS, text_size = size.tiny)
+            int lb2 = array.get(sLB, c)
+            table.cell(TBL, c + 1, 10, lb2 < 0 ? "—" : str.tostring(last_bar_index - lb2) + " / " + str.tostring(array.get(sLP, c), format.mintick), text_color = color.gray, text_size = size.tiny)
+            float uN = c == 0 ? u5n : c == 1 ? u3n : u2n
+            float dN = c == 0 ? d5n : c == 1 ? d3n : d2n
+            table.cell(TBL, c + 1, 11, na(uN) ? "—" : str.tostring(uN, format.mintick) + "  " + str.tostring(100 * (uN - close) / close, "#.##") + "%", text_color = cSlUp, text_size = size.tiny)
+            table.cell(TBL, c + 1, 12, na(dN) ? "—" : str.tostring(dN, format.mintick) + "  " + str.tostring(100 * (close - dN) / close, "#.##") + "%", text_color = cSlDn, text_size = size.tiny)
+            // частота из замера: клетка «5 и больше» для всего, что длиннее пяти
+            string fcell = "—"
+            string ftip  = "Серии ещё нет."
+            if dr != 0 and rn > 0
+                int rk = rn > 5 ? 5 : rn
+                int fi = c * 10 + (dr > 0 ? 0 : 5) + rk - 1
+                float fq = array.get(SFQ, fi)
+                int fn = array.get(SFN, fi)
+                float bs = dr > 0 ? array.get(SFB, c) : 100 - array.get(SFB, c)
+                fcell := str.tostring(fq, "#.#") + "%"
+                ftip  := "После " + str.tostring(rk) + (rn > 5 ? " и более" : "") + " сломов подряд " + (dr > 0 ? "вверх" : "вниз") + " следующий уходил туда же в " + str.tostring(fq, "#.#") + "% случаев.\nВыборка: " + str.tostring(fn) + " случаев.\nБазовая доля по слою: " + str.tostring(bs, "#.#") + "%.\nНадбавка: " + (fq - bs >= 0 ? "+" : "") + str.tostring(fq - bs, "#.#") + " процентных пункта."
+            table.cell(TBL, c + 1, 13, fcell, text_color = cS, text_size = size.tiny, tooltip = ftip)
 
     if on3
         if lvOn
