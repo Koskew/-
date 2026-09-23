@@ -41,9 +41,11 @@ OUT = 'research/out/vstrechnaya_9y.csv'
 AHEAD = (1, 2, 3)
 
 
-def progon(rows, d):
-    """Возвращает события колен живого тренда и бары смерти."""
-    at = pivots_d(rows, d)
+def progon(rows, d, flip=False):
+    """События колен живого тренда. rows — ВСЕГДА настоящие свечи;
+    flip=True считает нисходящий. Порядок событий внутри бара из events()."""
+    at = events(rows, d, flip)
+    sg = -1.0 if flip else 1.0
     K, T = Knees(), Trend()
     ev = []          # (бар, id тренда, номер точки, флаг)
     live = []        # жив ли тренд на этом баре
@@ -56,7 +58,7 @@ def progon(rows, d):
             nw = K.push(price, bar, isHi) or nw
         fr = i in at
         tr0, cnt0, zb0 = T.tr, T.cnt, T.zb
-        T.step(i, o, c, K, nw, fr)
+        T.step(i, sg * o, sg * c, K, nw, fr)
         if T.tr == 1 and tr0 != 1:                 # рождение
             tid += 1
             flag = False
@@ -89,7 +91,7 @@ w.writerow(['слой', 'направление', 'точка счёта', 'фл
 
 for d, nm in ((5, '5/5'), (3, '3/3'), (2, '2/2')):
     evU, liveU, TU = progon(rows, d)
-    evD, liveD, TD = progon(flip, d)
+    evD, liveD, TD = progon(rows, d, True)
     for dirn, ev, own, opp in (('восходящий', evU, liveU, liveD),
                                ('нисходящий', evD, liveD, liveU)):
         # для каждого события — бары следующих колен того же тренда

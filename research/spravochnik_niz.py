@@ -38,9 +38,11 @@ PFR_IND = [99, 74, 58, 44, 30, 28, 13, 2,  134, 95, 97, 65, 69, 39, 31, 12,
            10, 9, 23, 20, 17, 2, 5, 1,  14, 10, 35, 22, 18, 3, 4, 1]
 
 
-def perepis(rows, d):
-    """Все колена слоя разом, без обрезки массива: это перепись, а не движок."""
-    at = pivots_d(rows, d)
+def perepis(rows, d, flip=False):
+    """Все колена слоя разом, без обрезки массива: это перепись, а не движок.
+    rows — ВСЕГДА настоящие свечи; flip=True считает нисходящий. Порядок
+    событий внутри бара берётся из events() — см. ошибку 23.09.2026."""
+    at = events(rows, d, flip)
     P, B, H, L = [], [], [], []
 
     def relabel():
@@ -82,7 +84,7 @@ data = {}
 for d, nm in ((5, '5/5'), (3, '3/3'), (2, '2/2')):
     data[(nm, 'восходящий')] = perepis(rows, d)
     data[(nm, 'нисходящий')] = [(SW[z], tuple(SW[x] for x in s))
-                                for z, s in perepis(flip, d)]
+                                for z, s in perepis(rows, d, True)]
 
 os.makedirs('research/out', exist_ok=True)
 fh = open(OUT, 'w', newline='', encoding='utf-8')

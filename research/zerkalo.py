@@ -131,17 +131,39 @@ class Trend:
                         self.lvl = K.P[j]; self.lhl = (self.zl == 'HL'); self.bel = 0
 
 
-def run(rows, d):
+def events(rows, d, flip=False):
+    """Пивоты считаются по НАСТОЯЩИМ ценам и отдаются в НАСТОЯЩЕМ порядке:
+    сначала вершина, потом низ.
+
+    ОШИБКА, найденная 23.09.2026. Раньше нисходящий считался так: сначала
+    переворачивались свечи, потом по ним искались пивоты. Тогда внутри
+    бара первой шла перевёрнутая ВЕРШИНА, то есть настоящий НИЗ, — порядок
+    оказывался обратным тому, что делает metki_prosto.pine.
+
+    Зеркало меняет знак цены и стороны, но НЕ переставляет события во
+    времени. Пайн прав, реплика врала. Видно только на барах, где вершина
+    и низ подтверждаются одновременно: 1.9% колен на 2/2, 1.1% на 3/3,
+    0.4% на 5/5. Но каждое расхождение меняет цепочку подписей дальше."""
     at = pivots_d(rows, d)
+    if not flip:
+        return at
+    return {i: [(bar, -price, not isHi) for bar, price, isHi in ev]
+            for i, ev in at.items()}
+
+
+def run(rows, d, flip=False):
+    """rows — ВСЕГДА настоящие свечи. flip=True считает нисходящий."""
+    at = events(rows, d, flip)
     K, T = Knees(), Trend()
     live = []
+    sg = -1.0 if flip else 1.0
     for i in range(len(rows)):
         _, o, h, l, c = rows[i]
         nw = False
         for bar, price, isHi in at.get(i, []):
             nw = K.push(price, bar, isHi) or nw
         fr = i in at
-        T.step(i, o, c, K, nw, fr)
+        T.step(i, sg * o, sg * c, K, nw, fr)
         live.append(T.tr == 1)
     if T.tr == 1:
         T.trends.append((T.born, len(rows) - 1, T.zl, T.mx, T.zp))
@@ -170,8 +192,8 @@ w.writerow(['направление', 'слой', 'рождение', 'смер�
 SW = {'LL': 'HH', 'HL': 'LH', 'HH': 'LL', 'LH': 'HL'}
 res = {}
 for d, nm in ((5, '5/5'), (3, '3/3'), (2, '2/2')):
-    for src, dirn in ((rows, 'восходящий'), (flip, 'нисходящий')):
-        T, live = run(src, d)
+    for fl, dirn in ((False, 'восходящий'), (True, 'нисходящий')):
+        T, live = run(rows, d, fl)
         res[(nm, dirn)] = (T, live)
         for b, e, zl, mx, zp in T.trends:
             z = zl if dirn == 'восходящий' else SW.get(zl, zl)
