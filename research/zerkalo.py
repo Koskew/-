@@ -179,63 +179,69 @@ def qq(v, f='%.0f'):
         v[0], g(.25), g(.50), g(.75), g(.90), v[-1])
 
 
-rows = load('data/XAUUSD_1h_9y.csv')
-flip = [(r[0], -r[1], -r[3], -r[2], -r[4]) for r in rows]   # максимум и минимум местами
-print('баров %d   с %s по %s' % (len(rows), rows[0][0][:10], rows[-1][0][:10]))
-print('настройки: глубина смерти 0.33 импульса, правило «имп × 0.33», ноль — ближайший назад, до 3 колен\n')
+def main():
+    rows = load('data/XAUUSD_1h_9y.csv')
+    flip = [(r[0], -r[1], -r[3], -r[2], -r[4]) for r in rows]   # максимум и минимум местами
+    print('баров %d   с %s по %s' % (len(rows), rows[0][0][:10], rows[-1][0][:10]))
+    print('настройки: глубина смерти 0.33 импульса, правило «имп × 0.33», ноль — ближайший назад, до 3 колен\n')
 
-os.makedirs('research/out', exist_ok=True)
-fh = open(OUT, 'w', newline='', encoding='utf-8')
-w = csv.writer(fh)
-w.writerow(['направление', 'слой', 'рождение', 'смерть', 'баров жил', 'ноль', 'докуда дошёл счёт'])
+    os.makedirs('research/out', exist_ok=True)
+    fh = open(OUT, 'w', newline='', encoding='utf-8')
+    w = csv.writer(fh)
+    w.writerow(['направление', 'слой', 'рождение', 'смерть', 'баров жил', 'ноль', 'докуда дошёл счёт'])
 
-SW = {'LL': 'HH', 'HL': 'LH', 'HH': 'LL', 'LH': 'HL'}
-res = {}
-for d, nm in ((5, '5/5'), (3, '3/3'), (2, '2/2')):
-    for fl, dirn in ((False, 'восходящий'), (True, 'нисходящий')):
-        T, live = run(rows, d, fl)
-        res[(nm, dirn)] = (T, live)
-        for b, e, zl, mx, zp in T.trends:
-            z = zl if dirn == 'восходящий' else SW.get(zl, zl)
-            w.writerow([dirn, nm, rows[b][0][:16], rows[e][0][:16], e - b, z, mx])
-fh.close()
+    SW = {'LL': 'HH', 'HL': 'LH', 'HH': 'LL', 'LH': 'HL'}
+    res = {}
+    for d, nm in ((5, '5/5'), (3, '3/3'), (2, '2/2')):
+        for fl, dirn in ((False, 'восходящий'), (True, 'нисходящий')):
+            T, live = run(rows, d, fl)
+            res[(nm, dirn)] = (T, live)
+            for b, e, zl, mx, zp in T.trends:
+                z = zl if dirn == 'восходящий' else SW.get(zl, zl)
+                w.writerow([dirn, nm, rows[b][0][:16], rows[e][0][:16], e - b, z, mx])
+    fh.close()
 
-for d, nm in ((5, '5/5'), (3, '3/3'), (2, '2/2')):
-    print('=' * 78)
-    print('СЛОЙ ' + nm)
-    for dirn in ('восходящий', 'нисходящий'):
-        T, live = res[(nm, dirn)]
-        tr = T.trends
-        lifes = [e - b for b, e, _, _, _ in tr]
-        rojd = sum(1 for t in tr if t[2] == 'LL')
-        prod = len(tr) - rojd
-        mxs = [t[3] for t in tr]
-        do5 = sum(1 for m in mxs if m >= 5)
-        print('  %s: трендов %4d   рождений %4d  продолжений %4d   дошли до (5) %4d (%.0f%%)'
-              % (dirn, len(tr), rojd, prod, do5, 100.0*do5/max(len(tr), 1)))
-        print('      жизнь, баров   ' + qq([float(x) for x in lifes]))
-        print('      докуда счёт    ' + '  '.join('(%d) %d' % (k, mxs.count(k)) for k in range(6)))
-        print('      баров под трендом %d из %d  (%.1f%%)' % (sum(live), len(rows), 100.0*sum(live)/len(rows)))
-    # покрытие
-    _, lu = res[(nm, 'восходящий')]
-    _, ld = res[(nm, 'нисходящий')]
-    both = sum(1 for a, b in zip(lu, ld) if a and b)
-    only_u = sum(1 for a, b in zip(lu, ld) if a and not b)
-    only_d = sum(1 for a, b in zip(lu, ld) if b and not a)
-    none = sum(1 for a, b in zip(lu, ld) if not a and not b)
-    N = len(rows)
-    print('  ПОКРЫТИЕ: только восх %.1f%%   только нисх %.1f%%   ОБА сразу %.1f%%   ни одного %.1f%%'
-          % (100.0*only_u/N, 100.0*only_d/N, 100.0*both/N, 100.0*none/N))
-    print('            хоть какой-то тренд %.1f%%  (один восходящий давал %.1f%%)'
-          % (100.0*(N-none)/N, 100.0*sum(lu)/N))
-    holes, run_ = [], 0
-    for a, b in zip(lu, ld):
-        if not a and not b:
-            run_ += 1
-        elif run_:
-            holes.append(float(run_)); run_ = 0
-    if run_:
-        holes.append(float(run_))
-    print('            дыр %d, длина в барах: %s' % (len(holes), qq(holes)))
-    print()
-print('построчно: ' + OUT)
+    for d, nm in ((5, '5/5'), (3, '3/3'), (2, '2/2')):
+        print('=' * 78)
+        print('СЛОЙ ' + nm)
+        for dirn in ('восходящий', 'нисходящий'):
+            T, live = res[(nm, dirn)]
+            tr = T.trends
+            lifes = [e - b for b, e, _, _, _ in tr]
+            rojd = sum(1 for t in tr if t[2] == 'LL')
+            prod = len(tr) - rojd
+            mxs = [t[3] for t in tr]
+            do5 = sum(1 for m in mxs if m >= 5)
+            print('  %s: трендов %4d   рождений %4d  продолжений %4d   дошли до (5) %4d (%.0f%%)'
+                  % (dirn, len(tr), rojd, prod, do5, 100.0*do5/max(len(tr), 1)))
+            print('      жизнь, баров   ' + qq([float(x) for x in lifes]))
+            print('      докуда счёт    ' + '  '.join('(%d) %d' % (k, mxs.count(k)) for k in range(6)))
+            print('      баров под трендом %d из %d  (%.1f%%)' % (sum(live), len(rows), 100.0*sum(live)/len(rows)))
+        # покрытие
+        _, lu = res[(nm, 'восходящий')]
+        _, ld = res[(nm, 'нисходящий')]
+        both = sum(1 for a, b in zip(lu, ld) if a and b)
+        only_u = sum(1 for a, b in zip(lu, ld) if a and not b)
+        only_d = sum(1 for a, b in zip(lu, ld) if b and not a)
+        none = sum(1 for a, b in zip(lu, ld) if not a and not b)
+        N = len(rows)
+        print('  ПОКРЫТИЕ: только восх %.1f%%   только нисх %.1f%%   ОБА сразу %.1f%%   ни одного %.1f%%'
+              % (100.0*only_u/N, 100.0*only_d/N, 100.0*both/N, 100.0*none/N))
+        print('            хоть какой-то тренд %.1f%%  (один восходящий давал %.1f%%)'
+              % (100.0*(N-none)/N, 100.0*sum(lu)/N))
+        holes, run_ = [], 0
+        for a, b in zip(lu, ld):
+            if not a and not b:
+                run_ += 1
+            elif run_:
+                holes.append(float(run_)); run_ = 0
+        if run_:
+            holes.append(float(run_))
+        print('            дыр %d, длина в барах: %s' % (len(holes), qq(holes)))
+        print()
+    print('построчно: ' + OUT)
+
+
+
+if __name__ == '__main__':
+    main()
