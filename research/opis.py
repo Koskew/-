@@ -25,6 +25,7 @@ FILES = (
     # В живёт строкой в очереди: измеренный вопрос уезжает в Н, а здесь
     # остаётся строка со ссылкой. Поэтому ищем по таблице, а не по разделам.
     ('В', 'indicator/ПРОВЕРИТЬ.md', r'^\| \*\*В(\d+)\*\* \| ([^|]+)\|'),
+    ('СИТ', 'indicator/СИТУАЦИИ.md', r'^### СИТ(\d+) · (.+)$'),
 )
 
 
@@ -50,7 +51,7 @@ for tag, path, pat in FILES:
             print('   !! ДЫРЫ В НУМЕРАЦИИ: ' + ', '.join(tag + str(h) for h in holes))
     # упомянут ли каждый номер в описи/очереди этого же файла
     head = txt.split('---', 1)[0] + txt[:6000]
-    miss = [n for n in nums if not re.search(r'\*?\*?%s%d\b' % (tag, n), head)]
+    miss = [] if tag == 'СИТ' else [n for n in nums if not re.search(r'\*?\*?%s%d\b' % (tag, n), head)]
     if miss:
         bad += 1
         print('   !! НЕТ В ОПИСИ ВВЕРХУ ФАЙЛА: ' + ', '.join(tag + str(m) for m in miss))
