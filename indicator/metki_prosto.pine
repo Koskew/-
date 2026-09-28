@@ -104,6 +104,8 @@ cSlDn  = input.color(#ef5350, "",                  inline = "cs", group = gS)
 gN = "⑦ Нисходящий"
 trDn   = input.bool(true, "Считать нисходящий тренд", group = gN, tooltip = "Нисходящий считается ТЕМ ЖЕ движком на ПЕРЕВЁРНУТЫХ свечах. Идея владельца 22.09.2026: не переводить сорок правил руками, а перевернуть цены. Перевёрнутая свеча — знак меняется, максимум и минимум местами. Тогда пивот-вершина на перевёрнутых это пивот-низ на настоящих, HH это LL, HL это LH, а ВОСХОДЯЩИЙ на перевёрнутых это НИСХОДЯЩИЙ на настоящих.\n\nВторого набора правил не существует: зеркало точное по построению, а не потому, что я аккуратно переписал условия.\n\nПроверено на девяти годах часовика: 519 трендов на 5/5, 806 на 3/3, 1131 на 2/2. Падений больше числом и короче по жизни, чем ростов, — ровно та форма, которую обязан дать растущий рынок. Покрытие баров хоть каким-то трендом выросло с 60% до 93%.")
 trWho  = input.string("авто", "Какой тренд рисовать", options = ["авто", "только восходящий", "только нисходящий"], group = gN, tooltip = "Колена у обоих трендов ОДНИ И ТЕ ЖЕ — один зиг-заг, те же бары, те же цены. Отличается только прочтение. Поэтому одна нога не может быть двух цветов, а одно колено не может нести два номера.\n\nЗамер на девяти годах: оба движка живы одновременно 19.5% баров на 5/5, 21.9% на 3/3, 21.8% на 2/2. Кусками по 7-14 баров медианно, до ста подряд. Это пятая часть времени, не краевой случай.\n\n«авто» — рисуется тот, кто жив. Живы оба — тот, чей НОЛЬ БЛИЖЕ к сегодняшнему дню: свежая структура это то, что рынок строит сейчас, старая уже контекст и всё равно видна в табло.\n\nОстальные два варианта — чтобы сравнить глазами.")
+trCntSw= input.string("весь, набранный в фоне", "Счёт при переключении", options = ["весь, набранный в фоне", "фоновую часть бледнее", "только с момента переключения"], group = gN, tooltip = "Только для режима «авто». Движок НЕ трогается: оба направления считают всегда, как считали. Меняется только то, какие номера счёта видит глаз.\n\nЗачем: когда «авто» переключается на другой тренд, тот появляется уже со счётом, набранным пока был невидим — сразу (2) или (3). Эта настройка позволяет посмотреть глазами, много ли счёта пришло из невидимой части.\n\n· «весь, набранный в фоне» — как было всегда, ничего не меняется;\n· «фоновую часть бледнее» — номера, набранные до переключения, показаны бледными. Видно и их, и границу;\n· «только с момента переключения» — номера до переключения не показываются вовсе, подписи меток остаются. Это ближе всего к тому, как выглядел бы тренд, если бы начинал счёт с нуля в момент переключения.")
+swMark = input.bool(true, "Отмечать, где авто передумало", group = gN, tooltip = "Метка ⇄ на баре, где режим «авто» сменил рисуемый тренд. Показываются все переключения основного слоя, попавшие в окно.")
 cTrDn  = input.color(#ff1744, "Нисходящий: метки, счёт, уровень", group = gN)
 
 MAXK = 100
@@ -308,6 +310,25 @@ var float[] GDP = array.new_float()    //               цена
 var int[]   GDL = array.new_int()      //               слой
 var bool[]  GOK = array.new_bool()     //               подтверждён
 MAXSL = 600      // движков стало два, сломов вдвое больше
+
+// ── ПЕРЕКЛЮЧЕНИЯ «АВТО» ──
+// 28.09.2026, вопрос владельца: что именно переключает «авто» — только
+// картинку или ещё и счёт. Счёт сейчас идёт у обоих направлений всегда
+// (им управляют trOn5 и trDn), а trWho выбирает только, кого нарисовать.
+// Поэтому тренд, на который «авто» переключилось, появляется уже со
+// счётом, набранным пока он был невидим.
+//
+// Здесь запоминается, на каком баре «авто» в последний раз сменило
+// направление по каждому слою. Движок этим не пользуется — только
+// отрисовка, и только если владелец переключит trCntSw.
+var int[]  swB = array.new_int(3, -1)        // бар последней смены
+var bool[] swD = array.new_bool(3, false)    // что рисуем: true нисходящий
+var bool[] swI = array.new_bool(3, false)    // решение уже принималось
+// история переключений для меток на графике
+var int[]  AWB = array.new_int()             // бар
+var int[]  AWL = array.new_int()             // слой
+var bool[] AWD = array.new_bool()            // на что переключились
+var float[] AWP = array.new_float()          // цена закрытия на этом баре
 
 var float[]  tBP  = array.new_float(6, na)     // цена перебитой вершины
 var int[]    tBB2 = array.new_int(6, -1)       // бар зелёного слома
@@ -664,6 +685,35 @@ if barstate.isconfirmed
         n3 = f_trend(4, P3n, B3n, H3n, L3n, mw3, fr3, -open, -close)
         n2 = f_trend(5, P2n, B2n, H2n, L2n, mw2, fr2, -open, -close)
 
+    // ── кого «авто» рисует ПРЯМО СЕЙЧАС, по каждому слою ──
+    // Правило то же самое, что в блоке отрисовки ниже, слово в слово.
+    // Здесь оно считается каждый бар только ради одного: запомнить бар,
+    // на котором решение поменялось. На сам выбор это не влияет.
+    for c = 0 to 2
+        bool uA = trOn5 and array.get(tTR, c) == 1
+        bool dA = trDn and array.get(tTR, c + 3) == 1
+        bool dD = false
+        if trWho == "только нисходящий"
+            dD := dA
+        else if trWho == "только восходящий"
+            dD := false
+        else
+            dD := dA and (not uA or array.get(tZB, c + 3) > array.get(tZB, c))
+        if not array.get(swI, c) or dD != array.get(swD, c)
+            array.set(swB, c, bar_index)
+            array.set(swD, c, dD)
+            if array.get(swI, c)
+                array.push(AWB, bar_index)
+                array.push(AWL, c)
+                array.push(AWD, dD)
+                array.push(AWP, close)
+                if array.size(AWB) > MAXSL
+                    array.shift(AWB)
+                    array.shift(AWL)
+                    array.shift(AWD)
+                    array.shift(AWP)
+            array.set(swI, c, true)
+
 // ══════════════ ЖИВЫЕ УРОВНИ СЛОЯ ══════════════
 // Механизм Тренажёра v9: уровень — СЫРОЙ пивот, лежит в списке, при
 // касании ценой ВЫЧЁРКИВАЕТСЯ из списка. Пивоты не переезжают, поэтому
@@ -971,7 +1021,12 @@ f_subTail(_sB, _sH, _x1, _s1) =>
 // Отличается только прочтение, поэтому никаких перевёрнутых цен здесь
 // нет — разворачиваются ЧЕТЫРЕ ветки. При _dn = false каждая обязана
 // дать ровно то, что давала до 23.09.2026.
-f_draw(_P, _B, _H, _L, _M, _fP, _fB, _fH, _fL, _fV, _gP, _gB, _gH, _gL, _gV, _hasF, _cHi, _cLo, _tag, _lab, _labK, _tzB, _tpzB, _ttr, _bok, _dn) =>
+f_draw(_P, _B, _H, _L, _M, _fP, _fB, _fH, _fL, _fV, _gP, _gB, _gH, _gL, _gV, _hasF, _cHi, _cLo, _tag, _lab, _labK, _tzB, _tpzB, _ttr, _bok, _dn, _swB) =>
+    // _swB — бар, с которого этот тренд стал РИСОВАТЬСЯ. Нужен только
+    // настройке «Счёт при переключении». При значении по умолчанию
+    // ничего не меняет: swFull гасит всю ветку
+    bool swFull = trCntSw == "весь, набранный в фоне"
+    bool swPale = trCntSw == "фоновую часть бледнее"
     n = array.size(_P)
     // колено-ноль действующего счёта: первый НИЗ, чей бар не раньше нуля.
     //
@@ -1095,12 +1150,16 @@ f_draw(_P, _B, _H, _L, _M, _fP, _fB, _fH, _fL, _fV, _gP, _gB, _gH, _gL, _gV, _ha
                             pk := kk2
                     kk3 = k >= 0 ? k : pk
                     bool ideal = kk3 < 0 ? false : hi ? lb == (_dn ? "LH" : "HH") : (kk3 == 0 ? (_dn ? lb == "HH" or lb == "LH" : lb == "LL" or lb == "HL") : lb == (_dn ? "LL" : "HL"))
-                    txt = kk3 >= 0 and trNum ? "(" + str.tostring(kk3) + ") " + lb : lb
+                    // колено, чей номер набран ДО переключения «авто».
+                    // При настройке по умолчанию swOld всегда false
+                    bool swOld  = not swFull and _swB >= 0 and array.get(_B, i) < _swB and kk3 >= 0
+                    bool swHide = swOld and not swPale
+                    txt = kk3 >= 0 and trNum and not swHide ? "(" + str.tostring(kk3) + ") " + lb : lb
                     cCnt = _dn ? cTrDn : cTrUp
-                    col1 = k >= 0 ? cCnt : pk >= 0 ? color.new(cCnt, 55) : (hi ? _cHi : _cLo)
+                    col1 = swHide ? (hi ? _cHi : _cLo) : k >= 0 ? (swOld ? color.new(cCnt, 70) : cCnt) : pk >= 0 ? color.new(cCnt, 55) : (hi ? _cHi : _cLo)
                     tipK = kk3 < 0 ? "" : "\nточка (" + str.tostring(kk3) + ") из 5 · " + (ideal ? "подпись идеальная" : "подпись встречная — МАНИПУЛЯЦИЯ, счёт продолжается, нога к ней нарисована штрих-пунктиром") + (pk >= 0 ? "\nПРОШЛЫЙ счёт. Он дошёл до (5), после чего пришёл " + (_dn ? "LH" : "HL") + " и начался новый счёт с нуля на нём." : "") + (k == 0 and _tpzB >= 0 ? "\nНОВЫЙ счёт: это первый " + (_dn ? "LH" : "HL") + " после (5) прошлого счёта. Тренд не умирал, он продолжается." : "")
                     if not _labK or kk3 >= 0
-                        array.push(LBS, label.new(x2, p2, txt, style = hi ? label.style_label_down : label.style_label_up, color = color.new(color.black, 100), textcolor = col1, size = size.small, tooltip = "слой " + _tag + ", счёт " + (_dn ? "НИСХОДЯЩЕГО" : "ВОСХОДЯЩЕГО") + "   " + lb + "  " + str.tostring(p2, format.mintick) + "\n" + (hi ? "вершина" : "низ") + tipK + (mc >= 2 ? "\nслилось сырых меток: " + str.tostring(mc) : "")))
+                        array.push(LBS, label.new(x2, p2, txt, style = hi ? label.style_label_down : label.style_label_up, color = color.new(color.black, 100), textcolor = col1, size = size.small, tooltip = "слой " + _tag + ", счёт " + (_dn ? "НИСХОДЯЩЕГО" : "ВОСХОДЯЩЕГО") + "   " + lb + "  " + str.tostring(p2, format.mintick) + "\n" + (hi ? "вершина" : "низ") + tipK + (mc >= 2 ? "\nслилось сырых меток: " + str.tostring(mc) : "") + (swOld ? "\n\nЭтот номер набран, пока тренд НЕ рисовался: «авто» переключилось на него позже, на баре " + str.tostring(_swB) + "." : "")))
 
     // ── ХВОСТ ──
     if n >= 1 and fillOn and _hasF
@@ -1279,13 +1338,13 @@ if barstate.islast
             r5 = f_lvlLayer(V5P, V5B, V5H, V5L, c5H, c5L)
         if absOn and (lab5 or trFull)
             g5 = f_drawAbs(G5, Y5, Z5, W5, c5H, c5L, "5/5")
-        d5 = f_draw(P5, B5, H5, L5, M5, P3, B3, H3, L3, V3P, P2, B2, H2, L2, V2P, true,  c5H, c5L, "5/5", lab5 or trShow, not lab5 and not trFull, mainL == 0 ? array.get(tZB, bokIdx) : NOZERO, mainL == 0 ? array.get(tPZB, bokIdx) : NOZERO, mainL == 0 ? drawTr : 0, array.get(tBOK, bokIdx), dnDraw)
+        d5 = f_draw(P5, B5, H5, L5, M5, P3, B3, H3, L3, V3P, P2, B2, H2, L2, V2P, true,  c5H, c5L, "5/5", lab5 or trShow, not lab5 and not trFull, mainL == 0 ? array.get(tZB, bokIdx) : NOZERO, mainL == 0 ? array.get(tPZB, bokIdx) : NOZERO, mainL == 0 ? drawTr : 0, array.get(tBOK, bokIdx), dnDraw, mainL == 0 ? array.get(swB, 0) : NOZERO)
     if on2
         if lvOn
             r2 = f_lvlLayer(V2P, V2B, V2H, V2L, c2H, c2L)
         if absOn and (labWho == "2/2" or labWho == "все")
             g2 = f_drawAbs(G2, Y2, Z2, W2, c2H, c2L, "2/2")
-        d2 = f_draw(P2, B2, H2, L2, M2, P2, B2, H2, L2, V2P, P2, B2, H2, L2, V2P, false, c2H, c2L, "2/2", labWho == "2/2" or labWho == "все", false, mainL == 2 ? array.get(tZB, bokIdx) : NOZERO, mainL == 2 ? array.get(tPZB, bokIdx) : NOZERO, mainL == 2 ? drawTr : 0, array.get(tBOK, bokIdx), dnDraw)
+        d2 = f_draw(P2, B2, H2, L2, M2, P2, B2, H2, L2, V2P, P2, B2, H2, L2, V2P, false, c2H, c2L, "2/2", labWho == "2/2" or labWho == "все", false, mainL == 2 ? array.get(tZB, bokIdx) : NOZERO, mainL == 2 ? array.get(tPZB, bokIdx) : NOZERO, mainL == 2 ? drawTr : 0, array.get(tBOK, bokIdx), dnDraw, mainL == 2 ? array.get(swB, 2) : NOZERO)
     // ── тренд: зелёный уровень и красный слом рисуются по ГЛАВНОМУ слою ──
     if (trOn5 or trDn) and drawIdx >= 0
         // цены ячеек 3-5 живут в перевёрнутом мире — знак назад
@@ -1365,6 +1424,22 @@ if barstate.islast
                             sp = array.get(SP, k)
                             sn = array.get(SN, k)
                             array.push(LBS, label.new(sb, sp, (dirM > 0 ? "↑" : "↓") + str.tostring(sn), style = dirM > 0 ? label.style_label_down : label.style_label_up, color = color.new(color.black, 100), textcolor = dirM > 0 ? cSlUp : cSlDn, size = size.tiny, tooltip = "Слом " + (dirM > 0 ? "ВВЕРХ" : "ВНИЗ") + " номер " + str.tostring(sn) + " в текущей серии.\nЦена взяла непробитый уровень " + str.tostring(sp, format.mintick) + " слоя " + mNm + ".\n\nПоказывается только ТЕКУЩАЯ серия. Сменится направление — эти метки уйдут и счёт начнётся с единицы."))
+
+    // ── ГДЕ «АВТО» ПЕРЕДУМАЛО ──
+    // 28.09.2026. Метка на баре, где сменился рисуемый тренд. Показываются
+    // переключения ОСНОВНОГО слоя, попавшие в окно. Ничего не считает —
+    // только показывает то, что уже посчитано выше
+    if swMark and mainL >= 0 and trWho == "авто"
+        nA = array.size(AWB)
+        if nA > 0
+            for k = 0 to nA - 1
+                if array.get(AWL, k) == mainL
+                    ab = array.get(AWB, k)
+                    if last_bar_index - ab <= winBars
+                        bool aDn = array.get(AWD, k)
+                        ap = array.get(AWP, k)
+                        color cA = aDn ? cTrDn : cTrUp
+                        array.push(LBS, label.new(ab, ap, aDn ? "⇄ НИСХ" : "⇄ ВОСХ", style = label.style_label_center, color = color.new(color.black, 100), textcolor = cA, size = size.tiny, tooltip = "Здесь режим «авто» сменил рисуемый тренд на " + (aDn ? "НИСХОДЯЩИЙ" : "ВОСХОДЯЩИЙ") + ".\nСлой " + (mainL == 0 ? "5/5" : mainL == 1 ? "3/3" : "2/2") + ", бар " + str.tostring(ab) + ".\n\nСчёт обоих направлений идёт ВСЕГДА, независимо от того, кто нарисован. Поэтому тренд появляется здесь уже с тем счётом, который набрал, пока был невидим.\n\nНастройка «Счёт при переключении» в группе ⑦ показывает, много ли счёта пришло из невидимой части."))
 
     // ── ТАБЛО: три колонки, по одной на слой ──
     if trOn5 and trTbl
@@ -1497,4 +1572,4 @@ if barstate.islast
             r3 = f_lvlLayer(V3P, V3B, V3H, V3L, c3H, c3L)
         if absOn and (labWho == "3/3" or labWho == "все")
             g3 = f_drawAbs(G3, Y3, Z3, W3, c3H, c3L, "3/3")
-        d3 = f_draw(P3, B3, H3, L3, M3, P2, B2, H2, L2, V2P, P2, B2, H2, L2, V2P, true,  c3H, c3L, "3/3", labWho == "3/3" or labWho == "все", false, mainL == 1 ? array.get(tZB, bokIdx) : NOZERO, mainL == 1 ? array.get(tPZB, bokIdx) : NOZERO, mainL == 1 ? drawTr : 0, array.get(tBOK, bokIdx), dnDraw)
+        d3 = f_draw(P3, B3, H3, L3, M3, P2, B2, H2, L2, V2P, P2, B2, H2, L2, V2P, true,  c3H, c3L, "3/3", labWho == "3/3" or labWho == "все", false, mainL == 1 ? array.get(tZB, bokIdx) : NOZERO, mainL == 1 ? array.get(tPZB, bokIdx) : NOZERO, mainL == 1 ? drawTr : 0, array.get(tBOK, bokIdx), dnDraw, mainL == 1 ? array.get(swB, 1) : NOZERO)
