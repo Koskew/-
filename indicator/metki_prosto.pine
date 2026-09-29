@@ -108,6 +108,14 @@ trCntSw= input.string("весь, набранный в фоне", "Счёт пр
 swMark = input.bool(true, "Отмечать, где авто передумало", group = gN, tooltip = "Метка ⇄ на баре, где режим «авто» сменил рисуемый тренд. Показываются все переключения основного слоя, попавшие в окно.")
 cTrDn  = input.color(#ff1744, "Нисходящий: метки, счёт, уровень", group = gN)
 
+gV = "⑧ Вставки в счёт"
+vsOn   = input.bool(false, "Второй комплект со вставками", group = gV, tooltip = "Отдельный счёт, который считает по коленам слоя ПЛЮС сырые вставки с более быстрого слоя. 5/5 берёт у 3/3, 3/3 берёт у 2/2. Старые движки при этом не трогаются: это второй комплект РЯДОМ, а не замена.\n\nПо умолчанию ВЫКЛЮЧЕН. Включать, когда хочется сравнить.\n\nЗамер Н20 на девяти годах: если брать ВСЕ вставки, слой превращается почти в слой-донор. Это не совпадение, а арифметика: пивот 5/5 всегда и пивот 3/3, поэтому «все колена донора, которых нет у слоя» это ровно колена донора. Поэтому и появилась ручка ниже.")
+vsCap  = input.string("1", "Вставок в одну ногу", options = ["0", "1", "2", "без ограничения"], group = gV, tooltip = "Сколько сырых вставок пускать в счёт внутри одной ноги слоя.\n\n· 0 — второй комплект равен чистому слою, вставки в счёт не идут;\n· 1 — берётся только ПЕРВАЯ вставка в ноге. Слой видит разворот, который проспал, но не дробится на мелочь;\n· 2 — чуть подробнее;\n· без ограничения — то, что меряли в Н20: счёт становится почти счётом донора.\n\nПо умолчанию 1. Это и есть та доза, которой сейчас нет ни у одного слоя.")
+vsDraw = input.string("обычный", "Какой счёт рисовать", options = ["обычный", "со вставками"], group = gV, tooltip = "Что показывать НА ГРАФИКЕ на основном слое. В табло видны оба в любом случае.\n\nРаботает только для слоёв 5/5 и 3/3: у 2/2 более быстрого слоя нет, вставок ему взять неоткуда.")
+
+// сколько вставок пускать в одну ногу, числом
+vsN = vsCap == "0" ? 0 : vsCap == "1" ? 1 : vsCap == "2" ? 2 : 999
+
 MAXK = 100
 // «нуля счёта нет». Пайн не принимает na в параметр функции, у которого
 // тип выводится из вызова, — ни голый, ни через int-переменную. Поэтому
@@ -180,6 +188,63 @@ var float[]  G2n = array.new_float()
 var int[]    Y2n = array.new_int()
 var bool[]   Z2n = array.new_bool()
 var string[] W2n = array.new_string()
+
+// ── ОБЪЕДИНЁННЫЕ КОЛЕНА: слой ПЛЮС вставки донора ──
+// Второй комплект, 29.09.2026. Колена те же, что у слоя, плюс колена
+// более быстрого слоя, которых у слоя нет. Сколько их пускать в одну
+// ногу — ручка vsCap.
+//
+// ПОЧЕМУ РУЧКА. Пивот 5/5 — это всегда и пивот 3/3. Значит «все колена
+// 3/3, которых нет у 5/5» это ровно колена 3/3, и без ограничения слой
+// со вставками становится слоем-донором. Замер Н20 это и показал: 737
+// трендов против 736 у чистого 3/3. Ручка задаёт ДОЗУ.
+//
+// Запаздывание честное: вставка кладётся в цепочку с тем же лагом, что
+// и колено слоя, а не со своим. Иначе колено слоя, случившееся раньше,
+// встанет в зиг-заг позже вставки и сломает чередование. На этом я уже
+// обжёгся в первой сборке замера.
+var float[]  PV5 = array.new_float()
+var int[]    BV5 = array.new_int()
+var bool[]   HV5 = array.new_bool()
+var string[] LV5 = array.new_string()
+var int[]    MV5 = array.new_int()
+var float[]  GV5 = array.new_float()
+var int[]    YV5 = array.new_int()
+var bool[]   ZV5 = array.new_bool()
+var string[] WV5 = array.new_string()
+
+var float[]  PV3 = array.new_float()
+var int[]    BV3 = array.new_int()
+var bool[]   HV3 = array.new_bool()
+var string[] LV3 = array.new_string()
+var int[]    MV3 = array.new_int()
+var float[]  GV3 = array.new_float()
+var int[]    YV3 = array.new_int()
+var bool[]   ZV3 = array.new_bool()
+var string[] WV3 = array.new_string()
+
+var float[]  PV5n = array.new_float()
+var int[]    BV5n = array.new_int()
+var bool[]   HV5n = array.new_bool()
+var string[] LV5n = array.new_string()
+var int[]    MV5n = array.new_int()
+var float[]  GV5n = array.new_float()
+var int[]    YV5n = array.new_int()
+var bool[]   ZV5n = array.new_bool()
+var string[] WV5n = array.new_string()
+
+var float[]  PV3n = array.new_float()
+var int[]    BV3n = array.new_int()
+var bool[]   HV3n = array.new_bool()
+var string[] LV3n = array.new_string()
+var int[]    MV3n = array.new_int()
+var float[]  GV3n = array.new_float()
+var int[]    YV3n = array.new_int()
+var bool[]   ZV3n = array.new_bool()
+var string[] WV3n = array.new_string()
+
+// сколько вставок уже взято в ТЕКУЩЕЙ ноге каждого из четырёх комплектов
+var int[] VCN = array.new_int(4, 0)
 
 f_relabel(_P, _H, _L) =>
     array.clear(_L)
@@ -279,23 +344,23 @@ f_push(_P, _B, _H, _L, _M, _G, _Y, _Z, _W, _price, _bar, _hi) =>
 // ВНИМАНИЕ: цены в ячейках 3-5 ОТРИЦАТЕЛЬНЫЕ — это перевёрнутый мир.
 // Всё, что идёт на экран и в табло, переворачивается обратно. В историю
 // сломов цена кладётся уже настоящей, знаком внутри f_trend.
-var int[]    tTR  = array.new_int(6, 0)        // 0 нет тренда, 1 восходящий
-var int[]    tZB  = array.new_int(6, -1)       // бар колена-нуля
-var float[]  tZP  = array.new_float(6, na)     // его цена
-var string[] tZL  = array.new_string(6, "")    // его подпись
-var float[]  tLVL = array.new_float(6, na)     // уровень — последний HL
-var int[]    tLVB = array.new_int(6, -1)
-var bool[]   tLHL = array.new_bool(6, false)   // уровень на настоящем HL
-var int[]    tCNT = array.new_int(6, -1)       // номер последней точки
-var int[]    tMAX = array.new_int(6, -1)       // докуда счёт дошёл
-var float[]  tIMP = array.new_float(6, 0.0)    // импульсное колено
-var int[]    tBEL = array.new_int(6, 0)        // закрытий подряд ниже
-var bool[]   tPUP = array.new_bool(6, false)   // прошлый был восходящий
-var int[]    tPMX = array.new_int(6, -1)
-var float[]  tDP  = array.new_float(6, na)     // цена слома
-var int[]    tDB  = array.new_int(6, -1)       // бар слома
-var int[]    tBB  = array.new_int(6, -1)       // бар рождения
-var int[]    tPZB = array.new_int(6, -1)       // ноль ПРОШЛОГО счёта
+var int[]    tTR  = array.new_int(10, 0)        // 0 нет тренда, 1 восходящий
+var int[]    tZB  = array.new_int(10, -1)       // бар колена-нуля
+var float[]  tZP  = array.new_float(10, na)     // его цена
+var string[] tZL  = array.new_string(10, "")    // его подпись
+var float[]  tLVL = array.new_float(10, na)     // уровень — последний HL
+var int[]    tLVB = array.new_int(10, -1)
+var bool[]   tLHL = array.new_bool(10, false)   // уровень на настоящем HL
+var int[]    tCNT = array.new_int(10, -1)       // номер последней точки
+var int[]    tMAX = array.new_int(10, -1)       // докуда счёт дошёл
+var float[]  tIMP = array.new_float(10, 0.0)    // импульсное колено
+var int[]    tBEL = array.new_int(10, 0)        // закрытий подряд ниже
+var bool[]   tPUP = array.new_bool(10, false)   // прошлый был восходящий
+var int[]    tPMX = array.new_int(10, -1)
+var float[]  tDP  = array.new_float(10, na)     // цена слома
+var int[]    tDB  = array.new_int(10, -1)       // бар слома
+var int[]    tBB  = array.new_int(10, -1)       // бар рождения
+var int[]    tPZB = array.new_int(10, -1)       // ноль ПРОШЛОГО счёта
 // ЗЕЛЁНЫЙ СЛОМ — слом нисходящей структуры. Цена от LL перебила вершину
 // и сделала HH. Чёрточка встаёт на цене перебитой вершины сразу, а до
 // подтверждения ноги счёта рисуются тонкими
@@ -330,10 +395,10 @@ var int[]  AWL = array.new_int()             // слой
 var bool[] AWD = array.new_bool()            // на что переключились
 var float[] AWP = array.new_float()          // цена закрытия на этом баре
 
-var float[]  tBP  = array.new_float(6, na)     // цена перебитой вершины
-var int[]    tBB2 = array.new_int(6, -1)       // бар зелёного слома
-var bool[]   tBOK = array.new_bool(6, false)   // подтверждён ли
-var int[]    tBAB = array.new_int(6, 0)        // закрытий подряд выше
+var float[]  tBP  = array.new_float(10, na)     // цена перебитой вершины
+var int[]    tBB2 = array.new_int(10, -1)       // бар зелёного слома
+var bool[]   tBOK = array.new_bool(10, false)   // подтверждён ли
+var int[]    tBAB = array.new_int(10, 0)        // закрытий подряд выше
 
 // ══════════════ СПРАВОЧНИК ПОСЛЕДОВАТЕЛЬНОСТЕЙ ══════════════
 // Перепись 9 лет часовика, research/spravochnik_niz.py. Низы в
@@ -387,7 +452,7 @@ f_swapSeq(_s) =>
             r := r + (i == 0 ? "" : "·") + f_swap1(array.get(arr, i))
     r
 
-var table TBL = table.new(position.top_right, 4, 23, border_width = 1, frame_width = 1, frame_color = color.new(color.gray, 60), border_color = color.new(color.gray, 80))
+var table TBL = table.new(position.top_right, 4, 27, border_width = 1, frame_width = 1, frame_color = color.new(color.gray, 60), border_color = color.new(color.gray, 80))
 
 // последний зелёный слом слоя _i в истории, -1 если нет
 f_lastG(_i) =>
@@ -463,7 +528,10 @@ f_trend(_i, _P, _B, _H, _L, _nw, _fr, _o, _c) =>
     n = array.size(_P)
     // в ИСТОРИЮ сломов цена кладётся настоящей: ячейки 3-5 живут в
     // перевёрнутом мире, и без этого чёрточки уехали бы под график
-    float sg = _i >= 3 ? -1.0 : 1.0
+    // перевёрнутый мир: ячейки 3-5 (нисходящий по чистым коленам) и
+    // 8-9 (нисходящий по объединённым). 6-7 — восходящий объединённый,
+    // мир настоящий
+    float sg = (_i >= 3 and _i <= 5) or _i >= 8 ? -1.0 : 1.0
     // 1. смерть проверяется КАЖДЫЙ бар, а не только на колене
     if array.get(tTR, _i) == 1 and not na(array.get(tLVL, _i))
         lv = array.get(tLVL, _i)
@@ -684,6 +752,107 @@ if barstate.isconfirmed
         n5 = f_trend(3, P5n, B5n, H5n, L5n, mw5, fr5, -open, -close)
         n3 = f_trend(4, P3n, B3n, H3n, L3n, mw3, fr3, -open, -close)
         n2 = f_trend(5, P2n, B2n, H2n, L2n, mw2, fr2, -open, -close)
+
+
+    // ── ОБЪЕДИНЁННЫЕ ЦЕПОЧКИ: слой плюс вставки донора ──
+    // Вставка кладётся с ТЕМ ЖЕ лагом, что колено слоя: у 5/5 это пять
+    // баров, поэтому колено 3/3 берётся как ph3[2] — оно с того же бара,
+    // что и ph5. Так зиг-заг остаётся зиг-загом.
+    bool vw5 = false
+    bool vw3 = false
+    bool vm5 = false
+    bool vm3 = false
+    if vsOn
+        // ─ 5/5 + вставки с 3/3, мир настоящий ─
+        if not na(ph5)
+            va1 = f_push(PV5, BV5, HV5, LV5, MV5, GV5, YV5, ZV5, WV5, high[5], bar_index - 5, true)
+            if va1
+                array.set(VCN, 0, 0)
+            vw5 := vw5 or va1
+        else if not na(ph3[2]) and array.get(VCN, 0) < vsN
+            va2 = f_push(PV5, BV5, HV5, LV5, MV5, GV5, YV5, ZV5, WV5, high[5], bar_index - 5, true)
+            if va2
+                array.set(VCN, 0, array.get(VCN, 0) + 1)
+            vw5 := vw5 or va2
+        if not na(pl5)
+            va3 = f_push(PV5, BV5, HV5, LV5, MV5, GV5, YV5, ZV5, WV5, low[5], bar_index - 5, false)
+            if va3
+                array.set(VCN, 0, 0)
+            vw5 := vw5 or va3
+        else if not na(pl3[2]) and array.get(VCN, 0) < vsN
+            va4 = f_push(PV5, BV5, HV5, LV5, MV5, GV5, YV5, ZV5, WV5, low[5], bar_index - 5, false)
+            if va4
+                array.set(VCN, 0, array.get(VCN, 0) + 1)
+            vw5 := vw5 or va4
+        // ─ 3/3 + вставки с 2/2, мир настоящий ─
+        if not na(ph3)
+            vb1 = f_push(PV3, BV3, HV3, LV3, MV3, GV3, YV3, ZV3, WV3, high[3], bar_index - 3, true)
+            if vb1
+                array.set(VCN, 1, 0)
+            vw3 := vw3 or vb1
+        else if not na(ph2[1]) and array.get(VCN, 1) < vsN
+            vb2 = f_push(PV3, BV3, HV3, LV3, MV3, GV3, YV3, ZV3, WV3, high[3], bar_index - 3, true)
+            if vb2
+                array.set(VCN, 1, array.get(VCN, 1) + 1)
+            vw3 := vw3 or vb2
+        if not na(pl3)
+            vb3 = f_push(PV3, BV3, HV3, LV3, MV3, GV3, YV3, ZV3, WV3, low[3], bar_index - 3, false)
+            if vb3
+                array.set(VCN, 1, 0)
+            vw3 := vw3 or vb3
+        else if not na(pl2[1]) and array.get(VCN, 1) < vsN
+            vb4 = f_push(PV3, BV3, HV3, LV3, MV3, GV3, YV3, ZV3, WV3, low[3], bar_index - 3, false)
+            if vb4
+                array.set(VCN, 1, array.get(VCN, 1) + 1)
+            vw3 := vw3 or vb4
+        // ─ то же ЗЕРКАЛЬНО: минус-цена, сторона наоборот ─
+        if not na(ph5)
+            vc1 = f_push(PV5n, BV5n, HV5n, LV5n, MV5n, GV5n, YV5n, ZV5n, WV5n, -high[5], bar_index - 5, false)
+            if vc1
+                array.set(VCN, 2, 0)
+            vm5 := vm5 or vc1
+        else if not na(ph3[2]) and array.get(VCN, 2) < vsN
+            vc2 = f_push(PV5n, BV5n, HV5n, LV5n, MV5n, GV5n, YV5n, ZV5n, WV5n, -high[5], bar_index - 5, false)
+            if vc2
+                array.set(VCN, 2, array.get(VCN, 2) + 1)
+            vm5 := vm5 or vc2
+        if not na(pl5)
+            vc3 = f_push(PV5n, BV5n, HV5n, LV5n, MV5n, GV5n, YV5n, ZV5n, WV5n, -low[5], bar_index - 5, true)
+            if vc3
+                array.set(VCN, 2, 0)
+            vm5 := vm5 or vc3
+        else if not na(pl3[2]) and array.get(VCN, 2) < vsN
+            vc4 = f_push(PV5n, BV5n, HV5n, LV5n, MV5n, GV5n, YV5n, ZV5n, WV5n, -low[5], bar_index - 5, true)
+            if vc4
+                array.set(VCN, 2, array.get(VCN, 2) + 1)
+            vm5 := vm5 or vc4
+        if not na(ph3)
+            vd1 = f_push(PV3n, BV3n, HV3n, LV3n, MV3n, GV3n, YV3n, ZV3n, WV3n, -high[3], bar_index - 3, false)
+            if vd1
+                array.set(VCN, 3, 0)
+            vm3 := vm3 or vd1
+        else if not na(ph2[1]) and array.get(VCN, 3) < vsN
+            vd2 = f_push(PV3n, BV3n, HV3n, LV3n, MV3n, GV3n, YV3n, ZV3n, WV3n, -high[3], bar_index - 3, false)
+            if vd2
+                array.set(VCN, 3, array.get(VCN, 3) + 1)
+            vm3 := vm3 or vd2
+        if not na(pl3)
+            vd3 = f_push(PV3n, BV3n, HV3n, LV3n, MV3n, GV3n, YV3n, ZV3n, WV3n, -low[3], bar_index - 3, true)
+            if vd3
+                array.set(VCN, 3, 0)
+            vm3 := vm3 or vd3
+        else if not na(pl2[1]) and array.get(VCN, 3) < vsN
+            vd4 = f_push(PV3n, BV3n, HV3n, LV3n, MV3n, GV3n, YV3n, ZV3n, WV3n, -low[3], bar_index - 3, true)
+            if vd4
+                array.set(VCN, 3, array.get(VCN, 3) + 1)
+            vm3 := vm3 or vd4
+        // ─ четыре движка по объединённым коленам ─
+        bool fv5 = not na(ph5) or not na(pl5) or not na(ph3[2]) or not na(pl3[2])
+        bool fv3 = not na(ph3) or not na(pl3) or not na(ph2[1]) or not na(pl2[1])
+        ve1 = f_trend(6, PV5, BV5, HV5, LV5, vw5, fv5, open, close)
+        ve2 = f_trend(7, PV3, BV3, HV3, LV3, vw3, fv3, open, close)
+        ve3 = f_trend(8, PV5n, BV5n, HV5n, LV5n, vm5, fv5, -open, -close)
+        ve4 = f_trend(9, PV3n, BV3n, HV3n, LV3n, vm3, fv3, -open, -close)
 
     // ── кого «авто» рисует ПРЯМО СЕЙЧАС, по каждому слою ──
     // Правило то же самое, что в блоке отрисовки ниже, слово в слово.
@@ -1125,7 +1294,7 @@ f_draw(_P, _B, _H, _L, _M, _fP, _fB, _fH, _fL, _fV, _gP, _gB, _gH, _gL, _gV, _ha
                             fpr = useG ? array.get(_gP, k) : array.get(_fP, k)
                             fhi = useG ? array.get(_gH, k) : array.get(_fH, k)
                             fbx = useG ? array.get(_gB, k) : array.get(_fB, k)
-                            array.push(LBS, label.new(fbx, fpr, "·" + flb, style = fhi ? label.style_label_down : label.style_label_up, color = color.new(color.black, 100), textcolor = fhi ? _cHi : _cLo, size = size.small, tooltip = "СЫРАЯ метка — у слоя " + _tag + " колена здесь нет, взято с более быстрого слоя\n" + flb + "  " + str.tostring(fpr, format.mintick) + "\nучасток нарисован штрих-пунктиром"))
+                            array.push(LBS, label.new(fbx, fpr, (useG ? "··" : "·") + flb, style = fhi ? label.style_label_down : label.style_label_up, color = color.new(color.black, 100), textcolor = fhi ? _cHi : _cLo, size = size.small, tooltip = (useG ? "СЫРАЯ метка с ЗАПАСНОГО донора — две точки спереди. У слоя " + _tag + " колена здесь нет, и у первого донора тоже. Взято через один слой вниз.\nВ счёт со вставками такие метки НЕ идут: слово владельца 29.09.2026 — 5/5 берёт у 3/3, 3/3 берёт у 2/2.\nЗамер Н19: таких меток на 5/5 больше, чем с 3/3, — 1960 против 1790.\n" : "СЫРАЯ метка — одна точка спереди. У слоя " + _tag + " колена здесь нет, взято с более быстрого слоя.\n") + flb + "  " + str.tostring(fpr, format.mintick) + "\nучасток нарисован штрих-пунктиром"))
                             // линия сырой метки: только пока она ЖИВА в
                             // списке уровней того слоя, откуда одолжена
                             if fillLv and lvOn
@@ -1192,7 +1361,7 @@ f_draw(_P, _B, _H, _L, _M, _fP, _fB, _fH, _fL, _fV, _gP, _gB, _gH, _gL, _gV, _ha
                         fpr = useG2 ? array.get(_gP, k) : array.get(_fP, k)
                         fhi = useG2 ? array.get(_gH, k) : array.get(_fH, k)
                         fbx = useG2 ? array.get(_gB, k) : array.get(_fB, k)
-                        array.push(LBS, label.new(fbx, fpr, "·" + flb, style = fhi ? label.style_label_down : label.style_label_up, color = color.new(color.black, 100), textcolor = fhi ? _cHi : _cLo, size = size.small, tooltip = "СЫРАЯ метка в ХВОСТЕ — слой " + _tag + " этот разворот ещё не подтвердил, взято с более быстрого слоя\n" + flb + "  " + str.tostring(fpr, format.mintick) + "\nучасток нарисован штрих-пунктиром"))
+                        array.push(LBS, label.new(fbx, fpr, (useG2 ? "··" : "·") + flb, style = fhi ? label.style_label_down : label.style_label_up, color = color.new(color.black, 100), textcolor = fhi ? _cHi : _cLo, size = size.small, tooltip = (useG2 ? "СЫРАЯ метка в ХВОСТЕ с ЗАПАСНОГО донора — две точки. В счёт со вставками не идёт.\n" : "СЫРАЯ метка в ХВОСТЕ — слой " + _tag + " этот разворот ещё не подтвердил, взято с более быстрого слоя.\n") + flb + "  " + str.tostring(fpr, format.mintick) + "\nучасток нарисован штрих-пунктиром"))
                         if fillLv and lvOn
                             if f_alive(useG2 ? _gV : _fV, fpr)
                                 fst = flb == "HH" or flb == "LL" ? line.style_dashed : line.style_dotted
@@ -1330,7 +1499,10 @@ if barstate.islast
         dnDraw := false
     else
         dnDraw := dnAlive and (not upAlive or array.get(tZB, safeL + 3) > array.get(tZB, safeL))
-    int drawIdx = mainL < 0 ? -1 : (dnDraw ? mainL + 3 : mainL)
+    // второй комплект: рисуем счёт со вставками, если он включён и выбран.
+    // У 2/2 донора нет, поэтому только для 5/5 и 3/3
+    bool vsUse = vsOn and vsDraw == "со вставками" and mainL >= 0 and mainL <= 1
+    int drawIdx = mainL < 0 ? -1 : vsUse ? (dnDraw ? 8 + mainL : 6 + mainL) : (dnDraw ? mainL + 3 : mainL)
     int bokIdx  = drawIdx < 0 ? 0 : drawIdx
     int drawTr  = mainL < 0 ? 0 : (dnDraw ? (trDn ? array.get(tTR, bokIdx) : 0) : (trOn5 ? array.get(tTR, bokIdx) : 0))
     if on5 or trShow
@@ -1338,7 +1510,10 @@ if barstate.islast
             r5 = f_lvlLayer(V5P, V5B, V5H, V5L, c5H, c5L)
         if absOn and (lab5 or trFull)
             g5 = f_drawAbs(G5, Y5, Z5, W5, c5H, c5L, "5/5")
-        d5 = f_draw(P5, B5, H5, L5, M5, P3, B3, H3, L3, V3P, P2, B2, H2, L2, V2P, true,  c5H, c5L, "5/5", lab5 or trShow, not lab5 and not trFull, mainL == 0 ? array.get(tZB, bokIdx) : NOZERO, mainL == 0 ? array.get(tPZB, bokIdx) : NOZERO, mainL == 0 ? drawTr : 0, array.get(tBOK, bokIdx), dnDraw, mainL == 0 ? array.get(swB, 0) : NOZERO)
+        if vsUse and mainL == 0
+            dv5 = f_draw(PV5, BV5, HV5, LV5, MV5, P3, B3, H3, L3, V3P, P2, B2, H2, L2, V2P, true,  c5H, c5L, "5/5+", lab5 or trShow, not lab5 and not trFull, array.get(tZB, bokIdx), array.get(tPZB, bokIdx), drawTr, array.get(tBOK, bokIdx), dnDraw, array.get(swB, 0))
+        else
+            d5 = f_draw(P5, B5, H5, L5, M5, P3, B3, H3, L3, V3P, P2, B2, H2, L2, V2P, true,  c5H, c5L, "5/5", lab5 or trShow, not lab5 and not trFull, mainL == 0 ? array.get(tZB, bokIdx) : NOZERO, mainL == 0 ? array.get(tPZB, bokIdx) : NOZERO, mainL == 0 ? drawTr : 0, array.get(tBOK, bokIdx), dnDraw, mainL == 0 ? array.get(swB, 0) : NOZERO)
     if on2
         if lvOn
             r2 = f_lvlLayer(V2P, V2B, V2H, V2L, c2H, c2L)
@@ -1377,7 +1552,7 @@ if barstate.islast
                     color cR = rDn ? cTrUp : cTrDie
                     array.push(LNS, line.new(rb - 12, rp, rb + 12, rp, color = color.new(cR, isMain ? 0 : 65), width = isMain ? 2 : 1))
                     if isMain
-                        array.push(LBS, label.new(rb, rp, rDn ? "умер ↓" : "умер ↑", style = rDn ? label.style_label_up : label.style_label_down, color = color.new(color.black, 100), textcolor = cR, size = size.tiny, tooltip = (rDn ? "НИСХОДЯЩИЙ умер" : "ВОСХОДЯЩИЙ умер") + " на уровне " + str.tostring(rp, format.mintick) + "\nТело свечи ушло за уровень на имп × " + str.tostring(trFib) + " либо набралось " + str.tostring(trNbar) + " закрытий подряд.\nСлой: " + (lr % 3 == 0 ? "5/5" : lr % 3 == 1 ? "3/3" : "2/2")))
+                        array.push(LBS, label.new(rb, rp, rDn ? "умер ↓" : "умер ↑", style = rDn ? label.style_label_up : label.style_label_down, color = color.new(color.black, 100), textcolor = cR, size = size.tiny, tooltip = (rDn ? "НИСХОДЯЩИЙ умер" : "ВОСХОДЯЩИЙ умер") + " на уровне " + str.tostring(rp, format.mintick) + "\nТело свечи ушло за уровень на имп × " + str.tostring(trFib) + " либо набралось " + str.tostring(trNbar) + " закрытий подряд.\nСлой: " + (lr >= 6 ? (lr % 2 == 0 ? "5/5+" : "3/3+") : lr % 3 == 0 ? "5/5" : lr % 3 == 1 ? "3/3" : "2/2")))
         nG = array.size(GDB)
         if nG > 0
             for k = 0 to nG - 1
@@ -1392,7 +1567,7 @@ if barstate.islast
                     color cGc = gDn ? cTrDn : cTrUp
                     array.push(LNS, line.new(gb - 12, gp, gb + 12, gp, color = color.new(cGc, isMainG ? 0 : 65), width = isMainG and gok ? 2 : 1))
                     if isMainG
-                        array.push(LBS, label.new(gb, gp, (gDn ? "слом ↓" : "слом ↑") + (gok ? "" : " ?"), style = gDn ? label.style_label_down : label.style_label_up, color = color.new(color.black, 100), textcolor = cGc, size = size.tiny, tooltip = (gDn ? "СЛОМ ВНИЗ — сломали ВОСХОДЯЩУЮ структуру на " : "СЛОМ ВВЕРХ — сломали НИСХОДЯЩУЮ структуру на ") + str.tostring(gp, format.mintick) + ".\nЦена от нуля перебила " + (gDn ? "этот низ и сделала LL." : "эту вершину и сделала HH.") + "\n" + (gok ? "ПОДТВЕРЖДЁН правилом «" + trBrk + "»." : "НЕ подтверждён правилом «" + trBrk + "».") + "\nСлой: " + (lg % 3 == 0 ? "5/5" : lg % 3 == 1 ? "3/3" : "2/2") + "\n\nЭто рождение тренда: отметка события, а не состояние."))
+                        array.push(LBS, label.new(gb, gp, (gDn ? "слом ↓" : "слом ↑") + (gok ? "" : " ?"), style = gDn ? label.style_label_down : label.style_label_up, color = color.new(color.black, 100), textcolor = cGc, size = size.tiny, tooltip = (gDn ? "СЛОМ ВНИЗ — сломали ВОСХОДЯЩУЮ структуру на " : "СЛОМ ВВЕРХ — сломали НИСХОДЯЩУЮ структуру на ") + str.tostring(gp, format.mintick) + ".\nЦена от нуля перебила " + (gDn ? "этот низ и сделала LL." : "эту вершину и сделала HH.") + "\n" + (gok ? "ПОДТВЕРЖДЁН правилом «" + trBrk + "»." : "НЕ подтверждён правилом «" + trBrk + "».") + "\nСлой: " + (lg >= 6 ? (lg % 2 == 0 ? "5/5+" : "3/3+") : lg % 3 == 0 ? "5/5" : lg % 3 == 1 ? "3/3" : "2/2") + "\n\nЭто рождение тренда: отметка события, а не состояние."))
 
     // ── СЛОМЫ: две цены впереди и номера текущей серии ──
     // Линии рисуются только по ОСНОВНОМУ слою — тому, что выбран в ①.
@@ -1567,9 +1742,36 @@ if barstate.islast
                 ftip  := "После " + str.tostring(rk) + (rn > 5 ? " и более" : "") + " сломов подряд " + (dr > 0 ? "вверх" : "вниз") + " следующий уходил туда же в " + str.tostring(fq, "#.#") + "% случаев.\nВыборка: " + str.tostring(fn) + " случаев.\nБазовая доля по слою: " + str.tostring(bs, "#.#") + "%.\nНадбавка: " + (fq - bs >= 0 ? "+" : "") + str.tostring(fq - bs, "#.#") + " процентных пункта."
             table.cell(TBL, c + 1, 22, fcell, text_color = cS, text_size = size.tiny, tooltip = ftip)
 
+    // ── ВТОРОЙ КОМПЛЕКТ В ТАБЛО: строки 23-26 ──
+    // Счёт по коленам слоя ПЛЮС вставки. Колонка 2/2 пустая: у неё нет
+    // более быстрого слоя, брать вставки неоткуда
+    if vsOn and trTbl
+        table.cell(TBL, 0, 23, "восх + вставки", text_color = color.gray, text_size = size.tiny, tooltip = "Второй комплект: тот же движок, но по коленам слоя ПЛЮС сырые вставки с более быстрого слоя. Сколько вставок пускать в одну ногу — ручка в ⑧.\n\nСтарые строки выше не трогаются: это счёт РЯДОМ, а не замена.\n\nЗамер Н20 на девяти годах: если снять ограничение и брать ВСЕ вставки, слой становится почти слоем-донором — 737 трендов против 736 у чистого 3/3. Это арифметика, а не совпадение: пивот 5/5 всегда и пивот 3/3.")
+        table.cell(TBL, 0, 24, "счёт +", text_color = color.gray, text_size = size.tiny)
+        table.cell(TBL, 0, 25, "нисх + вставки", text_color = color.gray, text_size = size.tiny)
+        table.cell(TBL, 0, 26, "счёт +", text_color = color.gray, text_size = size.tiny)
+        for c = 0 to 1
+            iu = 6 + c
+            idn = 8 + c
+            bool upV = array.get(tTR, iu) == 1
+            bool dnV = array.get(tTR, idn) == 1
+            cU = upV ? cTrUp : color.gray
+            cD = dnV ? cTrDn : color.gray
+            table.cell(TBL, c + 1, 23, upV ? "ВОСХ" : "нет", text_color = cU, text_size = size.tiny)
+            table.cell(TBL, c + 1, 24, upV ? "(" + str.tostring(array.get(tCNT, iu)) + ")/5" : "—", text_color = cU, text_size = size.tiny)
+            table.cell(TBL, c + 1, 25, dnV ? "НИСХ" : "нет", text_color = cD, text_size = size.tiny)
+            table.cell(TBL, c + 1, 26, dnV ? "(" + str.tostring(array.get(tCNT, idn)) + ")/5" : "—", text_color = cD, text_size = size.tiny)
+        table.cell(TBL, 3, 23, "—", text_color = color.gray, text_size = size.tiny, tooltip = "У слоя 2/2 более быстрого слоя нет, вставок взять неоткуда.")
+        table.cell(TBL, 3, 24, "—", text_color = color.gray, text_size = size.tiny)
+        table.cell(TBL, 3, 25, "—", text_color = color.gray, text_size = size.tiny)
+        table.cell(TBL, 3, 26, "—", text_color = color.gray, text_size = size.tiny)
+
     if on3
         if lvOn
             r3 = f_lvlLayer(V3P, V3B, V3H, V3L, c3H, c3L)
         if absOn and (labWho == "3/3" or labWho == "все")
             g3 = f_drawAbs(G3, Y3, Z3, W3, c3H, c3L, "3/3")
-        d3 = f_draw(P3, B3, H3, L3, M3, P2, B2, H2, L2, V2P, P2, B2, H2, L2, V2P, true,  c3H, c3L, "3/3", labWho == "3/3" or labWho == "все", false, mainL == 1 ? array.get(tZB, bokIdx) : NOZERO, mainL == 1 ? array.get(tPZB, bokIdx) : NOZERO, mainL == 1 ? drawTr : 0, array.get(tBOK, bokIdx), dnDraw, mainL == 1 ? array.get(swB, 1) : NOZERO)
+        if vsUse and mainL == 1
+            dv3 = f_draw(PV3, BV3, HV3, LV3, MV3, P2, B2, H2, L2, V2P, P2, B2, H2, L2, V2P, true,  c3H, c3L, "3/3+", labWho == "3/3" or labWho == "все", false, array.get(tZB, bokIdx), array.get(tPZB, bokIdx), drawTr, array.get(tBOK, bokIdx), dnDraw, array.get(swB, 1))
+        else
+            d3 = f_draw(P3, B3, H3, L3, M3, P2, B2, H2, L2, V2P, P2, B2, H2, L2, V2P, true,  c3H, c3L, "3/3", labWho == "3/3" or labWho == "все", false, mainL == 1 ? array.get(tZB, bokIdx) : NOZERO, mainL == 1 ? array.get(tPZB, bokIdx) : NOZERO, mainL == 1 ? drawTr : 0, array.get(tBOK, bokIdx), dnDraw, mainL == 1 ? array.get(swB, 1) : NOZERO)
