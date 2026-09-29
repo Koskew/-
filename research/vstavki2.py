@@ -142,6 +142,118 @@ def forms(rows, dL, dD, flip, use_ins):
     return tails, ok
 
 
+
+# ── УЗКОЕ определение вставки ───────────────────────────────────────
+# Широкое (stream выше): любое колено донора, которого нет у слоя.
+# Узкое (здесь): только то, что индикатор УЖЕ рисует — колено донора
+# строго внутри ноги слоя, чередующееся от левого конца ноги. Обрезки
+# хвоста нет: показанное не переписывается, слово владельца 29.09.2026.
+class Geo(Knees):
+    """та же f_push, но без пересчёта подписей: здесь нужна только
+    геометрия колен. Подписи всё равно считаются заново в объединённой
+    цепочке, а без relabel список можно держать целиком, не обрезая
+    сотней, и это не O(n^2)."""
+    def relabel(self):
+        pass
+
+
+def geo(rows, d, flip):
+    at = events(rows, d, flip)
+    ev = []
+    for conf, lst in at.items():
+        for bar, price, isHi in lst:
+            ev.append((bar, conf, price, isHi))
+    ev.sort(key=lambda e: (e[0], not e[3]))
+    K = Geo()
+    for bar, conf, price, isHi in ev:
+        K.push(price, bar, isHi)
+    return K
+
+
+def narrow_inserts(KL, KD):
+    """колена донора строго внутри каждой ноги слоя, с чередованием"""
+    out = []
+    nL, nD = len(KL.P), len(KD.P)
+    q = 0
+    for j in range(nL):
+        x1 = KL.B[j]
+        s1 = KL.H[j]
+        x2 = KL.B[j + 1] if j + 1 < nL else None
+        want = not s1
+        for k in range(nD):
+            b = KD.B[k]
+            if b <= x1:
+                continue
+            if x2 is not None and b >= x2:
+                break
+            if KD.H[k] == want:
+                out.append((b, KD.P[k], KD.H[k]))
+                want = not want
+    return out
+
+
+def stream_narrow(rows, dL, dD, flip):
+    zerkalo.MAXK = 10 ** 9
+    KL, KD = geo(rows, dL, flip), geo(rows, dD, flip)
+    ins = narrow_inserts(KL, KD)
+    zerkalo.MAXK = 100
+    ev = [(KL.B[j], KL.B[j] + dL, KL.P[j], KL.H[j]) for j in range(len(KL.P))]
+    ev += [(b, b + dD, p, h) for b, p, h in ins]
+    ev.sort(key=lambda e: (e[0], not e[3]))
+    K, T = Knees(), Trend()
+    sg = -1.0 if flip else 1.0
+    live, q = [], 0
+    for i in range(len(rows)):
+        _, o, h, l, c = rows[i]
+        nw = False
+        fr = False
+        while q < len(ev) and ev[q][1] <= i:
+            bar, conf, price, isHi = ev[q]
+            nw = K.push(price, bar, isHi) or nw
+            fr = True
+            q += 1
+        T.step(i, sg * o, sg * c, K, nw, fr)
+        live.append(T.tr == 1)
+    if T.tr == 1:
+        T.trends.append((T.born, len(rows) - 1, T.zl, T.mx, T.zp))
+    return T, live, len(ins)
+
+
+def forms_narrow(rows, dL, dD, flip):
+    zerkalo.MAXK = 10 ** 9
+    KL, KD = geo(rows, dL, flip), geo(rows, dD, flip)
+    ins = narrow_inserts(KL, KD)
+    zerkalo.MAXK = 100
+    ev = [(KL.B[j], KL.B[j] + dL, KL.P[j], KL.H[j]) for j in range(len(KL.P))]
+    ev += [(b, b + dD, p, h) for b, p, h in ins]
+    ev.sort(key=lambda e: (e[0], not e[3]))
+    K, T = Knees(), Trend()
+    sg = -1.0 if flip else 1.0
+    seen, tails, q = {}, [], 0
+    for i in range(len(rows)):
+        _, o, h, l, c = rows[i]
+        nw = False
+        fr = False
+        while q < len(ev) and ev[q][1] <= i:
+            bar, conf, price, isHi = ev[q]
+            nw = K.push(price, bar, isHi) or nw
+            fr = True
+            q += 1
+        T.step(i, sg * o, sg * c, K, nw, fr)
+        if T.tr == 1 and T.cnt == 5:
+            key = (T.born, T.zb)
+            if key not in seen:
+                seen[key] = True
+                zi = -1
+                for k in range(len(K.P)):
+                    if K.B[k] >= T.zb and not K.H[k]:
+                        zi = k
+                        break
+                if zi >= 0 and zi + 5 < len(K.P):
+                    tails.append('·'.join(K.L[zi + 1:zi + 6]))
+    return tails, sum(1 for t in tails if t in PAT)
+
+
 def main():
     rows = load('data/XAUUSD_1h_9y.csv')
     N = len(rows)
@@ -159,8 +271,13 @@ def main():
             c, c5 = report(('3/3' if dD == 3 else '2/2') + ' чистый', Td, ld, N)
             print('                 ДО (5): %s %.1f%%  →  со вставками %.1f%%  (донор сам: %.1f%%)'
                   % (nm, 100.0*a5/max(a,1), 100.0*b5/max(b,1), 100.0*c5/max(c,1)))
+            Tn, ln, insn = stream_narrow(rows, dL, dD, flip)
+            d, d5 = report(nm + ' + УЗКИЕ', Tn, ln, N, '   вставок %d' % insn)
+            print('                 ДО (5) УЗКОЕ: %.1f%%' % (100.0*d5/max(d,1)))
             t0, o0 = forms(rows, dL, dD, flip, False)
             t1, o1 = forms(rows, dL, dD, flip, True)
+            t2, o2 = forms_narrow(rows, dL, dD, flip)
+            print('                 СПРАВОЧНИК узкое: %d/%d (%.1f%%)' % (o2, len(t2), 100.0*o2/max(len(t2),1)))
             print('                 СПРАВОЧНИК: чистый %d/%d форм в справочнике (%.1f%%), со вставками %d/%d (%.1f%%)'
                   % (o0, len(t0), 100.0*o0/max(len(t0),1), o1, len(t1), 100.0*o1/max(len(t1),1)))
         print()
