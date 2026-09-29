@@ -859,15 +859,20 @@ if barstate.isconfirmed
     // Здесь оно считается каждый бар только ради одного: запомнить бар,
     // на котором решение поменялось. На сам выбор это не влияет.
     for c = 0 to 2
-        bool uA = trOn5 and array.get(tTR, c) == 1
-        bool dA = trDn and array.get(tTR, c + 3) == 1
+        // З20: тот же набор ячеек, что и в отрисовке, иначе метки ⇄
+        // отмечали бы переключения, которых на графике не было
+        bool vsL = vsOn and vsDraw == "со вставками" and c <= 1
+        int uI = vsL ? 6 + c : c
+        int dI = vsL ? 8 + c : c + 3
+        bool uA = (vsL or trOn5) and array.get(tTR, uI) == 1
+        bool dA = (vsL or trDn) and array.get(tTR, dI) == 1
         bool dD = false
         if trWho == "только нисходящий"
             dD := dA
         else if trWho == "только восходящий"
             dD := false
         else
-            dD := dA and (not uA or array.get(tZB, c + 3) > array.get(tZB, c))
+            dD := dA and (not uA or array.get(tZB, dI) > array.get(tZB, uI))
         if not array.get(swI, c) or dD != array.get(swD, c)
             array.set(swB, c, bar_index)
             array.set(swD, c, dD)
@@ -1490,21 +1495,32 @@ if barstate.islast
     // берусь — проверить это без редактора нечем. Поэтому индекс всегда
     // валидный (safeL), а пускает или нет — решает условие рядом.
     int safeL = mainL < 0 ? 0 : mainL
-    bool upAlive = mainL >= 0 and trOn5 and array.get(tTR, safeL) == 1
-    bool dnAlive = mainL >= 0 and trDn and array.get(tTR, safeL + 3) == 1
+    // З20, 29.09.2026: «авто» обязано РЕШАТЬ по тому же набору движков,
+    // который оно РИСУЕТ. До починки оно смотрело в ячейки 0 и 3 (чистые
+    // движки), а при включённом втором комплекте рисовало ячейки 6-9 (со
+    // вставками). Последствий было два, оба видны на таблице владельца:
+    // нисходящий со вставками мог быть жив, а чистый мёртв — и «авто» на
+    // него не переключалось никогда; а в обратном случае «авто» выбирало
+    // тренд, у которого счёта нет, и на графике не рисовалось ничего.
+    bool vsUse = vsOn and vsDraw == "со вставками" and mainL >= 0 and mainL <= 1
+    int upIdx = vsUse ? 6 + mainL : safeL
+    int dnIdx = vsUse ? 8 + mainL : safeL + 3
+    bool upAlive = mainL >= 0 and (vsUse or trOn5) and array.get(tTR, upIdx) == 1
+    bool dnAlive = mainL >= 0 and (vsUse or trDn) and array.get(tTR, dnIdx) == 1
     bool dnDraw = false
     if trWho == "только нисходящий"
         dnDraw := dnAlive
     else if trWho == "только восходящий"
         dnDraw := false
     else
-        dnDraw := dnAlive and (not upAlive or array.get(tZB, safeL + 3) > array.get(tZB, safeL))
+        dnDraw := dnAlive and (not upAlive or array.get(tZB, dnIdx) > array.get(tZB, upIdx))
     // второй комплект: рисуем счёт со вставками, если он включён и выбран.
-    // У 2/2 донора нет, поэтому только для 5/5 и 3/3
-    bool vsUse = vsOn and vsDraw == "со вставками" and mainL >= 0 and mainL <= 1
+    // У 2/2 донора нет, поэтому только для 5/5 и 3/3. vsUse объявлен выше,
+    // рядом с выбором тренда: там он теперь тоже нужен
     int drawIdx = mainL < 0 ? -1 : vsUse ? (dnDraw ? 8 + mainL : 6 + mainL) : (dnDraw ? mainL + 3 : mainL)
     int bokIdx  = drawIdx < 0 ? 0 : drawIdx
-    int drawTr  = mainL < 0 ? 0 : (dnDraw ? (trDn ? array.get(tTR, bokIdx) : 0) : (trOn5 ? array.get(tTR, bokIdx) : 0))
+    // при втором комплекте галочка vsOn уже проверена внутри vsUse
+    int drawTr  = mainL < 0 ? 0 : vsUse ? array.get(tTR, bokIdx) : (dnDraw ? (trDn ? array.get(tTR, bokIdx) : 0) : (trOn5 ? array.get(tTR, bokIdx) : 0))
     if on5 or trShow
         if lvOn and (on5 or trFull)
             r5 = f_lvlLayer(V5P, V5B, V5H, V5L, c5H, c5L)
