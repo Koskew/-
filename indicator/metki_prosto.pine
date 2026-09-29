@@ -111,10 +111,14 @@ cTrDn  = input.color(#ff1744, "Нисходящий: метки, счёт, ур�
 gV = "⑧ Вставки в счёт"
 vsOn   = input.bool(false, "Второй комплект со вставками", group = gV, tooltip = "Отдельный счёт, который считает по коленам слоя ПЛЮС сырые вставки с более быстрого слоя. 5/5 берёт у 3/3, 3/3 берёт у 2/2. Старые движки при этом не трогаются: это второй комплект РЯДОМ, а не замена.\n\nПо умолчанию ВЫКЛЮЧЕН. Включать, когда хочется сравнить.\n\nЗамер Н20 на девяти годах: если брать ВСЕ вставки, слой превращается почти в слой-донор. Это не совпадение, а арифметика: пивот 5/5 всегда и пивот 3/3, поэтому «все колена донора, которых нет у слоя» это ровно колена донора. Поэтому и появилась ручка ниже.")
 vsCap  = input.string("1", "Вставок в одну ногу", options = ["0", "1", "2", "без ограничения"], group = gV, tooltip = "Сколько сырых вставок пускать в счёт внутри одной ноги слоя.\n\n· 0 — второй комплект равен чистому слою, вставки в счёт не идут;\n· 1 — берётся только ПЕРВАЯ вставка в ноге. Слой видит разворот, который проспал, но не дробится на мелочь;\n· 2 — чуть подробнее;\n· без ограничения — то, что меряли в Н20: счёт становится почти счётом донора.\n\nПо умолчанию 1. Это и есть та доза, которой сейчас нет ни у одного слоя.")
+vsSrc  = input.string("3/3, а если пусто — 2/2", "Откуда 5/5 берёт вставки", options = ["только 3/3", "3/3, а если пусто — 2/2", "3/3 и 2/2 вместе"], group = gV, tooltip = "Только для слоя 5/5. У 3/3 донор всегда 2/2, выбирать там нечего.\n\nНаблюдение владельца 29.09.2026: «3/3 просто идеально всё нарисовал, а вот 5/5, беря сырые метки только у 3/3, пропускает этот момент, потому что там метки сырые с 2/2. Он выстраивает зиг-заг правильно, только счёт не отображает».\n\nПричина ровно такая: ОТРИСОВКА у 5/5 запасного донора использует, поэтому зиг-заг и метки ·· нарисованы верно, а цепочка для СЧЁТА брала только у 3/3.\n\n· «только 3/3» — как было;\n· «3/3, а если пусто — 2/2» — если 3/3 в этой ноге ещё ничего не дал, берётся 2/2. По умолчанию;\n· «3/3 и 2/2 вместе» — берётся всё подряд, слой станет очень дробным.\n\nЦЕНА, замер Н19: запасных меток на 5/5 БОЛЬШЕ, чем с 3/3, — 1960 против 1790. Это не добавка, а почти удвоение: 5/5 со вставками поедет в сторону 2/2.\n\nОГОВОРКА. Отрисовка решает «в ноге пусто» задним числом, когда нога закрылась. Счёт так не может — он идёт вперёд и назад не переписывается. Поэтому в счёте условие «3/3 в этой ноге ЕЩЁ ничего не дал». Если 3/3 даст метку позже в той же ноге, счёт успеет взять метку с 2/2, а на графике она останется с двумя точками.")
 vsDraw = input.string("обычный", "Какой счёт рисовать", options = ["обычный", "со вставками"], group = gV, tooltip = "Что показывать НА ГРАФИКЕ на основном слое. В табло видны оба в любом случае.\n\nРаботает только для слоёв 5/5 и 3/3: у 2/2 более быстрого слоя нет, вставок ему взять неоткуда.")
 
 // сколько вставок пускать в одну ногу, числом
 vsN = vsCap == "0" ? 0 : vsCap == "1" ? 1 : vsCap == "2" ? 2 : 999
+// запасной донор 2/2 для слоя 5/5
+vs2ok  = vsSrc != "только 3/3"
+vs2all = vsSrc == "3/3 и 2/2 вместе"
 
 MAXK = 100
 // «нуля счёта нет». Пайн не принимает na в параметр функции, у которого
@@ -245,6 +249,9 @@ var string[] WV3n = array.new_string()
 
 // сколько вставок уже взято в ТЕКУЩЕЙ ноге каждого из четырёх комплектов
 var int[] VCN = array.new_int(4, 0)
+// дал ли уже 3/3 метку в текущей ноге слоя 5/5. Нужен для запасного
+// донора: он подключается, только когда первый донор молчит
+var bool[] VF3 = array.new_bool(2, false)
 
 f_relabel(_P, _H, _L) =>
     array.clear(_L)
@@ -768,22 +775,36 @@ if barstate.isconfirmed
             va1 = f_push(PV5, BV5, HV5, LV5, MV5, GV5, YV5, ZV5, WV5, high[5], bar_index - 5, true)
             if va1
                 array.set(VCN, 0, 0)
+                array.set(VF3, 0, false)
             vw5 := vw5 or va1
         else if not na(ph3[2]) and array.get(VCN, 0) < vsN
             va2 = f_push(PV5, BV5, HV5, LV5, MV5, GV5, YV5, ZV5, WV5, high[5], bar_index - 5, true)
             if va2
                 array.set(VCN, 0, array.get(VCN, 0) + 1)
+                array.set(VF3, 0, true)
             vw5 := vw5 or va2
+        else if vs2ok and not na(ph2[3]) and array.get(VCN, 0) < vsN and (vs2all or not array.get(VF3, 0))
+            va2b = f_push(PV5, BV5, HV5, LV5, MV5, GV5, YV5, ZV5, WV5, high[5], bar_index - 5, true)
+            if va2b
+                array.set(VCN, 0, array.get(VCN, 0) + 1)
+            vw5 := vw5 or va2b
         if not na(pl5)
             va3 = f_push(PV5, BV5, HV5, LV5, MV5, GV5, YV5, ZV5, WV5, low[5], bar_index - 5, false)
             if va3
                 array.set(VCN, 0, 0)
+                array.set(VF3, 0, false)
             vw5 := vw5 or va3
         else if not na(pl3[2]) and array.get(VCN, 0) < vsN
             va4 = f_push(PV5, BV5, HV5, LV5, MV5, GV5, YV5, ZV5, WV5, low[5], bar_index - 5, false)
             if va4
                 array.set(VCN, 0, array.get(VCN, 0) + 1)
+                array.set(VF3, 0, true)
             vw5 := vw5 or va4
+        else if vs2ok and not na(pl2[3]) and array.get(VCN, 0) < vsN and (vs2all or not array.get(VF3, 0))
+            va4b = f_push(PV5, BV5, HV5, LV5, MV5, GV5, YV5, ZV5, WV5, low[5], bar_index - 5, false)
+            if va4b
+                array.set(VCN, 0, array.get(VCN, 0) + 1)
+            vw5 := vw5 or va4b
         // ─ 3/3 + вставки с 2/2, мир настоящий ─
         if not na(ph3)
             vb1 = f_push(PV3, BV3, HV3, LV3, MV3, GV3, YV3, ZV3, WV3, high[3], bar_index - 3, true)
@@ -810,22 +831,36 @@ if barstate.isconfirmed
             vc1 = f_push(PV5n, BV5n, HV5n, LV5n, MV5n, GV5n, YV5n, ZV5n, WV5n, -high[5], bar_index - 5, false)
             if vc1
                 array.set(VCN, 2, 0)
+                array.set(VF3, 1, false)
             vm5 := vm5 or vc1
         else if not na(ph3[2]) and array.get(VCN, 2) < vsN
             vc2 = f_push(PV5n, BV5n, HV5n, LV5n, MV5n, GV5n, YV5n, ZV5n, WV5n, -high[5], bar_index - 5, false)
             if vc2
                 array.set(VCN, 2, array.get(VCN, 2) + 1)
+                array.set(VF3, 1, true)
             vm5 := vm5 or vc2
+        else if vs2ok and not na(ph2[3]) and array.get(VCN, 2) < vsN and (vs2all or not array.get(VF3, 1))
+            vc2b = f_push(PV5n, BV5n, HV5n, LV5n, MV5n, GV5n, YV5n, ZV5n, WV5n, -high[5], bar_index - 5, false)
+            if vc2b
+                array.set(VCN, 2, array.get(VCN, 2) + 1)
+            vm5 := vm5 or vc2b
         if not na(pl5)
             vc3 = f_push(PV5n, BV5n, HV5n, LV5n, MV5n, GV5n, YV5n, ZV5n, WV5n, -low[5], bar_index - 5, true)
             if vc3
                 array.set(VCN, 2, 0)
+                array.set(VF3, 1, false)
             vm5 := vm5 or vc3
         else if not na(pl3[2]) and array.get(VCN, 2) < vsN
             vc4 = f_push(PV5n, BV5n, HV5n, LV5n, MV5n, GV5n, YV5n, ZV5n, WV5n, -low[5], bar_index - 5, true)
             if vc4
                 array.set(VCN, 2, array.get(VCN, 2) + 1)
+                array.set(VF3, 1, true)
             vm5 := vm5 or vc4
+        else if vs2ok and not na(pl2[3]) and array.get(VCN, 2) < vsN and (vs2all or not array.get(VF3, 1))
+            vc4b = f_push(PV5n, BV5n, HV5n, LV5n, MV5n, GV5n, YV5n, ZV5n, WV5n, -low[5], bar_index - 5, true)
+            if vc4b
+                array.set(VCN, 2, array.get(VCN, 2) + 1)
+            vm5 := vm5 or vc4b
         if not na(ph3)
             vd1 = f_push(PV3n, BV3n, HV3n, LV3n, MV3n, GV3n, YV3n, ZV3n, WV3n, -high[3], bar_index - 3, false)
             if vd1
@@ -847,7 +882,7 @@ if barstate.isconfirmed
                 array.set(VCN, 3, array.get(VCN, 3) + 1)
             vm3 := vm3 or vd4
         // ─ четыре движка по объединённым коленам ─
-        bool fv5 = not na(ph5) or not na(pl5) or not na(ph3[2]) or not na(pl3[2])
+        bool fv5 = not na(ph5) or not na(pl5) or not na(ph3[2]) or not na(pl3[2]) or (vs2ok and (not na(ph2[3]) or not na(pl2[3])))
         bool fv3 = not na(ph3) or not na(pl3) or not na(ph2[1]) or not na(pl2[1])
         ve1 = f_trend(6, PV5, BV5, HV5, LV5, vw5, fv5, open, close)
         ve2 = f_trend(7, PV3, BV3, HV3, LV3, vw3, fv3, open, close)
