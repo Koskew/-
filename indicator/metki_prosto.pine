@@ -252,6 +252,22 @@ var int[] VCN = array.new_int(4, 0)
 // дал ли уже 3/3 метку в текущей ноге слоя 5/5. Нужен для запасного
 // донора: он подключается, только когда первый донор молчит
 var bool[] VF3 = array.new_bool(2, false)
+// сколько вставок реально СТАЛО коленом. 0 — 5/5 настоящий мир,
+// 1 — 3/3 настоящий, 2 — 5/5 перевёрнутый, 3 — 3/3 перевёрнутый
+var int[] VINS = array.new_int(4, 0)
+
+// З22, 29.09.2026. Вставка, совпадающая по стороне с последним коленом
+// цепочки, в счёт идти НЕ должна. f_push такую не добавляет, а ПОГЛОЩАЕТ:
+// колено не появляется, счёт не шагает, а цена колена самого слоя может
+// ещё и сдвинуться на вставку. Замер на девяти годах: 1316 поглощений и
+// 268 сдвигов цены колена слоя при потолке 2.
+//
+// Отрисовка так никогда не делала: внутри ноги она берёт строго
+// ЧЕРЕДУЮЩУЮСЯ цепочку. Отсюда и слова владельца «зиг-заг видит
+// правильно, счёт пропускает». Теперь счёт чередуется так же.
+f_altOk(_H, _hi) =>
+    n = array.size(_H)
+    n == 0 or array.get(_H, n - 1) != _hi
 
 f_relabel(_P, _H, _L) =>
     array.clear(_L)
@@ -459,7 +475,7 @@ f_swapSeq(_s) =>
             r := r + (i == 0 ? "" : "·") + f_swap1(array.get(arr, i))
     r
 
-var table TBL = table.new(position.top_right, 4, 27, border_width = 1, frame_width = 1, frame_color = color.new(color.gray, 60), border_color = color.new(color.gray, 80))
+var table TBL = table.new(position.top_right, 4, 30, border_width = 1, frame_width = 1, frame_color = color.new(color.gray, 60), border_color = color.new(color.gray, 80))
 
 // последний зелёный слом слоя _i в истории, -1 если нет
 f_lastG(_i) =>
@@ -777,16 +793,18 @@ if barstate.isconfirmed
                 array.set(VCN, 0, 0)
                 array.set(VF3, 0, false)
             vw5 := vw5 or va1
-        else if not na(ph3[2]) and array.get(VCN, 0) < vsN
+        else if not na(ph3[2]) and array.get(VCN, 0) < vsN and f_altOk(HV5, true)
             va2 = f_push(PV5, BV5, HV5, LV5, MV5, GV5, YV5, ZV5, WV5, high[5], bar_index - 5, true)
             if va2
                 array.set(VCN, 0, array.get(VCN, 0) + 1)
+                array.set(VINS, 0, array.get(VINS, 0) + 1)
                 array.set(VF3, 0, true)
             vw5 := vw5 or va2
-        else if vs2ok and not na(ph2[3]) and array.get(VCN, 0) < vsN and (vs2all or not array.get(VF3, 0))
+        else if vs2ok and not na(ph2[3]) and array.get(VCN, 0) < vsN and f_altOk(HV5, true) and (vs2all or not array.get(VF3, 0))
             va2b = f_push(PV5, BV5, HV5, LV5, MV5, GV5, YV5, ZV5, WV5, high[5], bar_index - 5, true)
             if va2b
                 array.set(VCN, 0, array.get(VCN, 0) + 1)
+                array.set(VINS, 0, array.get(VINS, 0) + 1)
             vw5 := vw5 or va2b
         if not na(pl5)
             va3 = f_push(PV5, BV5, HV5, LV5, MV5, GV5, YV5, ZV5, WV5, low[5], bar_index - 5, false)
@@ -794,16 +812,18 @@ if barstate.isconfirmed
                 array.set(VCN, 0, 0)
                 array.set(VF3, 0, false)
             vw5 := vw5 or va3
-        else if not na(pl3[2]) and array.get(VCN, 0) < vsN
+        else if not na(pl3[2]) and array.get(VCN, 0) < vsN and f_altOk(HV5, false)
             va4 = f_push(PV5, BV5, HV5, LV5, MV5, GV5, YV5, ZV5, WV5, low[5], bar_index - 5, false)
             if va4
                 array.set(VCN, 0, array.get(VCN, 0) + 1)
+                array.set(VINS, 0, array.get(VINS, 0) + 1)
                 array.set(VF3, 0, true)
             vw5 := vw5 or va4
-        else if vs2ok and not na(pl2[3]) and array.get(VCN, 0) < vsN and (vs2all or not array.get(VF3, 0))
+        else if vs2ok and not na(pl2[3]) and array.get(VCN, 0) < vsN and f_altOk(HV5, false) and (vs2all or not array.get(VF3, 0))
             va4b = f_push(PV5, BV5, HV5, LV5, MV5, GV5, YV5, ZV5, WV5, low[5], bar_index - 5, false)
             if va4b
                 array.set(VCN, 0, array.get(VCN, 0) + 1)
+                array.set(VINS, 0, array.get(VINS, 0) + 1)
             vw5 := vw5 or va4b
         // ─ 3/3 + вставки с 2/2, мир настоящий ─
         if not na(ph3)
@@ -811,20 +831,22 @@ if barstate.isconfirmed
             if vb1
                 array.set(VCN, 1, 0)
             vw3 := vw3 or vb1
-        else if not na(ph2[1]) and array.get(VCN, 1) < vsN
+        else if not na(ph2[1]) and array.get(VCN, 1) < vsN and f_altOk(HV3, true)
             vb2 = f_push(PV3, BV3, HV3, LV3, MV3, GV3, YV3, ZV3, WV3, high[3], bar_index - 3, true)
             if vb2
                 array.set(VCN, 1, array.get(VCN, 1) + 1)
+                array.set(VINS, 1, array.get(VINS, 1) + 1)
             vw3 := vw3 or vb2
         if not na(pl3)
             vb3 = f_push(PV3, BV3, HV3, LV3, MV3, GV3, YV3, ZV3, WV3, low[3], bar_index - 3, false)
             if vb3
                 array.set(VCN, 1, 0)
             vw3 := vw3 or vb3
-        else if not na(pl2[1]) and array.get(VCN, 1) < vsN
+        else if not na(pl2[1]) and array.get(VCN, 1) < vsN and f_altOk(HV3, false)
             vb4 = f_push(PV3, BV3, HV3, LV3, MV3, GV3, YV3, ZV3, WV3, low[3], bar_index - 3, false)
             if vb4
                 array.set(VCN, 1, array.get(VCN, 1) + 1)
+                array.set(VINS, 1, array.get(VINS, 1) + 1)
             vw3 := vw3 or vb4
         // ─ то же ЗЕРКАЛЬНО: минус-цена, сторона наоборот ─
         if not na(ph5)
@@ -833,16 +855,18 @@ if barstate.isconfirmed
                 array.set(VCN, 2, 0)
                 array.set(VF3, 1, false)
             vm5 := vm5 or vc1
-        else if not na(ph3[2]) and array.get(VCN, 2) < vsN
+        else if not na(ph3[2]) and array.get(VCN, 2) < vsN and f_altOk(HV5n, false)
             vc2 = f_push(PV5n, BV5n, HV5n, LV5n, MV5n, GV5n, YV5n, ZV5n, WV5n, -high[5], bar_index - 5, false)
             if vc2
                 array.set(VCN, 2, array.get(VCN, 2) + 1)
+                array.set(VINS, 2, array.get(VINS, 2) + 1)
                 array.set(VF3, 1, true)
             vm5 := vm5 or vc2
-        else if vs2ok and not na(ph2[3]) and array.get(VCN, 2) < vsN and (vs2all or not array.get(VF3, 1))
+        else if vs2ok and not na(ph2[3]) and array.get(VCN, 2) < vsN and f_altOk(HV5n, false) and (vs2all or not array.get(VF3, 1))
             vc2b = f_push(PV5n, BV5n, HV5n, LV5n, MV5n, GV5n, YV5n, ZV5n, WV5n, -high[5], bar_index - 5, false)
             if vc2b
                 array.set(VCN, 2, array.get(VCN, 2) + 1)
+                array.set(VINS, 2, array.get(VINS, 2) + 1)
             vm5 := vm5 or vc2b
         if not na(pl5)
             vc3 = f_push(PV5n, BV5n, HV5n, LV5n, MV5n, GV5n, YV5n, ZV5n, WV5n, -low[5], bar_index - 5, true)
@@ -850,36 +874,40 @@ if barstate.isconfirmed
                 array.set(VCN, 2, 0)
                 array.set(VF3, 1, false)
             vm5 := vm5 or vc3
-        else if not na(pl3[2]) and array.get(VCN, 2) < vsN
+        else if not na(pl3[2]) and array.get(VCN, 2) < vsN and f_altOk(HV5n, true)
             vc4 = f_push(PV5n, BV5n, HV5n, LV5n, MV5n, GV5n, YV5n, ZV5n, WV5n, -low[5], bar_index - 5, true)
             if vc4
                 array.set(VCN, 2, array.get(VCN, 2) + 1)
+                array.set(VINS, 2, array.get(VINS, 2) + 1)
                 array.set(VF3, 1, true)
             vm5 := vm5 or vc4
-        else if vs2ok and not na(pl2[3]) and array.get(VCN, 2) < vsN and (vs2all or not array.get(VF3, 1))
+        else if vs2ok and not na(pl2[3]) and array.get(VCN, 2) < vsN and f_altOk(HV5n, true) and (vs2all or not array.get(VF3, 1))
             vc4b = f_push(PV5n, BV5n, HV5n, LV5n, MV5n, GV5n, YV5n, ZV5n, WV5n, -low[5], bar_index - 5, true)
             if vc4b
                 array.set(VCN, 2, array.get(VCN, 2) + 1)
+                array.set(VINS, 2, array.get(VINS, 2) + 1)
             vm5 := vm5 or vc4b
         if not na(ph3)
             vd1 = f_push(PV3n, BV3n, HV3n, LV3n, MV3n, GV3n, YV3n, ZV3n, WV3n, -high[3], bar_index - 3, false)
             if vd1
                 array.set(VCN, 3, 0)
             vm3 := vm3 or vd1
-        else if not na(ph2[1]) and array.get(VCN, 3) < vsN
+        else if not na(ph2[1]) and array.get(VCN, 3) < vsN and f_altOk(HV3n, false)
             vd2 = f_push(PV3n, BV3n, HV3n, LV3n, MV3n, GV3n, YV3n, ZV3n, WV3n, -high[3], bar_index - 3, false)
             if vd2
                 array.set(VCN, 3, array.get(VCN, 3) + 1)
+                array.set(VINS, 3, array.get(VINS, 3) + 1)
             vm3 := vm3 or vd2
         if not na(pl3)
             vd3 = f_push(PV3n, BV3n, HV3n, LV3n, MV3n, GV3n, YV3n, ZV3n, WV3n, -low[3], bar_index - 3, true)
             if vd3
                 array.set(VCN, 3, 0)
             vm3 := vm3 or vd3
-        else if not na(pl2[1]) and array.get(VCN, 3) < vsN
+        else if not na(pl2[1]) and array.get(VCN, 3) < vsN and f_altOk(HV3n, true)
             vd4 = f_push(PV3n, BV3n, HV3n, LV3n, MV3n, GV3n, YV3n, ZV3n, WV3n, -low[3], bar_index - 3, true)
             if vd4
                 array.set(VCN, 3, array.get(VCN, 3) + 1)
+                array.set(VINS, 3, array.get(VINS, 3) + 1)
             vm3 := vm3 or vd4
         // ─ четыре движка по объединённым коленам ─
         bool fv5 = not na(ph5) or not na(pl5) or not na(ph3[2]) or not na(pl3[2]) or (vs2ok and (not na(ph2[3]) or not na(pl2[3])))
@@ -1816,6 +1844,23 @@ if barstate.islast
         table.cell(TBL, 3, 24, "—", text_color = color.gray, text_size = size.tiny)
         table.cell(TBL, 3, 25, "—", text_color = color.gray, text_size = size.tiny)
         table.cell(TBL, 3, 26, "—", text_color = color.gray, text_size = size.tiny)
+        // три строки приборов, 29.09.2026. Без них по табло нельзя было
+        // отличить «цепочка не изменилась» от «изменилась, а счёт всё
+        // равно встал на ту же цифру». На этом застряли разом
+        table.cell(TBL, 0, 27, "уровень + восх", text_color = color.gray, text_size = size.tiny, tooltip = "Уровень восходящего по объединённой цепочке — последний HL со вставками. Сравнивать со строкой «уровень» вверху: если они разные, цепочка действительно другая.")
+        table.cell(TBL, 0, 28, "уровень + нисх", text_color = color.gray, text_size = size.tiny, tooltip = "То же для нисходящего: последняя LH по объединённой цепочке.")
+        table.cell(TBL, 0, 29, "вставок в счёте", text_color = color.gray, text_size = size.tiny, tooltip = "Сколько сырых вставок РЕАЛЬНО стало коленом объединённой цепочки за всю историю графика. ↑ восходящая цепочка, ↓ нисходящая.\n\nЭто главный прибор. Если число не растёт при переключении «Откуда 5/5 берёт вставки» — значит вставки в счёт не попадают, и дело в коде, а не в месте.\n\nСчитаются только те, что СТАЛИ коленом. Вставка, совпавшая по стороне с предыдущим коленом, теперь пропускается и сюда не идёт — З22.")
+        for c2 = 0 to 1
+            iu2 = 6 + c2
+            id2 = 8 + c2
+            lvU = array.get(tLVL, iu2)
+            lvD = array.get(tLVL, id2)
+            table.cell(TBL, c2 + 1, 27, na(lvU) or array.get(tTR, iu2) != 1 ? "—" : (array.get(tLHL, iu2) ? "HL " : "LL ") + str.tostring(lvU, format.mintick), text_color = array.get(tTR, iu2) == 1 ? cTrUp : color.gray, text_size = size.tiny)
+            table.cell(TBL, c2 + 1, 28, na(lvD) or array.get(tTR, id2) != 1 ? "—" : (array.get(tLHL, id2) ? "LH " : "HH ") + str.tostring(-lvD, format.mintick), text_color = array.get(tTR, id2) == 1 ? cTrDn : color.gray, text_size = size.tiny)
+            table.cell(TBL, c2 + 1, 29, "↑" + str.tostring(array.get(VINS, c2)) + "  ↓" + str.tostring(array.get(VINS, c2 + 2)), text_color = color.gray, text_size = size.tiny)
+        table.cell(TBL, 3, 27, "—", text_color = color.gray, text_size = size.tiny)
+        table.cell(TBL, 3, 28, "—", text_color = color.gray, text_size = size.tiny)
+        table.cell(TBL, 3, 29, "—", text_color = color.gray, text_size = size.tiny)
 
     if on3
         if lvOn
