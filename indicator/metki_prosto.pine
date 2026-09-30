@@ -421,6 +421,9 @@ MAXSL = 600      // движков стало два, сломов вдвое б
 var int[]  swB = array.new_int(3, -1)        // бар последней смены
 var bool[] swD = array.new_bool(3, false)    // что рисуем: true нисходящий
 var bool[] swI = array.new_bool(3, false)    // решение уже принималось
+// РЕЖИМ, а не флаг: 0 веду восходящий, 1 веду нисходящий, -1 никого.
+// -2 значит «ещё не считали ни разу»
+var int[]  SWM = array.new_int(3, -2)
 // история переключений для меток на графике
 var int[]  AWB = array.new_int()             // бар
 var int[]  AWL = array.new_int()             // слой
@@ -938,17 +941,27 @@ if barstate.isconfirmed
         int dI = vsL ? 8 + c : c + 3
         bool uA = (vsL or trOn5) and array.get(tTR, uI) == 1
         bool dA = (vsL or trDn) and array.get(tTR, dI) == 1
-        bool dD = false
-        if trWho == "только нисходящий"
-            dD := dA
-        else if trWho == "только восходящий"
-            dD := false
+        // тот же трёхзначный режим, что и в отрисовке
+        int mD = -1
+        if trWho == "только восходящий"
+            mD := uA ? 0 : -1
+        else if trWho == "только нисходящий"
+            mD := dA ? 1 : -1
         else
-            dD := dA and (not uA or array.get(tZB, dI) > array.get(tZB, uI))
-        if not array.get(swI, c) or dD != array.get(swD, c)
+            if uA and dA
+                mD := array.get(tZB, dI) > array.get(tZB, uI) ? 1 : 0
+            else if uA
+                mD := 0
+            else if dA
+                mD := 1
+        bool dD = mD == 1
+        if not array.get(swI, c) or mD != array.get(SWM, c)
             array.set(swB, c, bar_index)
+            array.set(SWM, c, mD)
             array.set(swD, c, dD)
-            if array.get(swI, c)
+            // метка ⇄ ставится, только когда переключились НА тренд.
+            // Уход в «никого» метки не получает: там и рисовать нечего
+            if array.get(swI, c) and mD >= 0
                 array.push(AWB, bar_index)
                 array.push(AWL, c)
                 array.push(AWD, dD)
@@ -1581,20 +1594,54 @@ if barstate.islast
     int dnIdx = vsUse ? 8 + mainL : safeL + 3
     bool upAlive = mainL >= 0 and (vsUse or trOn5) and array.get(tTR, upIdx) == 1
     bool dnAlive = mainL >= 0 and (vsUse or trDn) and array.get(tTR, dnIdx) == 1
-    bool dnDraw = false
-    if trWho == "только нисходящий"
-        dnDraw := dnAlive
-    else if trWho == "только восходящий"
-        dnDraw := false
+    // ── РЕЖИМЫ РАЗДЕЛЕНЫ, 30.09.2026 ──
+    // Раньше здесь стоял один флаг dnDraw на два значения, и ЛОЖЬ в нём
+    // означала «рисуем восходящий». Сказать «не рисую никого» он не умел.
+    // Отсюда З23: «только нисходящий» при смерти нисходящего молча
+    // показывал восходящий, хотя владелец такого не просил.
+    //
+    // Теперь ответ ТРЁХЗНАЧНЫЙ:
+    //     0  веду восходящий
+    //     1  веду нисходящий
+    //    -1  не веду никого, счёта на графике нет
+    //
+    // Это и есть разделение режимов, которое владелец назвал 30.09.2026:
+    // «я поэтому и хотел разделить режимы авто, восходящий, нисходящий,
+    // будет ещё боковик — так как у каждого будут свои функции, критерии
+    // и задачи. И самый основной будет авто, который должен понимать,
+    // что делать».
+    //
+    // «Авто» пока решает по старому правилу — чей ноль свежее. Его
+    // переделка идёт отдельно, по перечням из indicator/АВТО-РЕЖИМ.md.
+    // Здесь сделана только РАЗВЯЗКА: теперь есть куда встраивать.
+    int drawMode = -1
+    if trWho == "только восходящий"
+        drawMode := upAlive ? 0 : -1
+    else if trWho == "только нисходящий"
+        drawMode := dnAlive ? 1 : -1
     else
-        dnDraw := dnAlive and (not upAlive or array.get(tZB, dnIdx) > array.get(tZB, upIdx))
+        if upAlive and dnAlive
+            drawMode := array.get(tZB, dnIdx) > array.get(tZB, upIdx) ? 1 : 0
+        else if upAlive
+            drawMode := 0
+        else if dnAlive
+            drawMode := 1
+    bool dnDraw = drawMode == 1
     // второй комплект: рисуем счёт со вставками, если он включён и выбран.
     // У 2/2 донора нет, поэтому только для 5/5 и 3/3. vsUse объявлен выше,
     // рядом с выбором тренда: там он теперь тоже нужен
+    // drawIdx оставлен КАК БЫЛ, по слою и направлению. Через него
+    // рисуются чёрточки «слом» и «умер», а событие не отменяется тем,
+    // что сейчас мы никого не ведём: оно было. Если завести сюда -1,
+    // чёрточки молча исчезнут в состоянии «никого» — сверка такого не
+    // ловит, у неё условие показа на вид то же самое
     int drawIdx = mainL < 0 ? -1 : vsUse ? (dnDraw ? 8 + mainL : 6 + mainL) : (dnDraw ? mainL + 3 : mainL)
     int bokIdx  = drawIdx < 0 ? 0 : drawIdx
     // при втором комплекте галочка vsOn уже проверена внутри vsUse
-    int drawTr  = mainL < 0 ? 0 : vsUse ? array.get(tTR, bokIdx) : (dnDraw ? (trDn ? array.get(tTR, bokIdx) : 0) : (trOn5 ? array.get(tTR, bokIdx) : 0))
+    // а вот СЧЁТ и УРОВЕНЬ — только когда кого-то ведём. drawTr = 0
+    // гасит номера, линию уровня и подпись «держит», оставляя зиг-заг в
+    // цветах слоя. Это и есть состояние «не веду никого»
+    int drawTr  = drawMode < 0 or drawIdx < 0 ? 0 : vsUse ? array.get(tTR, bokIdx) : (dnDraw ? (trDn ? array.get(tTR, bokIdx) : 0) : (trOn5 ? array.get(tTR, bokIdx) : 0))
     if on5 or trShow
         if lvOn and (on5 or trFull)
             r5 = f_lvlLayer(V5P, V5B, V5H, V5L, c5H, c5L)
