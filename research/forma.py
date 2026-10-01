@@ -311,3 +311,57 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+# ── ДОЗА ВСТАВОК: сколько колен даёт каждое положение ручки ──────────
+# Правило из пайна: счётчик вставок в ноге сбрасывается, когда приходит
+# СВОЁ колено слоя; вставка той же стороны, что последнее колено цепочки,
+# пропускается (З22) и в счётчик не идёт.
+
+def chain_dose(rows, dL, dDs, flip, dose):
+    """dose: 0, 1, 2 или None = без ограничения. Возвращает число колен."""
+    atL = events(rows, dL, flip)
+    own = {(b, h) for lst in atL.values() for b, p, h in lst}
+    ev = [(b, cf, p, h, True) for cf, lst in atL.items() for b, p, h in lst]
+    seen = set(own)
+    for dD in dDs:
+        for cf, lst in events(rows, dD, flip).items():
+            for b, p, h in lst:
+                if (b, h) not in seen:
+                    seen.add((b, h))
+                    ev.append((b, cf, p, h, False))
+    ev.sort(key=lambda e: (e[0], e[3] if flip else not e[3]))
+    C = Chain()
+    used = 0
+    for b, cf, p, h, mine in ev:
+        if mine:
+            C.push(p, b, h, cf)
+            used = 0
+            continue
+        if dose is not None and used >= dose:
+            continue
+        if C.H and C.H[-1] == h:        # З22: та же сторона — пропускаем
+            continue
+        C.push(p, b, h, cf)
+        used += 1
+    return len(C.P)
+
+
+def doses():
+    rows = load('data/XAUUSD_1h_2y.csv')
+    print('\nСКОЛЬКО КОЛЕН ДАЁТ КАЖДОЕ ПОЛОЖЕНИЕ РУЧКИ · два года часовика')
+    print('  %-30s %8s %8s %8s' % ('доза и донор', '5/5', '3/3', '2/2'))
+    rowsdef = [
+        ('0 — чистые слои',              0,    'оба'),
+        ('1, донор только 3/3',          1,    '33'),
+        ('1, донор 3/3 и 2/2',           1,    'оба'),
+        ('2, донор 3/3 и 2/2',           2,    'оба'),
+        ('без огранич., только 3/3',     None, '33'),
+        ('без огранич., 3/3 и 2/2',      None, 'оба'),
+    ]
+    for nm, dose, who in rowsdef:
+        cells = []
+        for layer, dL, full, narrow in (('5/5', 5, [3, 2], [3]), ('3/3', 3, [2], [2]), ('2/2', 2, [], [])):
+            dDs = [] if dose == 0 else (narrow if who == '33' else full)
+            cells.append(chain_dose(rows, dL, dDs, False, dose))
+        print('  %-30s %8d %8d %8d' % (nm, *cells))
