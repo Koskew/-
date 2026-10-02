@@ -365,3 +365,91 @@ def doses():
             dDs = [] if dose == 0 else (narrow if who == '33' else full)
             cells.append(chain_dose(rows, dL, dDs, False, dose))
         print('  %-30s %8d %8d %8d' % (nm, *cells))
+
+
+# ── 1б · ТРЕТЬЕ ПРАВИЛО РОЖДЕНИЯ: исходы, а не частота ───────────────
+# Частота совпадений посчитана 17.09 в research/rojdenie.py: A 35%,
+# B 75%, C 97%. Исходы не считались — здесь считаются они.
+#
+# Определения взяты оттуда слово в слово, но на коленах СО ВСТАВКАМИ:
+#   точка отсчёта — бар СМЕРТИ предыдущего счёта того же направления;
+#   A строгий — ПЕРВАЯ вершина после неё = LH, и ПЕРВЫЙ низ после этой
+#               вершины = LL, и он же действующий ноль;
+#   B мягкий  — где-то после неё была вершина LH раньше нуля.
+# C не мерится: он совпадает с 97% рождений, отсеивать три процента
+# бессмысленно, число утонет в шуме.
+
+def rule_ab(FC, zi, dbar):
+    s = [k for k in range(zi + 1) if FC.B[k] > dbar]
+    hs = [k for k in s if FC.H[k]]
+    okB = any(FC.H[k] and FC.L[k] == 'LH' and k < zi for k in s)
+    okA = False
+    if hs and FC.L[hs[0]] == 'LH':
+        ls = [k for k in s if (not FC.H[k]) and k > hs[0]]
+        if ls and FC.L[ls[0]] == 'LL' and ls[0] == zi:
+            okA = True
+    return okA, okB
+
+
+def rojd(path, title):
+    rows = load(path)
+    print('\n' + '=' * 78)
+    print('%s · %d баров' % (title, len(rows)))
+    for nm, dL, dDs in (('5/5', 5, [3]), ('3/3', 3, [2]), ('2/2', 2, [])):
+        for flip, dirn in ((False, '↑'), (True, '↓')):
+            FC, counts, ins = run_layer(rows, dL, dDs, flip)
+            rec = []
+            prev_end = None
+            for ct in counts:
+                zi = zero_index(FC, ct['zb'])
+                if zi >= 0 and prev_end is not None and ct['zl'] == 'LL':
+                    a, b = rule_ab(FC, zi, prev_end)
+                    last = min(zi + 5, len(FC.P) - 1)
+                    tail = '·'.join(FC.L[k] for k in range(zi + 1, last + 1))
+                    inref = any(p.startswith(tail) for p in PAT) if tail else True
+                    # ТАВТОЛОГИЯ, пойманная 02.10.2026 в первой сборке.
+                    # Считал LL среди низов zi+2 и zi+4 ВСЕГДА, даже если
+                    # счёт умер на (1) — то есть по коленам, которые
+                    # появились ПОСЛЕ его смерти. А после смерти низ почти
+                    # всегда LL: цена ушла за уровень, потому тренд и умер.
+                    # Получалось «умер → значит была манипуляция → значит
+                    # манипуляция предсказывает смерть». Числа выброшены.
+                    #
+                    # Честно: смотрим ТОЛЬКО низ (2), он известен в момент,
+                    # когда счёт на (2), а исход считается после.
+                    n2 = zi + 2
+                    had2 = ct['mx'] >= 2 and n2 < len(FC.P)
+                    ll2 = had2 and FC.L[n2] == 'LL'
+                    rec.append({'A': a, 'B': b, 'mx': ct['mx'], 'ref': inref,
+                                'had2': had2, 'll2': ll2})
+                prev_end = ct['end']
+            if not rec:
+                continue
+            print('\n  слой %s %s — рождений с нулём LL: %d' % (nm, dirn, len(rec)))
+            print('    %-18s %7s %10s %12s' % ('группа', 'штук', 'до (5)', 'в справ.'))
+            for lab, sel in (('правило A', [r for r in rec if r['A']]),
+                             ('НЕ A', [r for r in rec if not r['A']]),
+                             ('правило B', [r for r in rec if r['B']]),
+                             ('НЕ B', [r for r in rec if not r['B']])):
+                if not sel:
+                    continue
+                d5 = sum(1 for r in sel if r['mx'] >= 5)
+                rf = sum(1 for r in sel if r['ref'])
+                print('    %-18s %7d %10s %12s'
+                      % (lab, len(sel), pct(d5, len(sel)), pct(rf, len(sel))))
+            # исход 3 по слову владельца: докуда дошёл счёт,
+            # отдельно чистые и с манипуляциями
+            print('    %-18s %s  (только дожившие до (2))' % ('докуда счёт', '  '.join('(%d)' % k for k in range(2, 6))))
+            d2 = [r for r in rec if r['had2']]
+            for lab, sel in (('A · низ (2) HL', [r for r in d2 if r['A'] and not r['ll2']]),
+                             ('A · низ (2) LL', [r for r in d2 if r['A'] and r['ll2']]),
+                             ('не A · низ (2) HL', [r for r in d2 if not r['A'] and not r['ll2']]),
+                             ('не A · низ (2) LL', [r for r in d2 if not r['A'] and r['ll2']]),
+                             ('ВСЕ · низ (2) HL', [r for r in d2 if not r['ll2']]),
+                             ('ВСЕ · низ (2) LL', [r for r in d2 if r['ll2']])):
+                if not sel:
+                    continue
+                cnts = [sum(1 for r in sel if r['mx'] == k) for k in range(2, 6)]
+                d5 = sum(1 for r in sel if r['mx'] >= 5)
+                print('    %-18s %s   n=%-4d до (5): %s'
+                      % (lab, '  '.join('%3d' % c for c in cnts), len(sel), pct(d5, len(sel))))
