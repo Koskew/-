@@ -1796,9 +1796,15 @@ if barstate.islast
             // границу массива. Та же предосторожность, что и с safeL
             int fiU = mi >= 0 ? mi + 8 * c + (rojd ? 0 : 24) : 0
             int fr = mi >= 0 and np >= 5 ? array.get(PFR, fiU) : -1
-            string cell = not up ? "—" : np < 5 ? (mc <= 3 ? mn : str.tostring(mc) + " вар.") : mn
-            string tip = not up ? "Тренда нет." : "Слой " + nm + ", " + (rojd ? "РОЖДЕНИЕ, ноль LL" : "ПРОДОЛЖЕНИЕ, ноль HL") + "\n\nсейчас на графике:  " + zl + (np > 0 ? "·" + tl : "") + "\n" + (np < 5 ? "счёт не дошёл до (5): подходят ещё " + str.tostring(mc) + " из 8 — " + mn : "это " + mn + ", за 9 лет часовика встретилась " + str.tostring(fr) + " раз") + "\n\nИндикатор ничего не предсказывает. Он узнаёт форму и называет её номером, как шаблон триггерной свечи."
-            table.cell(TBL, c + 1, 8, cell, text_color = up ? (np >= 5 ? cTrUp : color.gray) : color.gray, text_size = size.tiny, tooltip = tip)
+            // З28, 02.10.2026. Не подошёл НИ ОДИН эталон — f_match
+            // возвращает пустое имя, и в ячейку клалась ПУСТОТА. Самый
+            // сильный признак индикатора показывался пустым местом:
+            // замер Н21 — счёт вне справочника доходит до (5) в 37%
+            // против 90%. Теперь это слово, а не отсутствие слова.
+            string nmU = mc > 0 ? mn : "вне справ."
+            string cell = not up ? "—" : np < 5 ? (mc <= 3 ? nmU : str.tostring(mc) + " вар.") : nmU
+            string tip = not up ? "Тренда нет." : "Слой " + nm + ", " + (rojd ? "РОЖДЕНИЕ, ноль LL" : "ПРОДОЛЖЕНИЕ, ноль HL") + "\n\nсейчас на графике:  " + zl + (np > 0 ? "·" + tl : "") + "\n" + (mc == 0 ? "ФОРМА ВЫШЛА ИЗ СПРАВОЧНИКА: ни один из восьми эталонов больше не подходит.\nВсе восемь требуют HL на местах (2) и (4) — значит низ оказался LL, была манипуляция.\n\nЗамер Н21 на двух годах часовика: такие счёты доходят до (5) примерно в 37% случаев против 90% у формы из справочника." : np < 5 ? "счёт не дошёл до (5): подходят ещё " + str.tostring(mc) + " из 8 — " + mn : "это " + mn + ", за 9 лет часовика встретилась " + str.tostring(fr) + " раз") + "\n\nИндикатор ничего не предсказывает. Он узнаёт форму и называет её номером, как шаблон триггерной свечи."
+            table.cell(TBL, c + 1, 8, cell, text_color = up ? (mc == 0 ? color.orange : np >= 5 ? cTrUp : color.gray) : color.gray, text_size = size.tiny, tooltip = tip)
         table.cell(TBL, 0, 1, "состояние", text_color = color.gray, text_size = size.tiny)
         table.cell(TBL, 0, 2, "счёт", text_color = color.gray, text_size = size.tiny)
         table.cell(TBL, 0, 3, "уровень", text_color = color.gray, text_size = size.tiny)
@@ -1841,9 +1847,11 @@ if barstate.islast
             bool rojdN = zlN == "LL"
             int fiN = miN >= 0 ? miN + 8 * c + (rojdN ? 0 : 24) : 0
             int frN = miN >= 0 and npN >= 5 ? array.get(SFR, fiN) : -1
-            string cellN = not dn ? "—" : npN < 5 ? (mcN <= 3 ? mnN : str.tostring(mcN) + " вар.") : mnN
-            string tipN = not dn ? "Тренда нет." : "Слой " + nmD + ", " + (rojdN ? "РОЖДЕНИЕ, ноль HH" : "ПРОДОЛЖЕНИЕ, ноль LH") + "\n\nсейчас на графике:  " + f_swap1(zlN) + (npN > 0 ? "·" + f_swapSeq(tlN) : "") + "\n" + (npN < 5 ? "счёт не дошёл до (5): подходят ещё " + str.tostring(mcN) + " из 8 — " + mnN : "это " + mnN + ", за 9 лет часовика встретилась " + str.tostring(frN) + " раз") + "\n\nВершины в нисходящем всегда LH — иначе это не нисходящий. Свободны только низы, и вариантов ровно восемь.\n\nНумерация зеркальная: С1 это зеркало П1."
-            table.cell(TBL, c + 1, 17, cellN, text_color = dn ? (npN >= 5 ? cTrDn : color.gray) : color.gray, text_size = size.tiny, tooltip = tipN)
+            // З28, то же самое в зеркальном блоке
+            string nmD2 = mcN > 0 ? mnN : "вне справ."
+            string cellN = not dn ? "—" : npN < 5 ? (mcN <= 3 ? nmD2 : str.tostring(mcN) + " вар.") : nmD2
+            string tipN = not dn ? "Тренда нет." : "Слой " + nmD + ", " + (rojdN ? "РОЖДЕНИЕ, ноль HH" : "ПРОДОЛЖЕНИЕ, ноль LH") + "\n\nсейчас на графике:  " + f_swap1(zlN) + (npN > 0 ? "·" + f_swapSeq(tlN) : "") + "\n" + (mcN == 0 ? "ФОРМА ВЫШЛА ИЗ СПРАВОЧНИКА: ни один из восьми эталонов больше не подходит.\nВ нисходящем все восемь требуют LH на местах (2) и (4) — значит вершина оказалась HH, была манипуляция.\n\nЗамер Н21 на двух годах часовика: такие счёты доходят до (5) примерно в 37% случаев против 90% у формы из справочника." : npN < 5 ? "счёт не дошёл до (5): подходят ещё " + str.tostring(mcN) + " из 8 — " + mnN : "это " + mnN + ", за 9 лет часовика встретилась " + str.tostring(frN) + " раз") + "\n\nВершины в нисходящем всегда LH — иначе это не нисходящий. Свободны только низы, и вариантов ровно восемь.\n\nНумерация зеркальная: С1 это зеркало П1."
+            table.cell(TBL, c + 1, 17, cellN, text_color = dn ? (mcN == 0 ? color.orange : npN >= 5 ? cTrDn : color.gray) : color.gray, text_size = size.tiny, tooltip = tipN)
         table.cell(TBL, 0, 10, "состояние", text_color = color.gray, text_size = size.tiny)
         table.cell(TBL, 0, 11, "счёт", text_color = color.gray, text_size = size.tiny)
         table.cell(TBL, 0, 12, "уровень", text_color = color.gray, text_size = size.tiny, tooltip = "Уровень нисходящего — последняя появившаяся LH. Новая LH заменяет предыдущую безусловно, ниже она или выше.")
