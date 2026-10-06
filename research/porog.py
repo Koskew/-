@@ -163,7 +163,11 @@ def collect(rows, dL, dDs, dose, flip):
                 break
         if vt < 0:
             continue
-        res.append({'k': num[i], 'lab': K.L[i], 'held': K.L[vt] == 'HH',
+        # ИМПУЛЬС, как его считает движок: последняя ВЫРОСШАЯ нога.
+        # Колено i — низ, значит нога i-1→i падающая, а последняя
+        # растущая — это i-2→i-1.
+        imp = (K.P[i - 1] - K.P[i - 2]) if i >= 2 and K.P[i - 1] > K.P[i - 2] else 0.0
+        res.append({'k': num[i], 'lab': K.L[i], 'held': K.L[vt] == 'HH', 'imp': imp,
                     'w': max(deepW, 0.0), 'b': max(deepB, 0.0),
                     'px': abs(lv), 'avg': avg})
     return res
@@ -190,7 +194,14 @@ def show(res, title):
     bad = [r for r in res if not r['held']]
     if len(ok) < 30 or len(bad) < 30:
         return
+    # ПРОВЕРКА НЫНЕШНЕГО БУФЕРА: во что превращается имп × 0.33, если
+    # мерить его той же линейкой — в долях среднего колена слоя
+    iv = [r['imp'] / r['avg'] for r in res if r['imp'] > 0]
     print('   ' + '-' * 76)
+    print('   ИМПУЛЬС в коленах: медиана %.2f, 25%% %.2f, 75%% %.2f, 90%% %.2f'
+          % (q(iv, .5), q(iv, .25), q(iv, .75), q(iv, .9)))
+    print('   НЫНЕШНИЙ БУФЕР имп x 0.33 в коленах: медиана %.2f, 25%% %.2f, 75%% %.2f, 90%% %.2f'
+          % (q(iv, .5) * .33, q(iv, .25) * .33, q(iv, .75) * .33, q(iv, .9) * .33))
     for nm, key in (('ТЕНЬ', 'w'), ('ТЕЛО', 'b')):
         f = lambda v, g: q([g(r) for r in v], .5)
         print('   %s  оправился: %6.2f пункта · %5.3f%% · %4.2f колена   |   слабеет: %6.2f · %5.3f%% · %4.2f'
