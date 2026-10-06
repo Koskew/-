@@ -44,10 +44,14 @@ PNM = ["П1", "П5", "П6", "П12", "П16", "П20", "П25", "П29"]
 
 def merged_events(rows, dL, dDs, flip):
     """Колена слоя плюс вставки донора: любое колено донора, которого у
-    слоя нет. Доза без ограничения. Порядок — по бару САМОГО колена."""
+    слоя нет. Доза без ограничения. Порядок — по бару САМОГО колена.
+
+    ВОЗВРАЩАЕТ пятёрки (бар, бар подтверждения, цена, вершина?, СВОЁ?).
+    Пятый элемент добавлен 06.10.2026, чтобы run_layer умел дозу. Для
+    прежних вызовов ничего не меняется: доза по умолчанию без границы."""
     atL = events(rows, dL, flip)
     own = {(b, h) for lst in atL.values() for b, p, h in lst}
-    ev = [(b, cf, p, h) for cf, lst in atL.items() for b, p, h in lst]
+    ev = [(b, cf, p, h, True) for cf, lst in atL.items() for b, p, h in lst]
     seen = set(own)
     ins = 0
     for dD in dDs:
@@ -55,7 +59,7 @@ def merged_events(rows, dL, dDs, flip):
             for b, p, h in lst:
                 if (b, h) not in seen:
                     seen.add((b, h))
-                    ev.append((b, cf, p, h))
+                    ev.append((b, cf, p, h, False))
                     ins += 1
     # ПОРЯДОК ВНУТРИ БАРА. Одна большая свеча умеет сделать и вершину, и
     # низ сразу — §11.1. Пайн кладёт их в НАСТОЯЩЕМ порядке в обоих мирах:
@@ -96,7 +100,7 @@ class Chain:
                           ('HH' if c > prev else 'LH') if h else ('HL' if c > prev else 'LL'))
 
 
-def run_layer(rows, dL, dDs, flip):
+def run_layer(rows, dL, dDs, flip, dose=None):
     """Прогон одного слоя. Возвращает полную цепочку и список СЧЁТОВ.
 
     Счёт — не то же, что тренд: §5 даёт перезапуск, при котором внутри
@@ -104,6 +108,7 @@ def run_layer(rows, dL, dDs, flip):
     """
     ev, ins = merged_events(rows, dL, dDs, flip)
     K, T, FC = Knees(), Trend(), Chain()
+    used = 0            # одолженных подряд; своё колено обнуляет — как в Пайне
     sg = -1.0 if flip else 1.0
     counts = []          # {zb, zl, mx, born, end}
     cur = None
@@ -112,11 +117,20 @@ def run_layer(rows, dL, dDs, flip):
         _, o, h, l, c = rows[i]
         nw = fr = False
         while q < len(ev) and ev[q][1] <= i:
-            bar, conf, price, isHi = ev[q]
+            bar, conf, price, isHi, mine = ev[q]
+            q += 1
+            if mine:
+                used = 0
+            else:
+                if dose is not None:
+                    if used >= dose:
+                        continue
+                    if K.H and K.H[-1] == isHi:     # З22: та же сторона
+                        continue
+                used += 1
             nw = K.push(price, bar, isHi) or nw
             FC.push(price, bar, isHi, conf)
             fr = True
-            q += 1
         prev_zb = T.zb
         T.step(i, sg * o, sg * c, K, nw, fr)
         if T.zb != prev_zb:
@@ -163,8 +177,8 @@ def broke(rows, price, a, b, flip, below):
     return 'тень' if shad else 'цело'
 
 
-def analyse(rows, name, dL, dDs, flip):
-    FC, counts, ins = run_layer(rows, dL, dDs, flip)
+def analyse(rows, name, dL, dDs, flip, dose=None):
+    FC, counts, ins = run_layer(rows, dL, dDs, flip, dose)
     tails, res = {}, []
     for ct in counts:
         zi = zero_index(FC, ct['zb'])
