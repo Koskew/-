@@ -155,23 +155,46 @@ class Chain:
             self.L.append(lab(h, self.P[i], prev))
 
 
-def lvl_from(K, zb):
-    """f_lvlSet. Уровень = ПОСЛЕДНИЙ HL в цепочке, начиная с нуля
-    включительно. Такого нет — уровень на самом нуле, и он ВРЕМЕННЫЙ.
+def lvl_from(K, zb, only_hl=False):
+    """f_lvlSet. Уровень = ПОСЛЕДНИЙ НИЗ в цепочке, начиная с нуля.
 
-    Возвращает (цена, бар, настоящий_ли_HL) или (None, -1, False)."""
+    РАЗВИЛКА А, решение владельца 07.10.2026: «пусть съезжает на
+    манипуляционный низ». Уровень переезжает на низ ЛЮБОЙ подписи, а не
+    только на HL. Буквальное чтение его же правила М3 от 06.10:
+    «манипуляционное колено ДЕРЖИТ, отличие не в силе, а в ЛИНИИ».
+
+    Отличие в линии и остаётся: `real` говорит, настоящий это HL или нет,
+    и по нему рисуется сплошная или штрих-пунктирная.
+
+    ЦЕНА ЭТОГО РЕШЕНИЯ, названа владельцу: уровень поедет НИЖЕ, запас
+    вырастет, тренд проживёт дольше. И штрих-пунктирная линия имеет право
+    исчезнуть — тогда уровень прыгнет обратно вверх.
+
+    only_hl=True воспроизводит прежнее поведение (развилка Б).
+
+    Возвращает (цена, бар, настоящий_ли_HL, стоит_ли_на_НУЛЕ)."""
     zi = -1
     for k in range(len(K.P)):
         if K.B[k] >= zb and not K.H[k]:
             zi = k
             break
     if zi < 0:
-        return None, -1, False
+        return None, -1, False, False
     lp, lx, real = K.P[zi], K.B[zi], K.L[zi] == 'HL'
+    found = False
     for k in range(zi, len(K.P)):
-        if (not K.H[k]) and K.L[k] == 'HL':
-            lp, lx, real = K.P[k], K.B[k], True
-    return lp, lx, real
+        if not K.H[k]:
+            if k == zi:
+                continue
+            if only_hl and K.L[k] != 'HL':
+                continue
+            lp, lx, real = K.P[k], K.B[k], K.L[k] == 'HL'
+            found = True
+    # Строгая ступень — только пока линия ШТРИХ-ПУНКТИРНАЯ, то есть пока
+    # уровень стоит на нуле И этот ноль не настоящий HL. У продолжения
+    # ноль настоящий (У10), и строгой ступени у него быть не должно:
+    # тренд, трижды прошедший путь до (5), не может «не состояться».
+    return lp, lx, real, (not found) and (not real)
 
 
 class Trend:
@@ -187,6 +210,7 @@ class Trend:
         self.zb = -1; self.zp = None; self.zl = ''
         self.pzb = -1
         self.lvl = None; self.lvb = -1; self.lhl = False
+        self.on_zero = True     # уровень всё ещё стоит на НУЛЕ → строгая ступень
         self.cnt = -1; self.mx = -1
         self.rst = 0            # полных счётов: сколько раз дошёл до (5) и продолжился
         self.ll = False         # в счёте был низ LL — разбудил запасное подтверждение
@@ -216,7 +240,8 @@ class Trend:
         """Хвост истории на последнем баре: счёт не кончился, но прогон да."""
         self._close(bar, 'идёт')
 
-    def step(self, bar, o, c, K, nw, fr, leg, ref, depth, brk):
+    def step(self, bar, o, h, l, c, K, nw, fr, leg, ref, depth, brk,
+             cancel='касание', only_hl=False):
         if self.st in (ST_MAY, ST_LIVE):
             self.alive_bars += 1
 
@@ -237,28 +262,39 @@ class Trend:
                 self.st = ST_NO
 
         # ── 1. СМЕРТЬ и ОТМЕНА, каждый бар ──
-        if self.st == ST_LIVE and self.lvl is not None:
-            if min(o, c) < self.lvl - depth * leg:
-                self.st = ST_DEAD
-                self.eb = bar
-                self.cnt = -1
-                self.lvl = None
-                self.bab = 0
-                self.rst = 0
-                self.ll = False
-                self._close(bar, 'умер')
-        elif self.st == ST_MAY and self.lvl is not None:
-            # нижний сторож, §15: пока тренд не подтверждён, опора
-            # временная и нарисована штрих-пунктиром — буфера нет,
-            # хватает закрытия ниже нуля. «Рождения не было»
-            if c < self.lvl:
-                self.st = ST_CAN
-                self.eb = bar
-                self.cnt = -1
-                self.lvl = None
-                self.rst = 0
-                self.ll = False
-                self._close(bar, 'не было')
+        # ДВЕ СТУПЕНИ, и граница между ними проходит СРАЗУ ПОСЛЕ НОЛЯ —
+        # §31, «Прочтение 1», подтверждено владельцем 06.10.2026:
+        #
+        #   (0)        касание рубит, без всякого запаса  → «тренда не было»
+        #   (2), (4)   манипуляция прощается, убивает глубина → СМЕРТЬ
+        #
+        # Ступень выбирается НЕ по подтверждению, а по тому, где стоит
+        # уровень: пока он на нуле — строго; съехал на низ счёта —
+        # мягко. Это буквально «граница терпения проходит сразу после
+        # ноля», а не «после подтверждения» и не «после (3)».
+        if self.st in (ST_MAY, ST_LIVE) and self.lvl is not None:
+            if self.on_zero:
+                # строгая ступень: КАСАНИЕ сторожа ноля. Тренда не было
+                touched = (l <= self.lvl) if cancel == 'касание' else (c < self.lvl)
+                if touched:
+                    self.st = ST_CAN
+                    self.eb = bar
+                    self.cnt = -1
+                    self.lvl = None
+                    self.rst = 0
+                    self.ll = False
+                    self._close(bar, 'не было')
+            else:
+                # мягкая ступень: тело ниже уровня на долю колена
+                if min(o, c) < self.lvl - depth * leg:
+                    self.st = ST_DEAD
+                    self.eb = bar
+                    self.cnt = -1
+                    self.lvl = None
+                    self.bab = 0
+                    self.rst = 0
+                    self.ll = False
+                    self._close(bar, 'умер')
 
         # ── 2. ЗАПАСНОЕ ПОДТВЕРЖДЕНИЕ У7 ──
         # СПИТ, пока в счёте не появился низ LL
@@ -286,6 +322,11 @@ class Trend:
                         self.rst += 1
                         self.ll = False
                         self.st = ST_LIVE
+                        # У10: ноль продолжения — настоящий HL, значит
+                        # уровень настоящий, и строгой ступени здесь нет:
+                        # касанием такой тренд не рубится
+                        self.lvl = prK; self.lvb = bbK; self.lhl = True
+                        self.on_zero = False
                         self._open(bar)
                     else:
                         # АРХИВ
@@ -307,9 +348,9 @@ class Trend:
                             self.ll = True
                 # уровень пересчитывается ОТ НУЛЯ, но не у архива
                 if self.st in (ST_MAY, ST_LIVE):
-                    lp, lx, real = lvl_from(K, self.zb)
+                    lp, lx, real, onz = lvl_from(K, self.zb, only_hl)
                     if lp is not None:
-                        self.lvl, self.lvb, self.lhl = lp, lx, real
+                        self.lvl, self.lvb, self.lhl, self.on_zero = lp, lx, real, onz
             elif self.st in (ST_NO, ST_DEAD, ST_CAN, ST_ARC):
                 # ── РОЖДЕНИЕ ОБЪЯВЛЯЕТ (1) ──
                 if nw and hiK and (not K.H[-2]) and K.L[-2] == 'LL':
@@ -323,6 +364,7 @@ class Trend:
                     self.ll = False
                     # У2: ноль — ВРЕМЕННАЯ опора, помечена честно
                     self.lvl = K.P[j]; self.lvb = K.B[j]; self.lhl = False
+                    self.on_zero = True
                     # перебитая вершина — от неё считается У7
                     v = j - 1
                     while v >= 0 and not K.H[v]:
@@ -353,7 +395,8 @@ def pivots_by_bar(rows, d):
     return H, L
 
 
-def run_all(rows, flip=False, dose5=2, dose3=1, depth=0.20, brk=BRK_LEG):
+def run_all(rows, flip=False, dose5=2, dose3=2, depth=0.20, brk=BRK_LEG,
+            cancel='касание', only_hl=False):
     """Все три слоя ОДНИМ проходом, как в пайне.
 
     rows — ВСЕГДА настоящие свечи. flip=True считает нисходящий: цена
@@ -464,11 +507,17 @@ def run_all(rows, flip=False, dose5=2, dose3=1, depth=0.20, brk=BRK_LEG):
         pre_last[2] = -1
 
         # ── шаг движка ──
+        # В перевёрнутом мире «верх свечи» — это минус настоящий минимум,
+        # а «низ» — минус настоящий максимум. Зеркало меняет знак и
+        # сторону, но не переставляет события: поэтому пересчёт здесь, а
+        # не в f_trend
+        wh = -l if flip else h
+        wl = -h if flip else l
         for li in range(3):
             if vref[li]:
                 ref_bars[li] += 1
-            T[li].step(i, sg * o, sg * c, K[li], nw[li], fr[li],
-                       K[li].avg_leg(), vref[li], depth, brk)
+            T[li].step(i, sg * o, wh, wl, sg * c, K[li], nw[li], fr[li],
+                       K[li].avg_leg(), vref[li], depth, brk, cancel, only_hl)
 
     for li in range(3):
         C[li].relabel()
