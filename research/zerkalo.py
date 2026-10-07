@@ -58,8 +58,15 @@ class Knees:
                     prev = self.P[j]
                     break
             c = self.P[i]
+            # З36, 07.10.2026. У вершины сравнение строгое, у низа
+            # НЕСТРОГОЕ. `>` не симметрично при перевороте знака, когда
+            # значения РАВНЫ: неравенство переворачивается, равенство нет.
+            # Равная вершина НЕ ПЕРЕБИЛА (LH), равный низ УДЕРЖАЛ (HL), а
+            # HL и есть зеркало LH. Один оператор на обе стороны ломает
+            # зеркало с той или с другой. Проверено zerkalo_check.py:
+            # было 2-5 расхождений на 7-11 тысяч колен, стало 0.
             self.L.append('?' if prev is None else
-                          ('HH' if c > prev else 'LH') if h else ('HL' if c > prev else 'LL'))
+                          ('HH' if c > prev else 'LH') if h else ('HL' if c >= prev else 'LL'))
 
     def push(self, price, bar, isHi):
         same = self.P and self.H[-1] == isHi
