@@ -396,7 +396,7 @@ def pivots_by_bar(rows, d):
 
 
 def run_all(rows, flip=False, dose5=2, dose3=2, depth=0.20, brk=BRK_LEG,
-            cancel='касание', only_hl=False):
+            cancel='касание', only_hl=False, trace=False):
     """Все три слоя ОДНИМ проходом, как в пайне.
 
     rows — ВСЕГДА настоящие свечи. flip=True считает нисходящий: цена
@@ -424,6 +424,11 @@ def run_all(rows, flip=False, dose5=2, dose3=2, depth=0.20, brk=BRK_LEG,
     vref = [False, False, False]
     ins = [0, 0, 0]
     ref_bars = [0, 0, 0]
+    # ПРИБОР, а не правило: по-барный снимок уровня и состояния. Нужен
+    # замерам, которые спрашивают «что было на баре», — например
+    # «прыгает ли уровень вверх и не умирает ли тренд сразу после».
+    # На сам движок не влияет никак
+    tr = [[], [], []] if trace else None
     pre_last = [-1, -1, -1]
     dose = [dose5, dose3, 0]
 
@@ -518,11 +523,14 @@ def run_all(rows, flip=False, dose5=2, dose3=2, depth=0.20, brk=BRK_LEG,
                 ref_bars[li] += 1
             T[li].step(i, sg * o, wh, wl, sg * c, K[li], nw[li], fr[li],
                        K[li].avg_leg(), vref[li], depth, brk, cancel, only_hl)
+            if tr is not None:
+                tr[li].append((T[li].lvl, T[li].st, T[li].on_zero))
 
     for li in range(3):
         C[li].relabel()
         T[li].finish(n - 1)
-    return {'K': K, 'C': C, 'T': T, 'pre': pre_last, 'ins': ins, 'ref_bars': ref_bars}
+    return {'K': K, 'C': C, 'T': T, 'pre': pre_last, 'ins': ins,
+            'ref_bars': ref_bars, 'trace': tr}
 
 
 # ════════════════════════════════════════════════════════════════════
