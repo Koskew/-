@@ -241,7 +241,22 @@ class Trend:
         self._close(bar, 'идёт')
 
     def step(self, bar, o, h, l, c, K, nw, fr, leg, ref, depth, brk,
-             cancel='касание', only_hl=False):
+             cancel='касание', only_hl=False,
+             nwn=None, knee_seq=False, zguard=False, wlows=None):
+        """РУЧКИ, значения по умолчанию в точности воспроизводят эталон:
+
+        knee_seq — З41. False: колено разбирается ОДНО за бар, последнее,
+            и счёт двигается на единицу, сколько бы колен ни пришло.
+            True: колена разбираются ПО ОЧЕРЕДИ, по одному проходу на
+            каждое новое, в порядке цепочки. Трогает только бары, где
+            колен пришло ДВА, — свеча-накрышка.
+        zguard — З40. False: рождение смотрит только вперёд. True: при
+            рождении проверяется каждая свеча от бара ПОСЛЕ нуля до
+            текущей включительно, и касание нуля рождение отменяет.
+            Нужен wlows — «низ свечи» этого мира по барам.
+        nwn — СКОЛЬКО новых колен на баре. None = вывести из nw."""
+        if nwn is None:
+            nwn = 1 if nw else 0
         if self.st in (ST_MAY, ST_LIVE):
             self.alive_bars += 1
 
@@ -308,7 +323,26 @@ class Trend:
         # ── 3. НОВОЕ КОЛЕНО ──
         n = len(K.P)
         if fr and n >= 2:
-            lb, hiK, prK, bbK = K.L[-1], K.H[-1], K.P[-1], K.B[-1]
+            if knee_seq:
+                kFirst = n - nwn if nwn >= 1 else n - 1
+                for k in range(kFirst, n):
+                    self._knee(bar, K, k, nwn >= 1 and k >= n - nwn,
+                               leg, depth, brk, cancel, only_hl,
+                               zguard, wlows)
+            else:
+                self._knee(bar, K, n - 1, nw,
+                           leg, depth, brk, cancel, only_hl,
+                           zguard, wlows)
+
+    # ВТОРОЙ КОПИИ МЕХАНИКИ ЗДЕСЬ НЕТ. Блок колена ОДИН, вынесен в метод
+    # ровно для того, чтобы обе ручки гоняли один и тот же код: при
+    # knee_seq=False он зовётся один раз по последнему колену — это
+    # эталон, байт в байт по поведению
+    def _knee(self, bar, K, k, nw, leg, depth, brk, cancel, only_hl,
+              zguard=False, wlows=None):
+            n = len(K.P)
+            jb = k - 1 if k >= 1 else k
+            lb, hiK, prK, bbK = K.L[k], K.H[k], K.P[k], K.B[k]
             if self.st in (ST_MAY, ST_LIVE):
                 cnt = self.cnt
                 if nw and cnt >= 5 and not hiK:
@@ -353,25 +387,37 @@ class Trend:
                         self.lvl, self.lvb, self.lhl, self.on_zero = lp, lx, real, onz
             elif self.st in (ST_NO, ST_DEAD, ST_CAN, ST_ARC):
                 # ── РОЖДЕНИЕ ОБЪЯВЛЯЕТ (1) ──
-                if nw and hiK and (not K.H[-2]) and K.L[-2] == 'LL':
-                    j = n - 2
-                    self.st = ST_MAY
-                    self.born = bar
-                    self.zb = K.B[j]; self.zp = K.P[j]; self.zl = K.L[j]
-                    self.cnt = 1; self.mx = 1
-                    self.pzb = -1
-                    self.rst = 0
-                    self.ll = False
-                    # У2: ноль — ВРЕМЕННАЯ опора, помечена честно
-                    self.lvl = K.P[j]; self.lvb = K.B[j]; self.lhl = False
-                    self.on_zero = True
-                    # перебитая вершина — от неё считается У7
-                    v = j - 1
-                    while v >= 0 and not K.H[v]:
-                        v -= 1
-                    self.bp = K.P[v] if v >= 0 else None
-                    self.bab = 0
-                    self._open(bar)
+                if nw and hiK and k >= 1 and (not K.H[jb]) and K.L[jb] == 'LL':
+                    j = jb
+                    # ── РУЧКА zguard, З40 ──
+                    # Сторож нуля смотрит и НАЗАД: каждая свеча от бара
+                    # ПОСЛЕ нуля до текущей включительно. Коснулась нуля
+                    # или ушла ниже — тренд НЕ РОЖДАЕТСЯ. Сам бар нуля не
+                    # проверяется: его низ и ЕСТЬ цена нуля
+                    zBroke = False
+                    if zguard and wlows is not None:
+                        for q in range(K.B[j] + 1, bar + 1):
+                            if wlows[q] <= K.P[j]:
+                                zBroke = True
+                                break
+                    if not zBroke:
+                        self.st = ST_MAY
+                        self.born = bar
+                        self.zb = K.B[j]; self.zp = K.P[j]; self.zl = K.L[j]
+                        self.cnt = 1; self.mx = 1
+                        self.pzb = -1
+                        self.rst = 0
+                        self.ll = False
+                        # У2: ноль — ВРЕМЕННАЯ опора, помечена честно
+                        self.lvl = K.P[j]; self.lvb = K.B[j]; self.lhl = False
+                        self.on_zero = True
+                        # перебитая вершина — от неё считается У7
+                        v = j - 1
+                        while v >= 0 and not K.H[v]:
+                            v -= 1
+                        self.bp = K.P[v] if v >= 0 else None
+                        self.bab = 0
+                        self._open(bar)
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -396,7 +442,8 @@ def pivots_by_bar(rows, d):
 
 
 def run_all(rows, flip=False, dose5=2, dose3=2, depth=0.20, brk=BRK_LEG,
-            cancel='касание', only_hl=False, trace=False):
+            cancel='касание', only_hl=False, trace=False,
+            zguard=False, knee_seq=False):
     """Все три слоя ОДНИМ проходом, как в пайне.
 
     rows — ВСЕГДА настоящие свечи. flip=True считает нисходящий: цена
@@ -421,6 +468,13 @@ def run_all(rows, flip=False, dose5=2, dose3=2, depth=0.20, brk=BRK_LEG,
     C = [Chain(), Chain(), Chain()]
     T = [Trend(), Trend(), Trend()]
     vcn = [0, 0, 0]
+    # СКОЛЬКО новых колен пришло на этом баре — 0, 1 или 2. Ручка
+    # knee_seq (З41) читает это число; при knee_seq=False оно не
+    # используется вовсе, и поведение ровно эталонное
+    nwc = [0, 0, 0]
+    # «низ свечи» ЭТОГО мира по барам: ручке zguard (З40) надо смотреть
+    # назад, а зеркало меняет знак и сторону
+    wlows = [(-r[2] if flip else r[3]) for r in rows]
     vref = [False, False, False]
     ins = [0, 0, 0]
     ref_bars = [0, 0, 0]
@@ -437,6 +491,8 @@ def run_all(rows, flip=False, dose5=2, dose3=2, depth=0.20, brk=BRK_LEG,
         C[li].push(px(price), bar, isHi, bar + (5, 3, 2)[li])
         vcn[li] = 0
         vref[li] = False
+        if nw:
+            nwc[li] += 1
         return nw
 
     def donor(li, price, bar, isHi):
@@ -450,6 +506,7 @@ def run_all(rows, flip=False, dose5=2, dose3=2, depth=0.20, brk=BRK_LEG,
         vcn[li] += 1
         if nw:
             ins[li] += 1
+            nwc[li] += 1
         return nw, False
 
     n = len(rows)
@@ -457,6 +514,7 @@ def run_all(rows, flip=False, dose5=2, dose3=2, depth=0.20, brk=BRK_LEG,
         _, o, h, l, c = rows[i]
         nw = [False, False, False]
         fr = [False, False, False]
+        nwc[0] = 0; nwc[1] = 0; nwc[2] = 0
 
         # ── слой 2/2: только свои, соседа снизу нет ──
         p = i - 2
@@ -522,7 +580,9 @@ def run_all(rows, flip=False, dose5=2, dose3=2, depth=0.20, brk=BRK_LEG,
             if vref[li]:
                 ref_bars[li] += 1
             T[li].step(i, sg * o, wh, wl, sg * c, K[li], nw[li], fr[li],
-                       K[li].avg_leg(), vref[li], depth, brk, cancel, only_hl)
+                       K[li].avg_leg(), vref[li], depth, brk, cancel, only_hl,
+                       nwn=nwc[li], knee_seq=knee_seq, zguard=zguard,
+                       wlows=wlows)
             if tr is not None:
                 tr[li].append((T[li].lvl, T[li].st, T[li].on_zero))
 
