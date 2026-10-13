@@ -242,7 +242,8 @@ class Trend:
 
     def step(self, bar, o, h, l, c, K, nw, fr, leg, ref, depth, brk,
              cancel='касание', only_hl=False,
-             nwn=None, knee_seq=False, zguard=False, wlows=None):
+             nwn=None, knee_seq=False, zguard=False, wlows=None,
+             birth_lvl=False):
         """РУЧКИ, значения по умолчанию в точности воспроизводят эталон:
 
         knee_seq — З41. False: колено разбирается ОДНО за бар, последнее,
@@ -254,6 +255,11 @@ class Trend:
             рождении проверяется каждая свеча от бара ПОСЛЕ нуля до
             текущей включительно, и касание нуля рождение отменяет.
             Нужен wlows — «низ свечи» этого мира по барам.
+        birth_lvl — З42. False: уровень пересчитывается и на баре
+            рождения тоже, значит низ того же бара успевает снять строгую
+            ступень. True: на баре рождения уровень НЕ трогается, он
+            остаётся на нуле, ступень остаётся строгой. Имеет смысл
+            только вместе с knee_seq: без него колено за бар одно.
         nwn — СКОЛЬКО новых колен на баре. None = вывести из nw."""
         if nwn is None:
             nwn = 1 if nw else 0
@@ -328,18 +334,18 @@ class Trend:
                 for k in range(kFirst, n):
                     self._knee(bar, K, k, nwn >= 1 and k >= n - nwn,
                                leg, depth, brk, cancel, only_hl,
-                               zguard, wlows)
+                               zguard, wlows, birth_lvl)
             else:
                 self._knee(bar, K, n - 1, nw,
                            leg, depth, brk, cancel, only_hl,
-                           zguard, wlows)
+                           zguard, wlows, birth_lvl)
 
     # ВТОРОЙ КОПИИ МЕХАНИКИ ЗДЕСЬ НЕТ. Блок колена ОДИН, вынесен в метод
     # ровно для того, чтобы обе ручки гоняли один и тот же код: при
     # knee_seq=False он зовётся один раз по последнему колену — это
     # эталон, байт в байт по поведению
     def _knee(self, bar, K, k, nw, leg, depth, brk, cancel, only_hl,
-              zguard=False, wlows=None):
+              zguard=False, wlows=None, birth_lvl=False):
             n = len(K.P)
             jb = k - 1 if k >= 1 else k
             lb, hiK, prK, bbK = K.L[k], K.H[k], K.P[k], K.B[k]
@@ -380,8 +386,12 @@ class Trend:
                                 self.st = ST_LIVE
                         else:
                             self.ll = True
-                # уровень пересчитывается ОТ НУЛЯ, но не у архива
-                if self.st in (ST_MAY, ST_LIVE):
+                # уровень пересчитывается ОТ НУЛЯ, но не у архива и — по
+                # ручке birth_lvl, З42 — не на баре рождения: там он обязан
+                # остаться на нуле, иначе строгая ступень не живёт ни одного
+                # бара. Продолжения не касается: born пишется только рождением
+                just_born = birth_lvl and self.born == bar
+                if self.st in (ST_MAY, ST_LIVE) and not just_born:
                     lp, lx, real, onz = lvl_from(K, self.zb, only_hl)
                     if lp is not None:
                         self.lvl, self.lvb, self.lhl, self.on_zero = lp, lx, real, onz
@@ -443,7 +453,7 @@ def pivots_by_bar(rows, d):
 
 def run_all(rows, flip=False, dose5=2, dose3=2, depth=0.20, brk=BRK_LEG,
             cancel='касание', only_hl=False, trace=False,
-            zguard=False, knee_seq=False):
+            zguard=False, knee_seq=False, birth_lvl=False):
     """Все три слоя ОДНИМ проходом, как в пайне.
 
     rows — ВСЕГДА настоящие свечи. flip=True считает нисходящий: цена
@@ -582,7 +592,7 @@ def run_all(rows, flip=False, dose5=2, dose3=2, depth=0.20, brk=BRK_LEG,
             T[li].step(i, sg * o, wh, wl, sg * c, K[li], nw[li], fr[li],
                        K[li].avg_leg(), vref[li], depth, brk, cancel, only_hl,
                        nwn=nwc[li], knee_seq=knee_seq, zguard=zguard,
-                       wlows=wlows)
+                       wlows=wlows, birth_lvl=birth_lvl)
             if tr is not None:
                 tr[li].append((T[li].lvl, T[li].st, T[li].on_zero))
 
