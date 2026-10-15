@@ -65,6 +65,36 @@ for tag, path, pat in FILES:
         bad += 1
         print('   !! НЕТ В ОПИСИ ВВЕРХУ ФАЙЛА: ' + ', '.join(tag + str(m) for m in miss))
 
+# ── ДЛИНА БЛОКОВ `if barstate.islast`. Заведено 15.10.2026, З46 ──
+# v3.9 не скомпилировалась: «The if statement is too long». В v3.8 в
+# одном блоке было 281 строка кода и 40 346 символов и компилировалось,
+# в v3.9 стало 302 и 44 360 — не стало. Предел лежит между, точного
+# числа TradingView не называет. Поэтому порог здесь КОНСЕРВАТИВНЫЙ:
+# ругаемся с 260 строк, то есть раньше, чем станет поздно.
+LIMIT_LINES = 260
+print('=' * 70)
+try:
+    pine = open('indicator/metki_2x2.pine', encoding='utf-8').read().split('\n')
+except IOError:
+    pine = []
+blocks = []
+for i, ln in enumerate(pine):
+    if ln == 'if barstate.islast':
+        j = i + 1
+        while j < len(pine) and (not pine[j].strip() or pine[j].startswith(' ') or pine[j].startswith('\t')):
+            j += 1
+        body = [x for x in pine[i + 1:j] if x.strip() and not x.strip().startswith('//')]
+        blocks.append((i + 1, len(body), sum(len(x) for x in body)))
+if blocks:
+    print('БЛОКИ «if barstate.islast» в metki_2x2.pine — предел TradingView, З46')
+    for n, (ln, cnt, ch) in enumerate(blocks, 1):
+        mark = ' !! БЛИЗКО К ПРЕДЕЛУ' if cnt >= LIMIT_LINES else ''
+        print('   блок %d, строка %-5d кода %3d строк, %6d символов%s' % (n, ln, cnt, ch, mark))
+        if cnt >= LIMIT_LINES:
+            bad += 1
+    if not any(c >= LIMIT_LINES for _, c, _ in blocks):
+        print('   все блоки с запасом (порог %d строк)' % LIMIT_LINES)
+
 print('=' * 70)
 dirty = subprocess.run(['git', 'status', '--porcelain'], capture_output=True, text=True).stdout.strip()
 if dirty:
