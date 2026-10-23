@@ -603,6 +603,13 @@ def run_all(rows, flip=False, dose5=2, dose3=2, depth=0.20, brk=BRK_LEG,
     # колено слоя 2/2 НА ЭТОМ БАРЕ, в той же точке, где его берёт пайн:
     # после push колен, до шага тренда
     sl_leg = [] if slom else None
+    # по барам: (zb, born) слоя 2/2 ПОСЛЕ шага тренда.
+    # zb — бар нуля ТЕКУЩЕГО счёта, продолжение его переписывает.
+    # born — бар РОЖДЕНИЯ, продолжением НЕ переписывается, поэтому по
+    # нему узнаётся, где тренд начался. Ноль ВСЕГО тренда (tZB0 пайна)
+    # восстанавливается как zb на первом баре с этим же born.
+    # Нужно замеру В27: серия сломов, обрезанная нулём тренда
+    sl_zb = [] if slom else None
     pre_last = [-1, -1, -1]
     dose = [dose5, dose3, 0]
 
@@ -723,6 +730,8 @@ def run_all(rows, flip=False, dose5=2, dose3=2, depth=0.20, brk=BRK_LEG,
                        wlows=wlows, birth_lvl=birth_lvl)
             if tr is not None:
                 tr[li].append((T[li].lvl, T[li].st, T[li].on_zero))
+        if LV is not None:
+            sl_zb.append((T[2].zb, T[2].born))
 
     for li in range(3):
         C[li].relabel()
@@ -730,7 +739,7 @@ def run_all(rows, flip=False, dose5=2, dose3=2, depth=0.20, brk=BRK_LEG,
     return {'K': K, 'C': C, 'T': T, 'pre': pre_last, 'ins': ins,
             'ref_bars': ref_bars, 'trace': tr,
             'sl_near': sl_near, 'sl_events': sl_events,
-            'sl_leg': sl_leg}
+            'sl_leg': sl_leg, 'sl_zb': sl_zb}
 
 
 # ════════════════════════════════════════════════════════════════════
