@@ -431,6 +431,104 @@ class Trend:
 
 
 # ════════════════════════════════════════════════════════════════════
+#                     СЛОМЫ: ЖИВЫЕ УРОВНИ СЛОЯ
+# ════════════════════════════════════════════════════════════════════
+# Перенесено из metki_2x2.pine v3.26 23.10.2026 по слову владельца
+# «параметры норм». Это НЕ правило тренда: слом в пайне не кормит
+# движок, он пишет только свои счётчики для табло. Поэтому порт не может
+# сдвинуть ни один прежний Н, и это проверяется слепком.
+#
+# ПОРТИРУЮТСЯ ЧЕТЫРЕ КУСКА, дословно:
+#   f_lvPush   — сырой пивот попадает в список живых уровней
+#   f_slom     — сломы ЭТОГО бара по ПРОШЛЫМ уровням
+#   f_purgeL   — пробитый уровень вычёркивается совсем
+#   f_nearest  — ближайший НЕПРОБИТЫЙ сверху и снизу от close
+#
+# ПОРЯДОК ВНУТРИ БАРА ВАЖЕН И ВЗЯТ ИЗ ПАЙНА (строки 2307–2314):
+#   сломы → добавить сегодняшние пивоты → вычеркнуть пробитые
+# Поэтому пивот, появившийся и тронутый на одном баре, сломом НЕ
+# считается, но из списка уходит. Так считался и замер Н14.
+#
+# ДВЕ ТОНКОСТИ, обе воспроизведены НАРОЧНО и чинить их тут нельзя —
+# иначе получим числа другого индикатора:
+#   · пивот на ТОЧНОЙ НИЧЬЕЙ с предыдущим того же типа в список НЕ
+#     попадает. В пайне это следствие hh2/lh2: оба условия ложны.
+#     Замерено: 0 случаев за два года часовика, 5 за девять лет, 3 на
+#     пятиминутке;
+#   · САМЫЙ ПЕРВЫЙ пивот каждой стороны тоже не попадает: valuewhen(…, 1)
+#     отдаёт na, сравнение с na ложно.
+#
+# Касание считается ТЕНЬЮ: high >= уровня, low <= уровня.
+# Список НЕ ОБРЕЗАЕТСЯ — в пайне у него нет предела, только вычёркивание.
+
+
+class Levels:
+    """V2P/V2H пайна: живые уровни слоя в НАСТОЯЩИХ ценах.
+
+    Слом не зеркалится: в пайне f_slom вызывается один раз, индексом 0,
+    на настоящих ценах. Поэтому flip на этот класс не влияет вовсе.
+    """
+
+    def __init__(self):
+        self.P = []            # цена уровня
+        self.hi = []           # True — вершина, False — низ
+        self._prev_hi = None   # цена предыдущего СЫРОГО пивота-вершины
+        self._prev_lo = None   # то же для низа
+
+    # ── f_lvPush плюс подпись сырого пивота ──
+    def offer(self, price, isHi):
+        """Сырой пивот. Возвращает True, если он попал в список."""
+        if isHi:
+            prev, self._prev_hi = self._prev_hi, price
+        else:
+            prev, self._prev_lo = self._prev_lo, price
+        if prev is None or prev == price:
+            return False       # первый своей стороны или точная ничья
+        self.P.append(price)
+        self.hi.append(isHi)
+        return True
+
+    # ── f_slom ──
+    def slomy(self, h, l):
+        """Сломы ЭТОГО бара по уровням, какие есть СЕЙЧАС.
+
+        Возвращает (bu, bd): ближайший пробитый сверху и снизу, как в
+        пайне — min среди вершин и max среди низов.
+        """
+        bu = bd = None
+        for pr, isHi in zip(self.P, self.hi):
+            if isHi:
+                if h >= pr and (bu is None or pr < bu):
+                    bu = pr
+            else:
+                if l <= pr and (bd is None or pr > bd):
+                    bd = pr
+        return bu, bd
+
+    # ── f_purgeL ──
+    def purge(self, h, l):
+        keepP, keepH = [], []
+        for pr, isHi in zip(self.P, self.hi):
+            dead = (h >= pr) if isHi else (l <= pr)
+            if not dead:
+                keepP.append(pr)
+                keepH.append(isHi)
+        self.P, self.hi = keepP, keepH
+
+    # ── f_nearest ──
+    def nearest(self, close):
+        up = dn = None
+        for pr, isHi in zip(self.P, self.hi):
+            if isHi:
+                if pr > close and (up is None or pr < up):
+                    up = pr
+            else:
+                if pr < close and (dn is None or pr > dn):
+                    dn = pr
+        return up, dn
+
+
+# ════════════════════════════════════════════════════════════════════
 #                            ПРОГОН
 # ════════════════════════════════════════════════════════════════════
 
@@ -453,7 +551,7 @@ def pivots_by_bar(rows, d):
 
 def run_all(rows, flip=False, dose5=2, dose3=2, depth=0.20, brk=BRK_LEG,
             cancel='касание', only_hl=False, trace=False,
-            zguard=False, knee_seq=False, birth_lvl=False):
+            zguard=False, knee_seq=False, birth_lvl=False, slom=False):
     """Все три слоя ОДНИМ проходом, как в пайне.
 
     rows — ВСЕГДА настоящие свечи. flip=True считает нисходящий: цена
@@ -493,6 +591,18 @@ def run_all(rows, flip=False, dose5=2, dose3=2, depth=0.20, brk=BRK_LEG,
     # «прыгает ли уровень вверх и не умирает ли тренд сразу после».
     # На сам движок не влияет никак
     tr = [[], [], []] if trace else None
+    # ── СЛОМЫ, ручка slom. ПРИБОР, а не правило ──
+    # По умолчанию False: тогда ничего не считается и прогон до символа
+    # прежний. Слом живёт в НАСТОЯЩИХ ценах и не зеркалится — в пайне
+    # f_slom вызывается один раз, индексом 0
+    LV = Levels() if slom else None
+    # по барам: (ближайший непробитый СВЕРХУ, СНИЗУ) после push и purge
+    sl_near = [] if slom else None
+    # события: (бар, направление 1/-1, цена пробитого уровня)
+    sl_events = [] if slom else None
+    # колено слоя 2/2 НА ЭТОМ БАРЕ, в той же точке, где его берёт пайн:
+    # после push колен, до шага тренда
+    sl_leg = [] if slom else None
     pre_last = [-1, -1, -1]
     dose = [dose5, dose3, 0]
 
@@ -579,6 +689,24 @@ def run_all(rows, flip=False, dose5=2, dose3=2, depth=0.20, brk=BRK_LEG,
         pre_last[1] = K[1].pre_knee(K[2])
         pre_last[2] = -1
 
+        # ── СЛОМЫ. Порядок как в пайне, строки 2307–2314:
+        # сломы по ПРОШЛЫМ уровням → добавить сегодняшние → вычеркнуть
+        if LV is not None:
+            bu, bd = LV.slomy(h, l)
+            if bu is not None:
+                sl_events.append((i, 1, bu))
+            if bd is not None:
+                sl_events.append((i, -1, bd))
+            pp = i - 2
+            if pp >= 0:
+                if pp in H2:
+                    LV.offer(H2[pp], True)
+                if pp in L2:
+                    LV.offer(L2[pp], False)
+            LV.purge(h, l)
+            sl_near.append(LV.nearest(c))
+            sl_leg.append(K[2].avg_leg())
+
         # ── шаг движка ──
         # В перевёрнутом мире «верх свечи» — это минус настоящий минимум,
         # а «низ» — минус настоящий максимум. Зеркало меняет знак и
@@ -600,7 +728,9 @@ def run_all(rows, flip=False, dose5=2, dose3=2, depth=0.20, brk=BRK_LEG,
         C[li].relabel()
         T[li].finish(n - 1)
     return {'K': K, 'C': C, 'T': T, 'pre': pre_last, 'ins': ins,
-            'ref_bars': ref_bars, 'trace': tr}
+            'ref_bars': ref_bars, 'trace': tr,
+            'sl_near': sl_near, 'sl_events': sl_events,
+            'sl_leg': sl_leg}
 
 
 # ════════════════════════════════════════════════════════════════════
