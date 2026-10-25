@@ -130,6 +130,72 @@ def p7(rows, name):
                              'ТОЖДЕСТВО СЛОМАНО: %d + %d' % (bad1, bad2)))
 
 
+def p2(rows, name):
+    """Н35 · форма счёта: в справочнике против «вне справ.».
+
+    Два числа, как в Н35: СЫРОЕ и С КОНТРОЛЕМ. Контроль нужен потому,
+    что форма из справочника требует HL на местах (2) и (4), а HL на (2)
+    это низ ВЫШЕ нуля — такой счёт отменой почти не убивается. Сырое
+    сравнение наполовину меряет правило отмены, а не рынок.
+
+    Контроль Н35: берутся только счёты, ДОЖИВШИЕ до (3). После
+    подтверждения отмена уже невозможна.
+    """
+    print('  П2 · Н35 — ФОРМА СЧЁТА. Доля дошедших до (5), слой 2/2')
+    print('     %-5s %22s %22s %8s' % ('напр', 'в справочнике', 'вне справ.', 'разрыв'))
+    for flip, nm in ((False, '↑'), (True, '↓')):
+        res = D.run_all(rows, flip=flip, **RUN)
+        ts = [t for t in P.tails(res, LAY, rows, flip) if t['ntail'] >= 2]
+        for tag, sub in (('сырое', ts),
+                         ('с контролем (дожил до (3))', [t for t in ts if t['mx'] >= 3])):
+            a = [t for t in sub if t['inref']]
+            b = [t for t in sub if not t['inref']]
+            pa = 100.0 * sum(1 for t in a if t['do5']) / len(a) if a else 0.0
+            pb = 100.0 * sum(1 for t in b if t['do5']) / len(b) if b else 0.0
+            print('     %-5s %22s %22s %7.0f пп   %s'
+                  % (nm, '%.1f%% (%d)' % (pa, len(a)), '%.1f%% (%d)' % (pb, len(b)),
+                     pa - pb, tag))
+        # отмена внутри каждой группы — та самая тавтология, названная в Н35
+        a = [t for t in ts if t['inref']]
+        b = [t for t in ts if not t['inref']]
+        ca = 100.0 * sum(1 for t in a if t['how'] == 'не было') / len(a) if a else 0.0
+        cb = 100.0 * sum(1 for t in b if t['how'] == 'не было') / len(b) if b else 0.0
+        print('           отмен внутри группы: в справочнике %.1f%%, вне справ. %.1f%%' % (ca, cb))
+
+
+def p2freq(rows):
+    """Частоты справочников П и С для слоя 2/2 — массивы PFR и SFR пайна."""
+    print('  П2 · ЧАСТОТЫ СПРАВОЧНИКА, слой 2/2 (в пайне это PFR и SFR)')
+    import collections
+    for flip, nmset, title in ((False, P.PNM, 'П — ВОСХОДЯЩИЙ'), (True, P.SNM, 'С — НИСХОДЯЩИЙ')):
+        res = D.run_all(rows, flip=flip, **RUN)
+        ts = [t for t in P.tails(res, LAY, rows, flip) if t['exact']]
+        print('     %s   %6s %6s %6s %6s %6s %6s %6s %6s' % (title, *nmset))
+        for zl, znm in (('LL', 'рожд'), ('HL', 'прод')):
+            cnt = collections.Counter(t['tail'] for t in ts if t['zl'] == zl)
+            row = [cnt.get(q, 0) for q in P.PAT]
+            print('     %-17s %6d %6d %6d %6d %6d %6d %6d %6d' % (znm, *row))
+
+
+def p4(rows):
+    """Н21 · правило владельца про линии. Признак — ДО подтверждения (3)."""
+    print('  П4 · Н21 — ЛИНИИ. Доля дошедших до (5), слой 2/2, девять лет')
+    print('     признак снимается СТРОГО ДО бара, где подтвердилось колено (3)')
+    for key, title in (('z', 'ЛИНИЯ НУЛЯ — должна ДЕРЖАТЬСЯ'),
+                       ('n2', 'ЛИНИЯ НИЗА (2) — должна ДЕРЖАТЬСЯ'),
+                       ('v1', 'ЛИНИЯ ВЕРШИНЫ (1) — контроль, должна ПРОБИВАТЬСЯ')):
+        print('     %s' % title)
+        print('       %-5s %16s %16s %16s' % ('напр', 'цело', 'тенью', 'закр. за линию'))
+        for flip, nm in ((False, '↑'), (True, '↓')):
+            res = D.run_all(rows, flip=flip, **RUN)
+            ts = P.tails(res, LAY, rows, flip)
+            cells = []
+            for state in ('цело', 'тень', 'закр'):
+                g = [t for t in ts if t[key] == state]
+                cells.append('%s (%d)' % (pct(sum(1 for t in g if t['do5']), len(g)), len(g)))
+            print('       %-5s %16s %16s %16s' % (nm, *cells))
+
+
 def main():
     root = os.path.dirname(HERE)
     for path, nm in DATA:
@@ -139,8 +205,15 @@ def main():
         print('=' * 70)
         p1(rows, nm)
         print()
+        p2(rows, nm)
+        print()
         p7(rows, nm)
         print()
+        if 'девять' in nm:
+            p2freq(rows)
+            print()
+            p4(rows)
+            print()
     print('=' * 70)
     print('П7 · Н40 — ПЕРЕЕЗД КОЛЕНА, счётчик по всем прогонам выше')
     print('   переездов всего:        %d' % MOVES['всего'])
