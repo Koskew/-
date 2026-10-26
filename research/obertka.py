@@ -17,6 +17,12 @@
 читает. Проверяется функцией sverit() — прогон с обёрткой и без обязаны
 дать тождественные цепочки, подписи и историю счётов.
 
+ВТОРАЯ ОБЁРТКА — СОСТОЯНИЕ ТРЕНДА ПО БАРАМ. `trace` в реплике отдаёт
+только (уровень, состояние, на-нуле), а для Н27 нужны ещё бар уровня,
+номер счёта и бар нуля. Оборачивается `Trend.step`: после каждого вызова
+в поле `TR` самого тренда дописывается кортеж. Движок снова не тронут —
+_ostep вызывается как есть, поля движок не читает.
+
 ПОЧЕМУ ОТДЕЛЬНЫМ ФАЙЛОМ. У `v28_chestno.py` и `n47_chestno.py` лежит
 своя копия той же обёртки — их числа записаны против их же кода, и
 править их нельзя по тому же правилу, по какому не правится старая
@@ -50,8 +56,20 @@ def _push(self, price, bar, isHi, conf):
     return r
 
 
+_ostep = D.Trend.step
+
+
+def _step(self, *a, **kw):
+    r = _ostep(self, *a, **kw)
+    if not hasattr(self, 'TR'):
+        self.TR = []
+    self.TR.append((self.lvl, self.lvb, self.cnt, self.zb, self.st, self.on_zero))
+    return r
+
+
 def patch(on=True):
     D.Chain.push = _push if on else _orig
+    D.Trend.step = _step if on else _ostep
 
 
 def cena(hist, i):
@@ -80,6 +98,9 @@ def sverit(rows, **kw):
             print('  РАСХОЖДЕНИЕ: слой %d, длина истории' % li); ok = False
         if a['T'][li].counts != b['T'][li].counts:
             print('  РАСХОЖДЕНИЕ: слой %d, история счётов' % li); ok = False
+        if hasattr(b['T'][li], 'TR') and len(b['T'][li].TR) != len(rows):
+            print('  РАСХОЖДЕНИЕ: слой %d, длина записи тренда %d против %d'
+                  % (li, len(b['T'][li].TR), len(rows))); ok = False
     if ok:
         print('  цепочки, подписи и история счётов ТОЖДЕСТВЕННЫ на всех трёх слоях')
     return ok, b

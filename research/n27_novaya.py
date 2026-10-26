@@ -1,0 +1,166 @@
+# -*- coding: utf-8 -*-
+"""Н27 на НЫНЕШНЕЙ формуле порога · «у импульса нет дна». Слой 2/2.
+
+ЧТО ЭТО. Н27 (06.10.2026), слово владельца: «что-то внутри говорит, что
+всё равно должен быть какой-то предел этого импульса или правило,
+которое такую сильную манипуляцию будет останавливать». Замер считал,
+как часто порог смерти оказывается НИЖЕ предыдущего низа счёта — то есть
+буфер накрывает целое колено структуры. Ответ был тяжёлый: на 2/2 это
+40–63% баров и 78–79% трендов.
+
+ПРЕДМЕТ Н27 ИСЧЕЗ, и это надо сказать прямо. Н27 мерила порог
+`уровень − импульс × 0.33`. Этой формулы БОЛЬШЕ НЕТ: отменена
+06–07.10.2026, нынешняя — `уровень − 0.20 × скользящее среднее колено`.
+Импульс это ОДНО колено и он ничем не ограничен; скользящее среднее по
+нескольким ногам ограничено само собой. Значит болезнь, найденная Н27,
+была болезнью отменённой формулы, и «пересчитать как есть» нечего.
+
+ЧТО СЧИТАЕТСЯ ВМЕСТО, по согласованию с владельцем 26.10.2026: ТОТ ЖЕ
+ВОПРОС ПРО НЫНЕШНЮЮ ФОРМУЛУ. Если новая формула тоже проваливается под
+предыдущий низ в половине случаев — лекарство не подействовало. Если
+нет — болезнь вылечена сменой формулы, и §38 можно закрывать.
+Старая формула посчитана РЯДОМ, на том же движке, чтобы видеть, что
+именно дала смена.
+
+ОТКУДА БЕРУТСЯ ЧИСЛА. Уровень, номер счёта и бар уровня — из состояния
+движка ПО БАРАМ (обёртка `obertka.py`, поле TR). Скользящее колено — из
+движка же (`sl_leg`). Цена предыдущего низа — НА ТОТ БАР (вариант Б).
+То есть всё честно по построению: ничего не читается из готовой разметки.
+
+СУЖЕНИЕ ВЛАДЕЛЬЦА СОХРАНЕНО: только точки (2) и дальше. На (0) и (1)
+уровень стоит на НУЛЕ, а ноль по определению LL, то есть уже ниже
+предыдущего низа — условие выполняется само собой. Это артефакт,
+найденный первым прогоном Н27; владелец сузил по чутью и был прав.
+
+ПЛАНКА ОБЪЯВЛЕНА ДО ЗАМЕРА, порог взят ЕГО ЖЕ, из Н27 («2% — не
+городить, 30% — дыра настоящая»):
+  ВЫЛЕЧЕНО        — провал реже 30% баров И реже чем у половины счётов;
+  ЛЕГЧЕ, но живо   — заметно реже, но выше 30%;
+  НЕ ПОДЕЙСТВОВАЛО — около половины баров и четырёх трендов из пяти.
+
+    python3 research/n27_novaya.py
+"""
+import os, sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from core import load
+import dvizhok2 as D
+import obertka as O
+
+SETS = (('девять лет часовика', 'data/XAUUSD_1h_9y.csv'),
+        ('два года часовика', 'data/XAUUSD_1h_2y.csv'),
+        ('пятиминутка', 'data/XAUUSD_5m.csv'))
+KW = dict(zguard=True, knee_seq=True, birth_lvl=True, slom=True)
+ZIVOI = (1, 2)          # ST_MAY, ST_LIVE
+DEPTH = 0.20            # нынешняя доля скользящего колена
+IMP33 = 0.33            # старая доля импульса
+
+
+def nizy(C):
+    """Индексы НИЗОВ цепочки по возрастанию бара первого подтверждения."""
+    return [k for k in range(len(C.P)) if not C.H[k]]
+
+
+def schitat(res, rows):
+    """По барам: провалился ли порог ниже предыдущего низа счёта.
+    Отдаёт (по точкам счёта, по счётам) для новой и старой формулы."""
+    C = res['C'][2]
+    TR = res['T'][2].TR
+    legs = res['sl_leg']
+    nz = nizy(C)
+    bary = {}        # (точка, формула) -> [провалов, всего]
+    po_sch = {}      # zb -> {'new': bool, 'old': bool}
+    p = 0            # указатель в nz, движется вперёд
+    for i in range(min(len(TR), len(rows), len(legs))):
+        lvl, lvb, cnt, zb, stt, onz = TR[i]
+        if stt not in ZIVOI or lvl is None or cnt < 2:
+            continue
+        if onz:
+            continue                     # уровень на нуле — артефакт Н27
+        while p + 1 < len(nz) and C.FC[nz[p + 1]] <= i:
+            p += 1
+        k = nz[p]
+        if C.FC[k] > i:
+            continue
+        j = p - 1
+        if j < 0:
+            continue
+        pred = O.cena(C.HIST[nz[j]], i)   # предыдущий низ НА ТОТ БАР
+        if pred is None:
+            continue
+        leg = legs[i]
+        if not leg or leg <= 0:
+            continue
+        # НОВАЯ формула
+        por_new = lvl - DEPTH * leg
+        # СТАРАЯ: уровень − импульс × 0.33, импульс = последняя выросшая нога
+        imp = 0.0
+        if k >= 2 and C.P[k - 1] > C.P[k - 2]:
+            a = O.cena(C.HIST[k - 1], i)
+            b = O.cena(C.HIST[k - 2], i)
+            if a is not None and b is not None and a > b:
+                imp = a - b
+        por_old = lvl - IMP33 * imp
+        for nm, por in (('new', por_new), ('old', por_old)):
+            key = (min(cnt, 5), nm)
+            a, b = bary.get(key, (0, 0))
+            bary[key] = (a + (1 if por < pred else 0), b + 1)
+            d = po_sch.setdefault(zb, {'new': False, 'old': False})
+            if por < pred:
+                d[nm] = True
+    return bary, po_sch
+
+
+def pc(a, b):
+    return '%4.0f%%' % (100.0 * a / b) if b else '  — '
+
+
+print('Н27 на НЫНЕШНЕЙ формуле · слой 2/2, движок v3.29')
+print('планка объявлена в docstring ДО замера, порог 30%% — слово владельца из Н27')
+
+print('\n' + '=' * 96)
+print('СЕТЬ · обёртка не имеет права менять движок')
+print('=' * 96)
+ok, _ = O.sverit(load('data/XAUUSD_1h_9y.csv'), **KW)
+if not ok:
+    print('\nЗАМЕР ОТМЕНЁН'); sys.exit(1)
+
+svod = []
+for setnm, path in SETS:
+    rows = load(path)
+    print('\n' + '=' * 96)
+    print('%s — %d баров' % (setnm, len(rows)))
+    print('=' * 96)
+    for flip, dn in ((False, '↑'), (True, '↓')):
+        O.patch(True)
+        res = D.run_all(rows, flip=flip, **KW)
+        bary, po_sch = schitat(res, rows)
+        print('\n %s  ДОЛЯ БАРОВ, где порог ниже предыдущего низа счёта' % dn)
+        print('   точка счёта  |  НЫНЕШНЯЯ 0.20 колена  |  старая имп×0.33')
+        for c in (2, 3, 4, 5):
+            an, bn = bary.get((c, 'new'), (0, 0))
+            ao, bo = bary.get((c, 'old'), (0, 0))
+            print('      (%d)        |     %s  (%5d бар)    |     %s' % (c, pc(an, bn), bn, pc(ao, bo)))
+        tn = sum(v[0] for k, v in bary.items() if k[1] == 'new')
+        td = sum(v[1] for k, v in bary.items() if k[1] == 'new')
+        to = sum(v[0] for k, v in bary.items() if k[1] == 'old')
+        print('      ВСЕГО      |     %s  (%5d бар)    |     %s' % (pc(tn, td), td, pc(to, td)))
+        nsch = len(po_sch)
+        kn = sum(1 for v in po_sch.values() if v['new'])
+        ko = sum(1 for v in po_sch.values() if v['old'])
+        print('   ДОЛЯ СЧЁТОВ, где провал был хоть раз на (2)+:  нынешняя %s (%d из %d)   старая %s'
+              % (pc(kn, nsch), kn, nsch, pc(ko, nsch)))
+        svod.append((setnm, dn, 100.0 * tn / td if td else 0, 100.0 * kn / nsch if nsch else 0,
+                     100.0 * to / td if td else 0, 100.0 * ko / nsch if nsch else 0))
+
+print('\n' + '=' * 96)
+print('ИТОГ по планке')
+print('=' * 96)
+print('  %-22s %-4s %10s %10s %10s %10s' % ('набор', 'напр', 'бары НОВ', 'счёты НОВ', 'бары стар', 'счёты стар'))
+for setnm, dn, bn, sn, bo, so in svod:
+    print('  %-22s %-4s %9.0f%% %9.0f%% %9.0f%% %9.0f%%' % (setnm, dn, bn, sn, bo, so))
+mb = max(x[2] for x in svod)
+ms = max(x[3] for x in svod)
+print('\n  НЫНЕШНЯЯ формула: худшая клетка — %.0f%% баров и %.0f%% счётов' % (mb, ms))
+print('  планка владельца 30%%: %s' % ('ВЫЛЕЧЕНО' if mb < 30 and ms < 50 else
+                                       ('ЛЕГЧЕ, но живо' if mb < 40 else 'НЕ ПОДЕЙСТВОВАЛО')))
