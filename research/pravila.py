@@ -49,6 +49,7 @@ FILES = [
     'indicator/ПРАВИЛА-ВОСХОДЯЩИЙ.md',
     'indicator/ПРАВИЛА-НИСХОДЯЩИЙ.md',
     'indicator/ПРАВИЛА-ПРОДОЛЖЕНИЕ.md',
+    'indicator/ПРАВИЛА-СЛОМ.md',
     'indicator/РЕШЕНИЯ-ИТОГ.md',
 ]
 
