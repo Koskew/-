@@ -25,8 +25,22 @@
 Правка считается чистой, когда исчезло только то, что просили убрать,
 а изменивших значение НОЛЬ.
 
+⚠ ПОЧИНКА 28.10.2026, v3.32. ПЕРВАЯ РЕДАКЦИЯ СЕТИ ВРАЛА НА ВСТАВКЕ.
+Вызовы сверялись по ПОРЯДКОВОМУ НОМЕРУ. Сеть писалась под УДАЛЕНИЕ (65
+подсказок ушли, порядок не сдвинулся), и на первой же вставке — одна
+новая `input.string` в группе ④ — весь хвост съехал на единицу: 75
+ложных «исчезло» и десятки ложных «изменило значение», где на самом
+деле сравнивались СОСЕДНИЕ вызовы.
+
+Теперь вызовы СОПОСТАВЛЯЮТСЯ через `difflib`, по подписи «имя функции +
+набор имён аргументов». Вставка видна как вставка, удаление как
+удаление, а значения сравниваются только у СОПОСТАВЛЕННЫХ пар. Внутри
+участков, где подпись изменилась (у вызова убрали или добавили
+аргумент), пары берутся по порядку внутри участка.
+
     python3 research/argumenty.py было.pine стало.pine
 """
+import difflib
 import io, re, sys
 
 CALLS = ('table.cell(', 'label.new(', 'line.new(', 'box.new(',
@@ -73,22 +87,72 @@ def split_args(l, call):
     return [p.strip() for p in parts]
 
 
-def snimok(f):
-    out = {}
-    k = 0
+def vyzovy(f):
+    """Список вызовов в порядке файла: (имя функции, {аргумент: значение})."""
+    out = []
     for l in io.open(f, encoding='utf-8').read().split('\n'):
         if l.lstrip().startswith('//'):
             continue
         for call in CALLS:
             if call not in l:
                 continue
-            k += 1
+            args = {}
             for pos, p in enumerate(split_args(l, call)):
                 m = re.match(r'(\w+)\s*=\s*(.*)$', p, re.S)
                 if m and not p.startswith('"'):
-                    out[(k, m.group(1))] = m.group(2).strip()
+                    args[m.group(1)] = m.group(2).strip()
                 else:
-                    out[(k, 'поз%d' % pos)] = p
+                    args['поз%d' % pos] = p
+            out.append((call, args))
+    return out
+
+
+def podpis(v):
+    """Чем вызов узнаётся при сопоставлении.
+
+    ПОДПИСЬ ОБЯЗАНА ПЕРЕЖИВАТЬ ПРАВКУ АРГУМЕНТОВ, иначе сеть расцепит
+    пары там, где вызов остался тем же. Первая попытка брала НАБОР ИМЁН
+    аргументов — и на эталонном прогоне v3.29 → v3.31 (65 подсказок
+    убраны) сцепилось лишь 101 из 129 вызовов, а «изменили значение»
+    выросло с нуля до 120. Подпись менялась у каждого вызова, потерявшего
+    подсказку, и difflib переставал их узнавать.
+
+    Берётся ИМЯ ФУНКЦИИ, а у настроек — ещё и ЗАГОЛОВОК. Заголовок у
+    настройки уникален и его не правят: он и отличает одну `input.string`
+    от другой, когда рядом вставляют третью."""
+    call, args = v
+    if call.startswith('input.'):
+        return (call, args.get('поз1', ''))
+    return (call,)
+
+
+def pary(A, B):
+    """Сопоставить два списка вызовов. Возвращает (пары, только_в_A, только_в_B)."""
+    sm = difflib.SequenceMatcher(None, [podpis(v) for v in A], [podpis(v) for v in B], autojunk=False)
+    par, lishA, lishB = [], [], []
+    for op, a1, a2, b1, b2 in sm.get_opcodes():
+        if op == 'equal':
+            par += [(a1 + i, b1 + i) for i in range(a2 - a1)]
+        elif op == 'delete':
+            lishA += list(range(a1, a2))
+        elif op == 'insert':
+            lishB += list(range(b1, b2))
+        else:
+            # подпись изменилась: пары по порядку внутри участка,
+            # хвост более длинной стороны — как исчезнувшее/появившееся
+            n = min(a2 - a1, b2 - b1)
+            par += [(a1 + i, b1 + i) for i in range(n)]
+            lishA += list(range(a1 + n, a2))
+            lishB += list(range(b1 + n, b2))
+    return par, lishA, lishB
+
+
+def snimok(f):
+    """Плоский отпечаток — оставлен для совместимости со старыми прогонами."""
+    out = {}
+    for k, (_, args) in enumerate(vyzovy(f), 1):
+        for name, val in args.items():
+            out[(k, name)] = val
     return out
 
 
@@ -96,11 +160,33 @@ def main():
     if len(sys.argv) != 3:
         print(__doc__)
         return 2
-    a, b = snimok(sys.argv[1]), snimok(sys.argv[2])
-    ischez = sorted(k for k in a if k not in b)
-    pojav = sorted(k for k in b if k not in a)
-    izmen = sorted(k for k in a if k in b and a[k] != b[k])
-    print('аргументов: было %d, стало %d' % (len(a), len(b)))
+    A, B = vyzovy(sys.argv[1]), vyzovy(sys.argv[2])
+    par, lishA, lishB = pary(A, B)
+    a, b = {}, {}
+    ischez, pojav, izmen = [], [], []
+    for ia, ib in par:
+        da, db = A[ia][1], B[ib][1]
+        for nm in da:
+            a[(ia + 1, nm)] = da[nm]
+            if nm not in db:
+                ischez.append((ia + 1, nm))
+            elif da[nm] != db[nm]:
+                izmen.append((ia + 1, nm))
+                b[(ia + 1, nm)] = db[nm]
+        for nm in db:
+            if nm not in da:
+                pojav.append((ib + 1, nm))
+    for ia in lishA:
+        for nm in A[ia][1]:
+            ischez.append((ia + 1, nm + '  [вызов целиком убран]'))
+    for ib in lishB:
+        for nm in B[ib][1]:
+            pojav.append((ib + 1, nm + '  [вызов целиком новый]'))
+    ischez, pojav, izmen = sorted(ischez), sorted(pojav), sorted(izmen)
+    na = sum(len(v[1]) for v in A)
+    nb = sum(len(v[1]) for v in B)
+    print('вызовов: было %d, стало %d · сопоставлено пар %d' % (len(A), len(B), len(par)))
+    print('аргументов: было %d, стало %d' % (na, nb))
     print()
     print('ИСЧЕЗЛО: %d' % len(ischez))
     for k in ischez[:40]:
