@@ -172,14 +172,22 @@ def lvl_from(K, zb, only_hl=False):
 
     only_hl=True воспроизводит прежнее поведение (развилка Б).
 
-    Возвращает (цена, бар, настоящий_ли_HL, стоит_ли_на_НУЛЕ)."""
+    Возвращает (цена, бар, настоящий_ли_HL, стоит_ли_на_НУЛЕ,
+    стоит_ли_на_нуле_ПРОДОЛЖЕНИЯ).
+
+    Пятое значение добавлено 28.10.2026 под ручку `cont_touch` (З50).
+    Нового вычисления не потребовалось: это вторая половина того же
+    разбора. Ноль рождения — LL, значит real=False; ноль продолжения —
+    HL, значит real=True. Отсюда два взаимоисключающих случая:
+        on_zero   = (not found) and (not real)   → рубит касание, «не было»
+        cont_zero = (not found) and real         → рубит касание, «умер»."""
     zi = -1
     for k in range(len(K.P)):
         if K.B[k] >= zb and not K.H[k]:
             zi = k
             break
     if zi < 0:
-        return None, -1, False, False
+        return None, -1, False, False, False
     lp, lx, real = K.P[zi], K.B[zi], K.L[zi] == 'HL'
     found = False
     for k in range(zi, len(K.P)):
@@ -194,7 +202,7 @@ def lvl_from(K, zb, only_hl=False):
     # уровень стоит на нуле И этот ноль не настоящий HL. У продолжения
     # ноль настоящий (У10), и строгой ступени у него быть не должно:
     # тренд, трижды прошедший путь до (5), не может «не состояться».
-    return lp, lx, real, (not found) and (not real)
+    return lp, lx, real, (not found) and (not real), (not found) and real
 
 
 class Trend:
@@ -211,6 +219,7 @@ class Trend:
         self.pzb = -1
         self.lvl = None; self.lvb = -1; self.lhl = False
         self.on_zero = True     # уровень всё ещё стоит на НУЛЕ → строгая ступень
+        self.cont_zero = False  # З50: уровень стоит на нуле ПРОДОЛЖЕНИЯ
         self.cnt = -1; self.mx = -1
         self.rst = 0            # полных счётов: сколько раз дошёл до (5) и продолжился
         self.ll = False         # в счёте был низ LL — разбудил запасное подтверждение
@@ -243,7 +252,7 @@ class Trend:
     def step(self, bar, o, h, l, c, K, nw, fr, leg, ref, depth, brk,
              cancel='касание', only_hl=False,
              nwn=None, knee_seq=False, zguard=False, wlows=None,
-             birth_lvl=False):
+             birth_lvl=False, cont_touch=False):
         """РУЧКИ, значения по умолчанию в точности воспроизводят эталон:
 
         knee_seq — З41. False: колено разбирается ОДНО за бар, последнее,
@@ -255,6 +264,14 @@ class Trend:
             рождении проверяется каждая свеча от бара ПОСЛЕ нуля до
             текущей включительно, и касание нуля рождение отменяет.
             Нужен wlows — «низ свечи» этого мира по барам.
+        cont_touch — З50, слово владельца 28.10.2026. False: ноль
+            ПРОДОЛЖЕНИЯ рубится только глубиной по телу — это У10 и
+            поведение всех версий до v3.33, на нём посчитаны все прежние Н.
+            True: касание нуля продолжения тоже рубит, и ИСХОДОМ СМЕРТЬ,
+            а не отменой. Его прямое слово «да, умер вместо не было»:
+            «не было» стирает разметку, и ровно против этого ярлыка
+            возражала У10, а «умер» оставляет номера и чёрточку.
+            В пайне v3.33 это галочка ⑦, по умолчанию ВКЛЮЧЕННАЯ.
         birth_lvl — З42. False: уровень пересчитывается и на баре
             рождения тоже, значит низ того же бара успевает снять строгую
             ступень. True: на баре рождения уровень НЕ трогается, он
@@ -306,8 +323,12 @@ class Trend:
                     self.ll = False
                     self._close(bar, 'не было')
             else:
-                # мягкая ступень: тело ниже уровня на долю колена
-                if min(o, c) < self.lvl - depth * leg:
+                # мягкая ступень: тело ниже уровня на долю колена.
+                # З50: при cont_touch касание нуля ПРОДОЛЖЕНИЯ рубит здесь
+                # же, исходом СМЕРТЬ, — не в строгой ветке, потому что та
+                # ставит «тренда не было» и стирает разметку
+                cdie = cont_touch and self.cont_zero and l <= self.lvl
+                if min(o, c) < self.lvl - depth * leg or cdie:
                     self.st = ST_DEAD
                     self.eb = bar
                     self.cnt = -1
@@ -367,6 +388,9 @@ class Trend:
                         # касанием такой тренд не рубится
                         self.lvl = prK; self.lvb = bbK; self.lhl = True
                         self.on_zero = False
+                        # З50: ноль продолжения помечен. Ручка cont_touch
+                        # решает, рубит ли его касание исходом СМЕРТЬ
+                        self.cont_zero = True
                         self._open(bar)
                     else:
                         # АРХИВ
@@ -392,9 +416,10 @@ class Trend:
                 # бара. Продолжения не касается: born пишется только рождением
                 just_born = birth_lvl and self.born == bar
                 if self.st in (ST_MAY, ST_LIVE) and not just_born:
-                    lp, lx, real, onz = lvl_from(K, self.zb, only_hl)
+                    lp, lx, real, onz, czo = lvl_from(K, self.zb, only_hl)
                     if lp is not None:
                         self.lvl, self.lvb, self.lhl, self.on_zero = lp, lx, real, onz
+                        self.cont_zero = czo
             elif self.st in (ST_NO, ST_DEAD, ST_CAN, ST_ARC):
                 # ── РОЖДЕНИЕ ОБЪЯВЛЯЕТ (1) ──
                 if nw and hiK and k >= 1 and (not K.H[jb]) and K.L[jb] == 'LL':
@@ -421,6 +446,7 @@ class Trend:
                         # У2: ноль — ВРЕМЕННАЯ опора, помечена честно
                         self.lvl = K.P[j]; self.lvb = K.B[j]; self.lhl = False
                         self.on_zero = True
+                        self.cont_zero = False   # у рождения ноль это LL
                         # перебитая вершина — от неё считается У7
                         v = j - 1
                         while v >= 0 and not K.H[v]:
@@ -551,7 +577,8 @@ def pivots_by_bar(rows, d):
 
 def run_all(rows, flip=False, dose5=2, dose3=2, depth=0.20, brk=BRK_LEG,
             cancel='касание', only_hl=False, trace=False,
-            zguard=False, knee_seq=False, birth_lvl=False, slom=False):
+            zguard=False, knee_seq=False, birth_lvl=False, slom=False,
+            cont_touch=False):
     """Все три слоя ОДНИМ проходом, как в пайне.
 
     rows — ВСЕГДА настоящие свечи. flip=True считает нисходящий: цена
@@ -727,7 +754,7 @@ def run_all(rows, flip=False, dose5=2, dose3=2, depth=0.20, brk=BRK_LEG,
             T[li].step(i, sg * o, wh, wl, sg * c, K[li], nw[li], fr[li],
                        K[li].avg_leg(), vref[li], depth, brk, cancel, only_hl,
                        nwn=nwc[li], knee_seq=knee_seq, zguard=zguard,
-                       wlows=wlows, birth_lvl=birth_lvl)
+                       wlows=wlows, birth_lvl=birth_lvl, cont_touch=cont_touch)
             if tr is not None:
                 tr[li].append((T[li].lvl, T[li].st, T[li].on_zero))
         if LV is not None:
