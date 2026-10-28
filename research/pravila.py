@@ -50,6 +50,7 @@ FILES = [
     'indicator/ПРАВИЛА-НИСХОДЯЩИЙ.md',
     'indicator/ПРАВИЛА-ПРОДОЛЖЕНИЕ.md',
     'indicator/ПРАВИЛА-СЛОМ.md',
+    'indicator/ПРАВИЛА-БОКОВИК.md',
     'indicator/РЕШЕНИЯ-ИТОГ.md',
 ]
 
