@@ -328,6 +328,13 @@ class Trend:
                 # же, исходом СМЕРТЬ, — не в строгой ветке, потому что та
                 # ставит «тренда не было» и стирает разметку
                 cdie = cont_touch and self.cont_zero and l <= self.lvl
+                # 28.10.2026: ТОЛЬКО ПОМЕТКА, поведение не меняет.
+                # Нужна, чтобы отличать смерть ОТ КАСАНИЯ нуля продолжения
+                # от смерти по глубине, — владелец попросил адреса случаев,
+                # чтобы отмотать симулятор туда и проверить v3.33 глазом
+                if cdie and self._cur is not None:
+                    self._cur['cdie'] = True
+                    self._cur['czp'] = self.lvl
                 if min(o, c) < self.lvl - depth * leg or cdie:
                     self.st = ST_DEAD
                     self.eb = bar
