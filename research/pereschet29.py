@@ -38,7 +38,11 @@ sys.path.insert(0, HERE)
 import dvizhok2 as D
 import pereschet as P
 
-RUN = dict(zguard=True, knee_seq=True, birth_lvl=True)
+# РУЧКА v3.33, 30.10.2026, его слово «прогони Н48 и Н45». По умолчанию
+# ВЫКЛЮЧЕНА — прежний прогон воспроизводится буква в букву.
+#     python3 research/pereschet29.py --v33
+RUN = dict(zguard=True, knee_seq=True, birth_lvl=True,
+           cont_touch='--v33' in sys.argv)
 LAY = 2                      # слой 2/2 — единственный в нынешнем пайне
 
 DATA = (('data/XAUUSD_1h_9y.csv', 'ЧАСОВИК, девять лет'),

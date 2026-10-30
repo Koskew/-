@@ -119,7 +119,15 @@ half = N // 2
 print('баров %d   с %s по %s   граница половин %s'
       % (N, rows[0][0][:10], rows[-1][0][:10], rows[half][0][:10]))
 
-res = D.run_all(rows, zguard=True, knee_seq=True, birth_lvl=True, slom=True)
+# РУЧКА v3.33, 30.10.2026, его слово «прогони Н48 и Н45». Я утверждал,
+# что Н48 движком не затронута, и доказывал это трассировкой. Прогон
+# ПРОВЕРЯЕТ утверждение. По умолчанию ВЫКЛЮЧЕНА — прежний прогон
+# воспроизводится буква в букву.    python3 research/p3_rasstoyanie29.py --v33
+_CT = '--v33' in sys.argv
+print('ДВИЖОК: cont_touch=%s  (%s)'
+      % (_CT, 'v3.33' if _CT else 'v3.29, как было'))
+res = D.run_all(rows, zguard=True, knee_seq=True, birth_lvl=True, slom=True,
+                cont_touch=_CT)
 print('сломов всего %d, баров с расстоянием %d\n'
       % (len(res['sl_events']), sum(1 for u, d in res['sl_near']
                                     if u is not None and d is not None)))
