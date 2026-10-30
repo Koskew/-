@@ -83,7 +83,18 @@ import obertka as O
 SETS = (('девять лет часовика', 'data/XAUUSD_1h_9y.csv'),
         ('два года часовика', 'data/XAUUSD_1h_2y.csv'),
         ('пятиминутка', 'data/XAUUSD_5m.csv'))
-KW = dict(zguard=True, knee_seq=True, birth_lvl=True, slom=True)
+# ── РУЧКА v3.33, добавлена 30.10.2026 ──
+# Его слово: «давай Н55, тоже пересчитай на всякий случай». Я утверждал,
+# что Н55 движком НЕ затронута: её единица наблюдения — НИЗ ЦЕПОЧКИ, а
+# цепочка строится из пивотов ДО движка. Прогон с ручкой ПРОВЕРЯЕТ это
+# утверждение: дрогнут числа — значит я был неправ.
+# По умолчанию ВЫКЛЮЧЕНА и воспроизводит прежний прогон буква в букву.
+#
+#     python3 research/n38_chestno.py --v33
+CONT33 = '--v33' in sys.argv
+
+KW = dict(zguard=True, knee_seq=True, birth_lvl=True, slom=True,
+          cont_touch=CONT33)
 POROGI = (0.10, 0.15, 0.20, 0.25, 0.30, 0.40)
 ETALON = 0.20
 MIN_N = 50
