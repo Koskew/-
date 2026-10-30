@@ -332,10 +332,18 @@ class Trend:
                 # Нужна, чтобы отличать смерть ОТ КАСАНИЯ нуля продолжения
                 # от смерти по глубине, — владелец попросил адреса случаев,
                 # чтобы отмотать симулятор туда и проверить v3.33 глазом
+                # 30.10.2026, ВТОРОЙ КРУГ ПЕРЕСЧЁТА: его слово «да, считай
+                # врозь». Чтобы считать смерть ПО ТЕЛУ и ПО ТЕНИ раздельно,
+                # мало знать `cdie` — бар умеет удовлетворить ОБА условия.
+                # Пометка `bdie` говорит, держалось ли ТЕЛО. Тоже ТОЛЬКО
+                # пометка: в `if` ниже она не участвует, поведение прежнее
+                bdie = min(o, c) < self.lvl - depth * leg
                 if cdie and self._cur is not None:
                     self._cur['cdie'] = True
                     self._cur['czp'] = self.lvl
-                if min(o, c) < self.lvl - depth * leg or cdie:
+                if (cdie or bdie) and self._cur is not None:
+                    self._cur['bdie'] = bdie
+                if bdie or cdie:
                     self.st = ST_DEAD
                     self.eb = bar
                     self.cnt = -1
@@ -625,6 +633,11 @@ def run_all(rows, flip=False, dose5=2, dose3=2, depth=0.20, brk=BRK_LEG,
     # «прыгает ли уровень вверх и не умирает ли тренд сразу после».
     # На сам движок не влияет никак
     tr = [[], [], []] if trace else None
+    # 30.10.2026, ВТОРОЙ КРУГ. Отдельный список, А НЕ четвёртый элемент
+    # кортежа: шесть прежних скриптов распаковывают `trace` по три
+    # значения, и расширение кортежа сломало бы их записи. Только
+    # наблюдение, поведение не трогает
+    trcz = [[], [], []] if trace else None
     # ── СЛОМЫ, ручка slom. ПРИБОР, а не правило ──
     # По умолчанию False: тогда ничего не считается и прогон до символа
     # прежний. Слом живёт в НАСТОЯЩИХ ценах и не зеркалится — в пайне
@@ -764,6 +777,7 @@ def run_all(rows, flip=False, dose5=2, dose3=2, depth=0.20, brk=BRK_LEG,
                        wlows=wlows, birth_lvl=birth_lvl, cont_touch=cont_touch)
             if tr is not None:
                 tr[li].append((T[li].lvl, T[li].st, T[li].on_zero))
+                trcz[li].append(T[li].cont_zero)
         if LV is not None:
             sl_zb.append((T[2].zb, T[2].born))
 
@@ -771,7 +785,7 @@ def run_all(rows, flip=False, dose5=2, dose3=2, depth=0.20, brk=BRK_LEG,
         C[li].relabel()
         T[li].finish(n - 1)
     return {'K': K, 'C': C, 'T': T, 'pre': pre_last, 'ins': ins,
-            'ref_bars': ref_bars, 'trace': tr,
+            'ref_bars': ref_bars, 'trace': tr, 'trace_cz': trcz,
             'sl_near': sl_near, 'sl_events': sl_events,
             'sl_leg': sl_leg, 'sl_zb': sl_zb}
 
