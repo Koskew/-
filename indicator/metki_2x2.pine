@@ -1,9 +1,29 @@
 //@version=5
 // ═══════════════════════════════════════════════════════════════════
-// МЕТКИ 2/2 · v3.36     ОДИН СЛОЙ, ВСЕ ПРАВИЛА
+// МЕТКИ 2/2 · v3.37     ОДИН СЛОЙ, ВСЕ ПРАВИЛА
 // 12.10.2026
 //
 // Номера читаются «три-двадцать восемь», «три-двадцать девять».
+//
+// ── v3.37: СРЕДНЕЕ КОЛЕНО ТОЖЕ РАСТЯНУТО. З63 ──
+//
+// 31.10.2026, его слово «да, растяни среднее колено тоже». Движок НЕ
+// тронут. Правка на один ряд, но убирает НЕВЕРНОЕ ПРОЧТЕНИЕ.
+//
+// ЧТО БЫЛО. Строка «среднее колено» стояла в обеих колонках и
+// показывала ОДНО И ТО ЖЕ ЧИСЛО. Глаз читал это как «у каждого
+// направления своё, просто сейчас совпало» — а совпадения тут нет и
+// быть не может: колено считается МОДУЛЕМ разницы соседних колен, а у
+// перевёрнутой цепочки модуль тот же. Тождество по построению, и оно
+// было записано комментарием прямо у второй ячейки с самого начала.
+//
+// ЧТО СТАЛО. Ячейка ОДНА, в общем блоке подписей, слита на колонки
+// 1-2. Вторая удалена — она не несла своего значения.
+//
+// ПОЧЕМУ В ОБЩИЙ БЛОК, А НЕ ОСТАВИТЬ У ВОСХОДЯЩЕГО. Та же ловушка, что
+// поймана в v3.35 на подписях: сними владелец галочку ⑤ «восходящий»,
+// и слитая ячейка осталась бы без значения, хотя число принадлежит
+// СЛОЮ и к направлению отношения не имеет.
 //
 // ── v3.36: СТРОКА «РИСУЕТ» И СЛОМЫ РАСТЯНУТЫ НА ДВА СТОЛБЦА. З62 ──
 //
@@ -1546,7 +1566,7 @@
 //   python3 research/sverka.py indicator/ЭТАЛОН_v2.3.pine indicator/metki_2x2.pine
 // Исчезнувшее в ней — ровно список выше, и ничего сверх него.
 // ═══════════════════════════════════════════════════════════════════
-indicator("Метки 2/2 · v3.36", overlay = true, max_lines_count = 500, max_labels_count = 500, max_bars_back = 3000)
+indicator("Метки 2/2 · v3.37", overlay = true, max_lines_count = 500, max_labels_count = 500, max_bars_back = 3000)
 
 // ═══════════════════════════════════════════════════════════════════
 //                        ПОЛОВИНА  ·  ВИД
@@ -3749,6 +3769,14 @@ if barstate.islast
         table.cell(TBL, 0, 7, "рубится", text_color = color.gray, text_size = tSz)
         table.cell(TBL, 0, 8, "запас " + (depthU == depthD ? str.tostring(depthU) : str.tostring(depthU) + "/" + str.tostring(depthD)) + " кол.", text_color = color.gray, text_size = tSz)
         table.cell(TBL, 0, 9, "среднее колено", text_color = color.gray, text_size = tSz)
+        // ── З63 · САМО ЧИСЛО, ОДНО НА ДВА НАПРАВЛЕНИЯ ──
+        // Скользящее колено принадлежит СЛОЮ, а не направлению: оно
+        // считается модулем разницы соседних колен, и у перевёрнутой
+        // цепочки модуль тот же. Поэтому в табло оно стояло дважды
+        // одним и тем же числом. Берётся ячейка 0 — восходящий
+        float legAll = array.get(tLEG, 0)
+        string legTxtA = legAll <= 0 ? "—" : str.tostring(legAll, format.mintick) + "  " + str.tostring(100 * legAll / close, "#.##") + "%"
+        table.cell(TBL, 1, 9, legTxtA, text_color = color.gray, text_size = tSz)
         table.cell(TBL, 0, 11, "баров от (0)", text_color = color.gray, text_size = tSz)
         table.cell(TBL, 0, 12, "прошлая смерть", text_color = color.gray, text_size = tSz)
         table.cell(TBL, 0, 4, "посл-ть", text_color = color.gray, text_size = tSz)
@@ -3813,8 +3841,10 @@ if barstate.islast
         // но на экран не выводилась: табло показывало порог и запас, а
         // множитель, от которого берётся 0.20, оставался невидимым.
         // Процент считается от цены — та же мерка, что у «запаса»
-        string legTxt = leg <= 0 ? "—" : str.tostring(leg, format.mintick) + "  " + str.tostring(100 * leg / close, "#.##") + "%"
-        table.cell(TBL, 1, 9, legTxt, text_color = color.gray, text_size = tSz)
+        // v3.37: сама ячейка переехала в ОБЩИЙ блок подписей — число у
+        // двух направлений одно и то же, и теперь оно пишется один раз
+        // на обе колонки. Расчёт `leg` тут остаётся: им пользуется
+        // строка «запас» ниже
         string ageU = liv and array.get(tZB, 0) >= 0 ? str.tostring(last_bar_index - array.get(tZB, 0)) + (array.get(tZB0, 0) >= 0 ? "  ·  всего " + str.tostring(last_bar_index - array.get(tZB0, 0)) : "") : "—"
         table.cell(TBL, 1, 11, ageU, text_color = color.gray, text_size = tSz)
         db = array.get(tDB, 0)
@@ -3902,10 +3932,13 @@ if barstate.islast
         // поэтому делится на НАСТОЯЩУЮ цену close, а не на -close
         string zapTxtD = na(zapD) or not livD ? "—" : str.tostring(zapD, format.mintick) + "  " + str.tostring(100 * zapD / close, "#.##") + "%"
         table.cell(TBL, 2, 8, zapTxtD, text_color = not livD ? color.gray : negD ? cTrDie : color.gray, text_size = tSz)
-        // то же колено словами нисходящего. ЧИСЛО ТО ЖЕ САМОЕ: ноги
-        // зеркальной цепочки той же длины, это тождество по построению
-        string legTxtD = legD <= 0 ? "—" : str.tostring(legD, format.mintick) + "  " + str.tostring(100 * legD / close, "#.##") + "%"
-        table.cell(TBL, 2, 9, legTxtD, text_color = color.gray, text_size = tSz)
+        // v3.37: ЗДЕСЬ БЫЛА ВТОРАЯ ЯЧЕЙКА СКОЛЬЗЯЩЕГО КОЛЕНА, и она
+        // показывала ТО ЖЕ ЧИСЛО, что у восходящего. Это не совпадение:
+        // колено считается как МОДУЛЬ разницы соседних колен, а у
+        // перевёрнутых цен модуль тот же — тождество по построению, оно
+        // и было записано тут же комментарием с самого начала.
+        // Его слово 31.10.2026: «да, растяни среднее колено тоже».
+        // Ячейка одна, в общем блоке подписей, слита на две колонки.
         string ageD = livD and array.get(tZB, 1) >= 0 ? str.tostring(last_bar_index - array.get(tZB, 1)) + (array.get(tZB0, 1) >= 0 ? "  ·  всего " + str.tostring(last_bar_index - array.get(tZB0, 1)) : "") : "—"
         table.cell(TBL, 2, 11, ageD, text_color = color.gray, text_size = tSz)
         dbD = array.get(tDB, 1)
@@ -4010,6 +4043,9 @@ if barstate.islast
         // правая ячейка должна СУЩЕСТВОВАТЬ, иначе слить не с чем
         table.cell(TBL, 2, 0, "", text_size = tSz)
         table.merge_cells(TBL, 1, 0, 2, 0)
+        // З63 · среднее колено — та же растяжка, по той же причине
+        table.cell(TBL, 2, 9, "", text_size = tSz)
+        table.merge_cells(TBL, 1, 9, 2, 9)
         mrgTop := true
     if slOn and blkSl and not mrgSlm
         for r = 13 to 18
