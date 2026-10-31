@@ -1,9 +1,58 @@
 //@version=5
 // ═══════════════════════════════════════════════════════════════════
-// МЕТКИ 2/2 · v3.33     ОДИН СЛОЙ, ВСЕ ПРАВИЛА
+// МЕТКИ 2/2 · v3.35     ОДИН СЛОЙ, ВСЕ ПРАВИЛА
 // 12.10.2026
 //
 // Номера читаются «три-двадцать восемь», «три-двадцать девять».
+//
+// ── v3.35: ТРЕНДЫ ВСТАЛИ РЯДОМ. ТАБЛО ПЕРЕСТРОЕНО. З61 И З59 ──
+//
+// 31.10.2026. Движок НЕ ТРОНУТ: правки только в показе.
+//
+// НОМЕР 3.34 ПРОПУЩЕН НАРОЧНО. Версия с таким номером выдавалась
+// 29.10 (бледная метка на перепрыгнутом экстремуме) и была ОТКЛОНЕНА
+// владельцем на графике: «не хочу её добавлять». Файл вернулся к v3.33
+// побайтово. Занимать тот же номер другим содержимым нельзя — история
+// версий перестала бы читаться. Код отклонённой v3.34 жив в коммите
+// 710dee4.
+//
+// 1 · ТАБЛО ПЕРЕСТРОЕНО: ТРЕНДЫ СЛЕВА И СПРАВА. Замечание З61, его
+//     слово со скрином старого табло «ГДЕ МЫ»: «нужно сделать таблицу
+//     по примеру расположения, где тренды будут слева и справа, под
+//     ними сломы, потом вход, потом риск».
+//
+//     БЫЛО: 31 строка, 2 колонки, блоки ДРУГ ПОД ДРУГОМ — восходящий
+//     строки 1-12, нисходящий 13-24, сломы 25-30. Чтобы сравнить два
+//     направления, глаз вёл двенадцать строк вниз.
+//
+//     СТАЛО: 19 строк, 3 колонки. Левая — подписи, средняя —
+//     ВОСХОДЯЩИЙ, правая — НИСХОДЯЩИЙ. Сломы под ними, во всю ширину.
+//
+//     НИ ОДНА СТРОКА НЕ ИСЧЕЗЛА. Одиннадцать показателей тренда просто
+//     перестали повторяться дважды: состояние · счёт · посл-ть · за
+//     тренд · уровень · рубится · запас · среднее колено · полных
+//     счётов · баров от (0) · прошлая смерть.
+//
+//     ЛОВУШКА, ПОЙМАННАЯ ДО ВЫДАЧИ. Подписи строк лежали ВНУТРИ блока
+//     восходящего. Левая колонка теперь одна на двоих, и выключи
+//     владелец восходящий галочкой ⑤ — у нисходящего пропали бы
+//     названия строк. Подписи вынесены в свой блок с условием
+//     `blkUp or blkDn`.
+//
+//     ПОДПИСЬ «ЗАПАС» ДЕРЖИТ ОБЕ ГЛУБИНЫ. Она была написана дважды, у
+//     каждого направления своя: `запас 0.20 кол.`. Подпись теперь одна,
+//     а глубина у направлений может различаться, если снята галочка
+//     «как у восходящего». Поэтому при расхождении пишется `0.20/0.25`.
+//
+//     ВХОД И РИСК НЕ ДЕЛАЛИСЬ, и это его прямое слово «вход и риск
+//     ждём». В рабочем файле их нет ни строки: блок входа ЗАМОРОЖЕН с
+//     18.09.2026, а риск считает R по виртуальным сделкам входа, то
+//     есть упирается в тот же блок. Пустых заголовков на графике не
+//     ставим — это обещание, которого файл не держит.
+//
+// 2 · ЗАМЕЧАНИЕ З59 — ИСПРАВЛЕНО МОЁ ЧИСЛО В ДНЕВНИКЕ v3.33. Текст был
+//     готов с 29.10 и ждал СОДЕРЖАТЕЛЬНОЙ правки по его слову «ждём,
+//     вставишь со следующей правкой». Подробности — в дневнике v3.33.
 //
 // ── v3.33: НОЛЬ ПРОДОЛЖЕНИЯ РУБИТСЯ КАСАНИЕМ. ПРАВКА ДВИЖКА ──
 //
@@ -56,9 +105,27 @@
 // `cont_touch=True`.
 //
 // ЗАМЕР НЕ ДЕЛАЛСЯ — его слово «нет, считать не нужно». Сделана только
-// проверка работоспособности: правило срабатывает, продолжений на девяти
-// годах стало 634 вместо 685 у восходящего и 522 вместо 540 у
-// нисходящего. То есть «много», которого он опасался, оказалось 3–7%.
+// проверка работоспособности, и она показала: ПРАВИЛО СРАБАТЫВАЕТ ЧАСТО.
+//
+//     набор                    ↑      ↓
+//     девять лет часовика     335    287
+//     два года часовика        83     62
+//     пятиминутка             108    134
+//
+// ЕГО «ПРОПАДЁТ МНОГО» БЫЛО ПРАВДОЙ: 145 случаев за два года на
+// часовике, считая оба направления. Адреса всех — `СЛУЧАИ-v3.33.md`.
+//
+// ЧИСЛО ПРОДОЛЖЕНИЙ при этом упало гораздо меньше: 634 вместо 685 у
+// восходящего и 522 вместо 540 у нисходящего, то есть −51 и −18 за те
+// же девять лет. Это ДРУГАЯ ВЕЛИЧИНА: убитый тренд рождается заново и
+// успевает продолжиться снова, и каскад почти всё отыгрывает.
+//
+// ОШИБКА АССИСТЕНТА, ЗАМЕЧАНИЕ З59, исправлено в этой версии по его
+// слову «да, в следующей версии поправишь». В v3.33 тут стояло: «то
+// есть „много", которого он опасался, оказалось 3–7%». Я подставил
+// разницу в ЧИСЛЕ продолжений вместо числа срабатываний и сказал
+// владельцу, что цена правила мала. Неверно: она велика, и прав был
+// он, а не я. Разбор ошибки целиком — карточка Р43.
 //
 // СЕТИ: `sverka.py` 87 и 87, условия показа не менялись. `argumenty.py`
 // ИСЧЕЗЛО 0, изменивших значение 0, появился один новый вызов — галочка.
@@ -1455,7 +1522,7 @@
 //   python3 research/sverka.py indicator/ЭТАЛОН_v2.3.pine indicator/metki_2x2.pine
 // Исчезнувшее в ней — ровно список выше, и ничего сверх него.
 // ═══════════════════════════════════════════════════════════════════
-indicator("Метки 2/2 · v3.33", overlay = true, max_lines_count = 500, max_labels_count = 500, max_bars_back = 3000)
+indicator("Метки 2/2 · v3.35", overlay = true, max_lines_count = 500, max_labels_count = 500, max_bars_back = 3000)
 
 // ═══════════════════════════════════════════════════════════════════
 //                        ПОЛОВИНА  ·  ВИД
@@ -1907,7 +1974,7 @@ f_swapSeq(_s) =>
 // Раньше его три строки стояли вплотную под нисходящим и читались как
 // его продолжение — отсюда вопрос владельца «есть отличия между
 // трендами по строкам». Отличий в подписях нет, это был третий блок
-var table TBL = table.new(tblPos == "справа вверху" ? position.top_right : tblPos == "справа внизу" ? position.bottom_right : tblPos == "слева вверху" ? position.top_left : position.bottom_left, 2, 31, border_width = 1, frame_width = 1, frame_color = color.new(color.gray, 60), border_color = color.new(color.gray, 80))
+var table TBL = table.new(tblPos == "справа вверху" ? position.top_right : tblPos == "справа внизу" ? position.bottom_right : tblPos == "слева вверху" ? position.top_left : position.bottom_left, 3, 19, border_width = 1, frame_width = 1, frame_color = color.new(color.gray, 60), border_color = color.new(color.gray, 80))
 // Фон строки-заголовка блока. Прозрачность 88 — полоска видна, а текст
 // читается так же, как раньше. Правило показа: ЦВЕТ полоски говорит,
 // чей это блок
@@ -3622,12 +3689,34 @@ if barstate.islast
                 dtxt := dtxt + "  ·  ближе к концу " + (klPu < klPd ? "ВОСХ " : "НИСХ ") + str.tostring(math.min(klPu, klPd), "#.##") + "%"
         table.cell(TBL, 1, 0, dtxt, text_color = drwIdx < 0 ? color.gray : drwIdx == 1 ? cTrDn : cTrUp, text_size = tSz)
 
+    // ── ПОДПИСИ СТРОК — ОБЩИЕ НА ОБЕ КОЛОНКИ, v3.35 ──
+    //
+    // Тренды встали РЯДОМ (З61), и левая колонка теперь одна на
+    // двоих. Держать её внутри `blkUp` нельзя: выключив восходящий
+    // галочкой ⑤, владелец унёс бы названия строк и у нисходящего.
+    // Поэтому подписи пишутся, когда показан ХОТЬ ОДИН из двух.
+    //
+    // «запас» держит ОБЕ глубины: подпись одна, а у направлений
+    // глубина своя, если снята галочка «как у восходящего»
+    if trTbl and (blkUp or blkDn)
+        table.cell(TBL, 0, 1, "2/2", text_color = color.gray, text_size = tSz, bgcolor = cBlkS)
+        table.cell(TBL, 0, 2, "состояние", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 0, 3, "счёт", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 0, 10, "полных счётов", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 0, 6, "уровень", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 0, 7, "рубится", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 0, 8, "запас " + (depthU == depthD ? str.tostring(depthU) : str.tostring(depthU) + "/" + str.tostring(depthD)) + " кол.", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 0, 9, "среднее колено", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 0, 11, "баров от (0)", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 0, 12, "прошлая смерть", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 0, 4, "посл-ть", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 0, 5, "за тренд", text_color = color.gray, text_size = tSz)
+
     if trTbl and blkUp
         // строку последовательности считаем ДО ячеек: пайн не умеет
         // тернарник, возвращающий кортеж
         [zlC, tlC, npC] = f_seqNow(P2, B2, H2, L2, 0)
-        table.cell(TBL, 0, 1, "восходящий", text_color = cTrUp, text_size = tSz, bgcolor = cBlkU)
-        table.cell(TBL, 1, 1, "2/2", text_color = cTrUp, text_size = tSz, bgcolor = cBlkU)
+        table.cell(TBL, 1, 1, "восходящий", text_color = cTrUp, text_size = tSz, bgcolor = cBlkU)
         int    sU  = array.get(tTR, 0)
         bool   liv = sU == ST_MAY or sU == ST_LIVE
         float  lv  = array.get(tLVL, 0)
@@ -3718,17 +3807,6 @@ if barstate.islast
         string slU  = drS == 0 ? "" : "  ·  сломы " + (drS > 0 ? "↑" : "↓") + str.tostring(rnS) + (drS > 0 ? " за" : " ПРОТИВ")
         string zaU  = not showsU ? "—" : cntTxt + chU + slU
         table.cell(TBL, 1, 5, zaU, text_color = not showsU ? color.gray : drS < 0 ? color.orange : color.gray, text_size = tSz)
-        table.cell(TBL, 0, 2, "состояние", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 3, "счёт", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 10, "полных счётов", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 6, "уровень", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 7, "рубится", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 8, "запас " + str.tostring(depthU) + " кол.", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 9, "среднее колено", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 11, "баров от (0)", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 12, "прошлая смерть", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 4, "посл-ть", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 5, "за тренд", text_color = color.gray, text_size = tSz)
 
     // ── НИСХОДЯЩИЙ: те же девять строк, ячейка 1 ──
     // Цены в ней отрицательные — перевёрнутый мир. Всё, что идёт в
@@ -3753,8 +3831,7 @@ if barstate.islast
 
     if trTbl and blkDn
         [zlF, tlF, npF] = f_seqNow(P2n, B2n, H2n, L2n, 1)
-        table.cell(TBL, 0, 13, "нисходящий", text_color = cTrDn, text_size = tSz, bgcolor = cBlkD)
-        table.cell(TBL, 1, 13, "2/2", text_color = cTrDn, text_size = tSz, bgcolor = cBlkD)
+        table.cell(TBL, 2, 1, "нисходящий", text_color = cTrDn, text_size = tSz, bgcolor = cBlkD)
         int    sD   = array.get(tTR, 1)
         bool   livD = sD == ST_MAY or sD == ST_LIVE
         float  lvD  = array.get(tLVL, 1)
@@ -3764,15 +3841,15 @@ if barstate.islast
         // v3.33, З50 — то же, что у восходящего. Зеркало точное
         bool   zOnD = array.get(tONZ, 1) or (contTch and array.get(tCZ, 1))
         color  cD   = f_stColor(1, true)
-        table.cell(TBL, 1, 14, f_stWord(1, true), text_color = cD, text_size = tSz)
+        table.cell(TBL, 2, 2, f_stWord(1, true), text_color = cD, text_size = tSz)
         int cntRawD = array.get(tCNT, 1)
-        table.cell(TBL, 1, 15, sD == ST_ARC ? "(5)/5 ✓" : livD ? "(" + str.tostring(cntRawD) + ")/5" : "—", text_color = cD, text_size = tSz)
+        table.cell(TBL, 2, 3, sD == ST_ARC ? "(5)/5 ✓" : livD ? "(" + str.tostring(cntRawD) + ")/5" : "—", text_color = cD, text_size = tSz)
         int fullD = array.get(tRST, 1) + (array.get(tMAX, 1) >= 5 ? 1 : 0)
-        table.cell(TBL, 1, 22, livD or sD == ST_ARC ? str.tostring(fullD) : "—", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 18, not livD ? "—" : na(lvD) ? "нет" : (array.get(tLHL, 1) ? "LH " : "HH ") + str.tostring(-lvD, format.mintick), text_color = livD and not na(lvD) ? (array.get(tLHL, 1) ? cTrDn : color.new(cTrDn, 45)) : color.gray, text_size = tSz)
+        table.cell(TBL, 2, 10, livD or sD == ST_ARC ? str.tostring(fullD) : "—", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 2, 6, not livD ? "—" : na(lvD) ? "нет" : (array.get(tLHL, 1) ? "LH " : "HH ") + str.tostring(-lvD, format.mintick), text_color = livD and not na(lvD) ? (array.get(tLHL, 1) ? cTrDn : color.new(cTrDn, 45)) : color.gray, text_size = tSz)
         // ── НОВАЯ СТРОКА 16: ЧЕМ РУБИТСЯ СЕЙЧАС. З44, зеркало ──
         string rubD = not livD or na(lvD) ? "—" : zOnD ? "касанием " + str.tostring(-lvD, format.mintick) + (array.get(tCZ, 1) ? " продолж." : "") : "глубиной " + str.tostring(-thrD, format.mintick)
-        table.cell(TBL, 1, 19, rubD, text_color = not livD or na(lvD) ? color.gray : zOnD ? color.orange : color.gray, text_size = tSz)
+        table.cell(TBL, 2, 7, rubD, text_color = not livD or na(lvD) ? color.gray : zOnD ? color.orange : color.gray, text_size = tSz)
         // З44, зеркало. В перевёрнутом мире минимум свечи это −high,
         // поэтому на строгой ступени считается от МАКСИМУМА настоящей
         // свечи: в живых ценах это «уровень − максимум свечи»
@@ -3782,15 +3859,15 @@ if barstate.islast
         // в перевёрнутом мире знак у него тот же, что у восходящего,
         // поэтому делится на НАСТОЯЩУЮ цену close, а не на -close
         string zapTxtD = na(zapD) or not livD ? "—" : str.tostring(zapD, format.mintick) + "  " + str.tostring(100 * zapD / close, "#.##") + "%"
-        table.cell(TBL, 1, 20, zapTxtD, text_color = not livD ? color.gray : negD ? cTrDie : color.gray, text_size = tSz)
+        table.cell(TBL, 2, 8, zapTxtD, text_color = not livD ? color.gray : negD ? cTrDie : color.gray, text_size = tSz)
         // то же колено словами нисходящего. ЧИСЛО ТО ЖЕ САМОЕ: ноги
         // зеркальной цепочки той же длины, это тождество по построению
         string legTxtD = legD <= 0 ? "—" : str.tostring(legD, format.mintick) + "  " + str.tostring(100 * legD / close, "#.##") + "%"
-        table.cell(TBL, 1, 21, legTxtD, text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 2, 9, legTxtD, text_color = color.gray, text_size = tSz)
         string ageD = livD and array.get(tZB, 1) >= 0 ? str.tostring(last_bar_index - array.get(tZB, 1)) + (array.get(tZB0, 1) >= 0 ? "  ·  всего " + str.tostring(last_bar_index - array.get(tZB0, 1)) : "") : "—"
-        table.cell(TBL, 1, 23, ageD, text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 2, 11, ageD, text_color = color.gray, text_size = tSz)
         dbD = array.get(tDB, 1)
-        table.cell(TBL, 1, 24, dbD < 0 ? "—" : str.tostring(last_bar_index - dbD) + " / " + str.tostring(-array.get(tDP, 1), format.mintick), text_color = dbD < 0 ? color.gray : cTrUp, text_size = tSz)
+        table.cell(TBL, 2, 12, dbD < 0 ? "—" : str.tostring(last_bar_index - dbD) + " / " + str.tostring(-array.get(tDP, 1), format.mintick), text_color = dbD < 0 ? color.gray : cTrUp, text_size = tSz)
         [mcN, miN, mnN] = f_matchS(tlF)
         bool rojdN = zlF == "LL"
         int fiN = miN >= 0 ? miN + (rojdN ? 0 : 8) : 0
@@ -3799,7 +3876,7 @@ if barstate.islast
         string nmD2 = mcN > 0 ? mnN : "вне справ."
         bool showsN = livD or sD == ST_ARC
         string cellN = not showsN ? "—" : npF < 5 ? (mcN <= 3 ? nmD2 : str.tostring(mcN) + " вар.") : nmD2
-        table.cell(TBL, 1, 16, cellN, text_color = showsN ? (mcN == 0 ? color.orange : npF >= 5 ? cTrDn : color.gray) : color.gray, text_size = tSz)
+        table.cell(TBL, 2, 4, cellN, text_color = showsN ? (mcN == 0 ? color.orange : npF >= 5 ? cTrDn : color.gray) : color.gray, text_size = tSz)
         // то же словами нисходящего: у него «за» — это сломы ВНИЗ
         int    drN  = array.get(sDIR, 0)
         int    rnN  = array.get(sRUN, 0)
@@ -3807,18 +3884,7 @@ if barstate.islast
         string slD  = drN == 0 ? "" : "  ·  сломы " + (drN > 0 ? "↑" : "↓") + str.tostring(rnN) + (drN < 0 ? " за" : " ПРОТИВ")
         string cntD = sD == ST_ARC ? "(5)/5 ✓" : livD ? "(" + str.tostring(cntRawD) + ")/5" : "—"
         string zaD  = not showsN ? "—" : cntD + chD + slD
-        table.cell(TBL, 1, 17, zaD, text_color = not showsN ? color.gray : drN > 0 ? color.orange : color.gray, text_size = tSz)
-        table.cell(TBL, 0, 14, "состояние", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 15, "счёт", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 22, "полных счётов", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 18, "уровень", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 19, "рубится", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 20, "запас " + str.tostring(depthD) + " кол.", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 21, "среднее колено", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 23, "баров от (0)", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 24, "прошлая смерть", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 16, "посл-ть", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 17, "за тренд", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 2, 5, zaD, text_color = not showsN ? color.gray : drN > 0 ? color.orange : color.gray, text_size = tSz)
 
     // ── СЛОМЫ В ТАБЛО: ЗАГОЛОВОК плюс три строки ──
     //
@@ -3834,19 +3900,19 @@ if barstate.islast
     // Слом не принадлежит ни одному тренду: это цена взяла ближайший
     // непробитый пивот слоя. Со смертью тренда его путать нельзя — З35
     if slOn and blkSl
-        table.cell(TBL, 0, 25, "сломы", text_color = color.gray, text_size = tSz, bgcolor = cBlkS)
-        table.cell(TBL, 1, 25, "2/2", text_color = color.gray, text_size = tSz, bgcolor = cBlkS)
-        table.cell(TBL, 0, 26, "сломов подряд", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 27, "последний слом", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 28, "ближе слом", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 29, "дальний слом", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 30, "серия и уровни", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 0, 13, "сломы", text_color = color.gray, text_size = tSz, bgcolor = cBlkS)
+        table.cell(TBL, 1, 13, "2/2", text_color = color.gray, text_size = tSz, bgcolor = cBlkS)
+        table.cell(TBL, 0, 14, "сломов подряд", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 0, 15, "последний слом", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 0, 16, "ближе слом", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 0, 17, "дальний слом", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 0, 18, "серия и уровни", text_color = color.gray, text_size = tSz)
         int dr = array.get(sDIR, 0)
         int rn = array.get(sRUN, 0)
         color cS = dr > 0 ? cSlUp : dr < 0 ? cSlDn : color.gray
-        table.cell(TBL, 1, 26, dr == 0 ? "—" : (dr > 0 ? "↑" : "↓") + str.tostring(rn), text_color = cS, text_size = tSz)
+        table.cell(TBL, 1, 14, dr == 0 ? "—" : (dr > 0 ? "↑" : "↓") + str.tostring(rn), text_color = cS, text_size = tSz)
         int lbS = array.get(sLB, 0)
-        table.cell(TBL, 1, 27, lbS < 0 ? "—" : str.tostring(last_bar_index - lbS) + " / " + str.tostring(array.get(sLP, 0), format.mintick), text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 1, 15, lbS < 0 ? "—" : str.tostring(last_bar_index - lbS) + " / " + str.tostring(array.get(sLP, 0), format.mintick), text_color = color.gray, text_size = tSz)
         float du = na(mUp) ? 1.0e18 : mUp - close
         float dd = na(mDn) ? 1.0e18 : close - mDn
         string nearTxt = "—"
@@ -3857,7 +3923,7 @@ if barstate.islast
         else if dd < 1.0e17
             nearTxt := "снизу " + str.tostring(mDn, format.mintick) + "  " + str.tostring(100 * dd / close, "#.##") + "%"
             nearCol := cSlDn
-        table.cell(TBL, 1, 28, nearTxt, text_color = nearCol, text_size = tSz)
+        table.cell(TBL, 1, 16, nearTxt, text_color = nearCol, text_size = tSz)
         // ── ДАЛЬНИЙ СЛОМ, строка 25. Замечание З12, висело с 23.09.2026 ──
         //
         // Строка «ближе слом» одна не говорит, ближний он с перевесом в
@@ -3874,7 +3940,7 @@ if barstate.islast
             else
                 farTxt := "сверху " + str.tostring(mUp, format.mintick) + "  " + str.tostring(100 * du / close, "#.##") + "%"
                 farCol := cSlUp
-        table.cell(TBL, 1, 29, farTxt, text_color = farCol, text_size = tSz)
+        table.cell(TBL, 1, 17, farTxt, text_color = farCol, text_size = tSz)
         // ── СЕРИЯ И УРОВНИ, строка 26. Связывает блок ──
         //
         // Слово владельца 15.10.2026: «интуитивно чего-то не хватает
@@ -3894,4 +3960,4 @@ if barstate.islast
             bool agree = (dr > 0) == (geoDir > 0)
             relTxt := agree ? "согласны" : "спорят"
             relCol := agree ? (dr > 0 ? cSlUp : cSlDn) : color.orange
-        table.cell(TBL, 1, 30, relTxt, text_color = relCol, text_size = tSz)
+        table.cell(TBL, 1, 18, relTxt, text_color = relCol, text_size = tSz)
