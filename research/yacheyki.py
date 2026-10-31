@@ -35,7 +35,12 @@ from collections import Counter
 def cells(path):
     t = io.open(path, encoding='utf-8').read()
     out = []
-    for m in re.finditer(r'table\.cell\(TBL,\s*(\d+),\s*(\d+),(.*)$', t, re.M):
+    # ⚠️ 31.10.2026: адрес ячейки НЕ ОБЯЗАН быть цифрой. В v3.36
+    # появилось `table.cell(TBL, 2, r, …)` внутри цикла, и первая
+    #версия этого разбора с `(\d+)` молча его пропустила — сеть насчитала
+    # 51 ячейку вместо 52. Дыра в сети хуже, чем её отсутствие, поэтому
+    # адрес берётся как ЛЮБОЙ кусок до запятой.
+    for m in re.finditer(r'table\.cell\(TBL,\s*([^,]+),\s*([^,]+),(.*)$', t, re.M):
         rest = m.group(3)
         txt = rest.split(', text_color')[0].strip().rstrip(')')
         tc = re.search(r'text_color = ([^,)]+)', rest)
