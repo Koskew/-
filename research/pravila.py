@@ -51,6 +51,7 @@ FILES = [
     'indicator/ПРАВИЛА-ПРОДОЛЖЕНИЕ.md',
     'indicator/ПРАВИЛА-СЛОМ.md',
     'indicator/ПРАВИЛА-БОКОВИК.md',
+    'indicator/ПРАВИЛА-ТРИГГЕР.md',
     'indicator/РЕШЕНИЯ-ИТОГ.md',
 ]
 
