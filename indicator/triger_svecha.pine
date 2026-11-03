@@ -1,0 +1,181 @@
+//@version=5
+// ══════════════════════════════════════════════════════════════════════
+//  ТРИГГЕРНАЯ СВЕЧА · v0.1 · 03.11.2026
+//
+//  ОТДЕЛЬНЫЙ ИНДИКАТОР, БЕЗ СЛОЁВ. Слово владельца 03.11.2026:
+//  «да, вноси подсветку в пайн, только сделай отдельный пайн без слоёв,
+//   когда сделаем качественно просто туда перенесём».
+//
+//  Здесь НЕТ ни колен, ни счёта (0)-(5), ни тренда, ни уровня, ни сломов.
+//  Только одна свеча и её соседи.
+//
+//  ПРАВИЛО ИЗ ДВУХ УСЛОВИЙ, его слово 03.11.2026:
+//    ФОРМА  — симметричная: длина фитилей одинаковая. Тело ЛЮБОЕ —
+//             очень маленькое, среднее или большое. Фитили могут быть
+//             короткими.
+//    РАЗМЕР — свеча НЕ должна быть большой относительно цены и свечей
+//             рядом. Его пример: «если у свечей рядом средняя шкала
+//             0.3%, а свеча 0.8% — я такую пропускаю».
+//
+//  ТРИ ЧИСЛА согласованы его словом «давай так»:
+//    соседей 20 · порог размера 2x · разница фитилей до 8 п.п.
+//    Порог 8 п.п. взят не с потолка: это медиана разницы фитилей его
+//    собственных 40 шаблонов (7.7 п.п.) против 20.5 у обычной свечи.
+//
+//  ЗАМЕР Н60: правило ловит 20.1% баров и на 1H, и на 5m — доля совпала
+//  до десятой. Фильтр размера при 2x режет лишь 8.8% формы, потому что
+//  симметричная свеча обычно МЕНЬШЕ обычной (медиана 0.91x).
+//
+//  ⚠️ СВЕЧА НЕ ДЕЛАЕТ ВХОД. Его слово: «не делает автоматический вход,
+//  не отвечает за риск, и её автоматическое появление без остальных
+//  критериев, которые формируют вход, бессмысленно». Это ОРИЕНТИР.
+// ══════════════════════════════════════════════════════════════════════
+indicator("Триггерная свеча · v0.1", overlay = true, max_labels_count = 500)
+
+// ─────────────────────────── ПРАВИЛО ─────────────────────────────────
+gP = "Правило"
+trOn   = input.bool(true,  "Искать триггерные свечи", group = gP)
+simMax = input.float(8.0,  "Фитили: разница не больше, % высоты свечи", minval = 0.0, maxval = 50.0, step = 0.5, group = gP, tooltip = "Насколько «одинаковые» фитили. 8 — согласованное значение: медиана разницы фитилей у ваших 40 шаблонов 7.7, у обычной свечи 20.5.")
+okno   = input.int(20,     "Соседей для обычного размера", minval = 2, maxval = 200, group = gP, tooltip = "Сколько ПРЕДЫДУЩИХ свечей брать, чтобы понять обычный размер. Текущая свеча в среднее не входит.")
+porog  = input.float(2.0,  "Пропускать, если свеча больше средней в N раз", minval = 1.0, maxval = 10.0, step = 0.1, group = gP, tooltip = "Ваш пример 0.8% против 0.3% — это 2.7 раза. При 2.0 отсекается 8.8% формы на 1H.")
+
+// ─────────────────────────── ПОКАЗ ───────────────────────────────────
+gS = "Показ"
+svOn  = input.bool(true,   "Подсвечивать фон свечи", group = gS)
+svCol = input.color(color.new(color.orange, 0), "Цвет подсветки", group = gS)
+svPrz = input.int(80,      "Прозрачность подсветки", minval = 0, maxval = 95, group = gS)
+mtOn  = input.bool(false,  "Ставить метку под свечой", group = gS)
+mtSz  = input.string("Обычный", "Размер метки", options = ["Крошечный", "Мелкий", "Обычный", "Крупный"], group = gS)
+rzOn  = input.bool(false,  "Помечать срезанные размером", group = gS, tooltip = "Свечи, которые подошли по ФОРМЕ, но оказались слишком большими рядом с соседями. Нужно, чтобы увидеть, что именно отсекает фильтр.")
+rzCol = input.color(color.new(color.gray, 0), "Цвет срезанных", group = gS)
+
+gT = "Табло"
+tbOn  = input.bool(true,   "Показывать табло", group = gT)
+tbPos = input.string("Справа вверху", "Где табло", options = ["Справа вверху", "Справа внизу", "Слева вверху", "Слева внизу"], group = gT)
+tbSz  = input.string("Обычный", "Размер текста табло", options = ["Крошечный", "Мелкий", "Обычный", "Крупный"], group = gT)
+
+// ══════════════════════════ СЧЁТ ФОРМЫ ═══════════════════════════════
+// Доли считаются от ВЫСОТЫ свечи. Три доли всегда дают в сумме 100.
+rng = high - low
+bod = math.abs(close - open)
+upS = open > close ? high - open  : high - close
+loS = open > close ? close - low  : open - low
+
+float bodP = 0.0
+float uppP = 0.0
+float lowP = 0.0
+if rng > 0
+    bodP := bod / rng * 100.0
+    uppP := upS / rng * 100.0
+    lowP := loS / rng * 100.0
+
+// РАЗНИЦА ФИТИЛЕЙ — это и есть «симметричность» словами владельца
+razn = math.abs(uppP - lowP)
+
+// ══════════════════════════ СЧЁТ РАЗМЕРА ═════════════════════════════
+// Высота свечи в процентах ОТ ЦЕНЫ — ровно как в его примере «0.3%».
+float shk = 0.0
+if close > 0
+    shk := rng / close * 100.0
+
+// Средняя высота по ПРЕДЫДУЩИМ okno свечам. Сдвиг [1] убирает текущую.
+sredShk = ta.sma(shk, okno)
+float sredPred = na
+if bar_index >= okno
+    sredPred := sredShk[1]
+
+// Во сколько раз эта свеча больше обычной
+float otn = 0.0
+if not na(sredPred)
+    if sredPred > 0
+        otn := shk / sredPred
+
+// ══════════════════════════ ВЕРДИКТ ══════════════════════════════════
+// Сторожа пишутся через if, а не через логическую связку: пайн считает
+// обе половины `and` всегда, обрыва нет.
+bool formaOk = false
+if rng > 0
+    if razn <= simMax
+        formaOk := true
+
+bool razmOk = false
+if otn > 0
+    if otn <= porog
+        razmOk := true
+
+bool trig = false
+bool srez = false
+if trOn
+    if formaOk
+        if razmOk
+            trig := true
+        else
+            if otn > 0
+                srez := true
+
+// ══════════════════════════ СЧЁТЧИКИ ═════════════════════════════════
+// Считаем только на ЗАКРЫТЫХ барах: последний бар пересчитывается много
+// раз, и без этого сторожа счётчик врал бы.
+var int nTrig  = 0
+var int nForma = 0
+var int nSrez  = 0
+var int nVsego = 0
+var int lastTB = na
+if barstate.isconfirmed
+    nVsego := nVsego + 1
+    if formaOk
+        nForma := nForma + 1
+    if trig
+        nTrig := nTrig + 1
+        lastTB := bar_index
+    if srez
+        nSrez := nSrez + 1
+
+// ══════════════════════════ ГРАФИК ═══════════════════════════════════
+bgcolor(trig and svOn ? color.new(svCol, svPrz) : na, title = "Подсветка триггерной свечи")
+bgcolor(srez and rzOn ? color.new(rzCol, 88)    : na, title = "Подсветка срезанных размером")
+
+mSz = mtSz == "Крошечный" ? size.tiny : mtSz == "Мелкий" ? size.small : mtSz == "Крупный" ? size.large : size.normal
+if mtOn and trig
+    label.new(bar_index, low, "⟡", style = label.style_label_up, color = color.new(svCol, 20), textcolor = color.white, size = mSz, yloc = yloc.belowbar)
+
+// ══════════════════════════ ТАБЛО ════════════════════════════════════
+tPos = tbPos == "Справа внизу" ? position.bottom_right : tbPos == "Слева вверху" ? position.top_left : tbPos == "Слева внизу" ? position.bottom_left : position.top_right
+tSz  = tbSz == "Крошечный" ? size.tiny : tbSz == "Мелкий" ? size.small : tbSz == "Крупный" ? size.large : size.normal
+var table TBL = table.new(tPos, 2, 10, border_width = 1)
+
+cZag = color.new(color.gray, 70)
+cOk  = color.new(color.green, 70)
+cNet = color.new(color.gray, 85)
+
+if tbOn and barstate.islast
+    table.cell(TBL, 0, 0, "ТРИГГЕРНАЯ СВЕЧА", text_color = color.white, text_size = tSz, bgcolor = cZag)
+    table.cell(TBL, 1, 0, "v0.1", text_color = color.gray, text_size = tSz, bgcolor = cZag)
+
+    table.cell(TBL, 0, 1, "сейчас", text_color = color.gray, text_size = tSz)
+    table.cell(TBL, 1, 1, trig ? "ДА" : srez ? "срезана размером" : "нет", text_color = trig ? color.white : color.gray, text_size = tSz, bgcolor = trig ? cOk : cNet)
+
+    table.cell(TBL, 0, 2, "фитили: разница", text_color = color.gray, text_size = tSz)
+    table.cell(TBL, 1, 2, rng > 0 ? str.tostring(razn, "#.#") + " из " + str.tostring(simMax, "#.#") : "—", text_color = formaOk ? color.white : color.gray, text_size = tSz)
+
+    table.cell(TBL, 0, 3, "размер к обычному", text_color = color.gray, text_size = tSz)
+    table.cell(TBL, 1, 3, otn > 0 ? str.tostring(otn, "#.##") + "x из " + str.tostring(porog, "#.#") + "x" : "—", text_color = razmOk ? color.white : color.gray, text_size = tSz)
+
+    table.cell(TBL, 0, 4, "обычная высота", text_color = color.gray, text_size = tSz)
+    table.cell(TBL, 1, 4, na(sredPred) ? "—" : str.tostring(sredPred, "#.###") + "%", text_color = color.gray, text_size = tSz)
+
+    table.cell(TBL, 0, 5, "эта свеча", text_color = color.gray, text_size = tSz)
+    table.cell(TBL, 1, 5, str.tostring(shk, "#.###") + "%  тело " + str.tostring(bodP, "#") + "%", text_color = color.gray, text_size = tSz)
+
+if tbOn and barstate.islast
+    table.cell(TBL, 0, 6, "НАЙДЕНО", text_color = color.white, text_size = tSz, bgcolor = cZag)
+    table.cell(TBL, 1, 6, str.tostring(nTrig) + (nVsego > 0 ? "  " + str.tostring(100.0 * nTrig / nVsego, "#.#") + "%" : ""), text_color = color.white, text_size = tSz, bgcolor = cZag)
+
+    table.cell(TBL, 0, 7, "подошло по форме", text_color = color.gray, text_size = tSz)
+    table.cell(TBL, 1, 7, str.tostring(nForma) + (nVsego > 0 ? "  " + str.tostring(100.0 * nForma / nVsego, "#.#") + "%" : ""), text_color = color.gray, text_size = tSz)
+
+    table.cell(TBL, 0, 8, "срезано размером", text_color = color.gray, text_size = tSz)
+    table.cell(TBL, 1, 8, str.tostring(nSrez) + (nForma > 0 ? "  " + str.tostring(100.0 * nSrez / nForma, "#.#") + "% формы" : ""), text_color = color.gray, text_size = tSz)
+
+    table.cell(TBL, 0, 9, "последняя была", text_color = color.gray, text_size = tSz)
+    table.cell(TBL, 1, 9, na(lastTB) ? "—" : str.tostring(bar_index - lastTB) + " баров назад", text_color = color.gray, text_size = tSz)
