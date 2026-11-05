@@ -1,6 +1,6 @@
 //@version=5
 // ══════════════════════════════════════════════════════════════════════
-//  ТРИГГЕРНАЯ СВЕЧА · v0.3 · 05.11.2026
+//  ТРИГГЕРНАЯ СВЕЧА · v0.4 · 05.11.2026
 //
 //  ОТДЕЛЬНЫЙ ИНДИКАТОР, БЕЗ СЛОЁВ. Слово владельца 03.11.2026:
 //  «да, вноси подсветку в пайн, только сделай отдельный пайн без слоёв,
@@ -30,6 +30,16 @@
 //  не отвечает за риск, и её автоматическое появление без остальных
 //  критериев, которые формируют вход, бессмысленно». Это ОРИЕНТИР.
 //
+//  v0.4 · З66 · У ТЁМНОЙ ПОДСВЕТКИ ТЕПЕРЬ ТОТ ЖЕ НАБОР РУЧЕК.
+//  Его слово: «для удобства сделай в настройках для тёмного фона,
+//  чтобы его тоже можно было отключать, и ставить метку под свечой, и
+//  выбирать размеры». У оранжевой было пять ручек, у тёмной две.
+//  Добавлены: прозрачность срезанных, метка под срезанной, размер этой
+//  метки. ПОВЕДЕНИЕ ПО УМОЛЧАНИЮ НЕ ИЗМЕНИЛОСЬ: прозрачность 88 была
+//  вшита в код, теперь она же стоит по умолчанию в ручке; метка по
+//  умолчанию ВЫКЛЮЧЕНА, как и у оранжевой.
+//  Счёт свечей НЕ ТРОНУТ ни в одной строке.
+//
 //  v0.3 · З65 · ДОБАВЛЕН ПОТОЛОК ПО ЦЕНЕ. Правило стало из ТРЁХ условий.
 //  Его слово 03.11 было «не должны быть большие относительно ЦЕНЫ И
 //  свечей рядом» — ДВЕ меры. Я построил одну, и он нашёл дыру своим
@@ -56,7 +66,7 @@
 //  за светлой и тёмной темой. Шесть ячеек табло.
 //  Белый на МЕТКЕ оставлен: у неё свой цветной фон, она читается.
 // ══════════════════════════════════════════════════════════════════════
-indicator("Триггерная свеча · v0.3", overlay = true, max_labels_count = 500)
+indicator("Триггерная свеча · v0.4", overlay = true, max_labels_count = 500)
 
 // ─────────────────────────── ПРАВИЛО ─────────────────────────────────
 gP = "Правило"
@@ -75,6 +85,9 @@ mtOn  = input.bool(false,  "Ставить метку под свечой", grou
 mtSz  = input.string("Обычный", "Размер метки", options = ["Крошечный", "Мелкий", "Обычный", "Крупный"], group = gS)
 rzOn  = input.bool(false,  "Помечать срезанные размером", group = gS, tooltip = "Свечи, которые подошли по ФОРМЕ, но оказались слишком большими рядом с соседями. Нужно, чтобы увидеть, что именно отсекает фильтр.")
 rzCol = input.color(color.new(color.gray, 0), "Цвет срезанных", group = gS)
+rzPrz = input.int(88,      "Прозрачность срезанных", minval = 0, maxval = 95, group = gS, tooltip = "Было жёстко вшито 88. Значение по умолчанию то же, картинка не меняется.")
+rzMt  = input.bool(false,  "Ставить метку под срезанной", group = gS)
+rzMSz = input.string("Обычный", "Размер метки срезанных", options = ["Крошечный", "Мелкий", "Обычный", "Крупный"], group = gS)
 
 gT = "Табло"
 tbOn  = input.bool(true,   "Показывать табло", group = gT)
@@ -181,11 +194,16 @@ if barstate.isconfirmed
 
 // ══════════════════════════ ГРАФИК ═══════════════════════════════════
 bgcolor(trig and svOn ? color.new(svCol, svPrz) : na, title = "Подсветка триггерной свечи")
-bgcolor(srez and rzOn ? color.new(rzCol, 88)    : na, title = "Подсветка срезанных размером")
+bgcolor(srez and rzOn ? color.new(rzCol, rzPrz) : na, title = "Подсветка срезанных размером")
 
 mSz = mtSz == "Крошечный" ? size.tiny : mtSz == "Мелкий" ? size.small : mtSz == "Крупный" ? size.large : size.normal
 if mtOn and trig
     label.new(bar_index, low, "⟡", style = label.style_label_up, color = color.new(svCol, 20), textcolor = color.white, size = mSz, yloc = yloc.belowbar)
+
+// Метка под СРЕЗАННОЙ — точное зеркало метки выше, свой цвет и размер
+rSz = rzMSz == "Крошечный" ? size.tiny : rzMSz == "Мелкий" ? size.small : rzMSz == "Крупный" ? size.large : size.normal
+if rzMt and srez
+    label.new(bar_index, low, "⟡", style = label.style_label_up, color = color.new(rzCol, 20), textcolor = color.white, size = rSz, yloc = yloc.belowbar)
 
 // ══════════════════════════ ТАБЛО ════════════════════════════════════
 tPos = tbPos == "Справа внизу" ? position.bottom_right : tbPos == "Слева вверху" ? position.top_left : tbPos == "Слева внизу" ? position.bottom_left : position.top_right
@@ -198,7 +216,7 @@ cNet = color.new(color.gray, 85)
 
 if tbOn and barstate.islast
     table.cell(TBL, 0, 0, "ТРИГГЕРНАЯ СВЕЧА", text_color = chart.fg_color, text_size = tSz, bgcolor = cZag)
-    table.cell(TBL, 1, 0, "v0.3", text_color = color.gray, text_size = tSz, bgcolor = cZag)
+    table.cell(TBL, 1, 0, "v0.4", text_color = color.gray, text_size = tSz, bgcolor = cZag)
 
     table.cell(TBL, 0, 1, "сейчас", text_color = color.gray, text_size = tSz)
     table.cell(TBL, 1, 1, trig ? "ДА" : srez ? "срезана размером" : "нет", text_color = trig ? chart.fg_color : color.gray, text_size = tSz, bgcolor = trig ? cOk : cNet)
