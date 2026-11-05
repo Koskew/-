@@ -1,6 +1,6 @@
 //@version=5
 // ══════════════════════════════════════════════════════════════════════
-//  ТРИГГЕРНАЯ СВЕЧА · v0.1 · 03.11.2026
+//  ТРИГГЕРНАЯ СВЕЧА · v0.2 · 05.11.2026
 //
 //  ОТДЕЛЬНЫЙ ИНДИКАТОР, БЕЗ СЛОЁВ. Слово владельца 03.11.2026:
 //  «да, вноси подсветку в пайн, только сделай отдельный пайн без слоёв,
@@ -29,8 +29,18 @@
 //  ⚠️ СВЕЧА НЕ ДЕЛАЕТ ВХОД. Его слово: «не делает автоматический вход,
 //  не отвечает за риск, и её автоматическое появление без остальных
 //  критериев, которые формируют вход, бессмысленно». Это ОРИЕНТИР.
+//
+//  v0.2 · З64 · ПОЧИНЕН ПОКАЗ, СЧЁТ НЕ ТРОНУТ.
+//  В v0.1 число красилось в color.white, КОГДА УСЛОВИЕ ПРОЙДЕНО, а у
+//  двух ячеек нет своего фона — белым по светлому графику. Владелец
+//  открыл на графике: строка «размер к обычному» ПУСТАЯ, хотя число
+//  там было (0.37x при пороге 2x). Хуже обычной опечатки тем, что
+//  число исчезало РОВНО когда оно нужно.
+//  Заменено на chart.fg_color — цвет текста самого графика, он идёт
+//  за светлой и тёмной темой. Шесть ячеек табло.
+//  Белый на МЕТКЕ оставлен: у неё свой цветной фон, она читается.
 // ══════════════════════════════════════════════════════════════════════
-indicator("Триггерная свеча · v0.1", overlay = true, max_labels_count = 500)
+indicator("Триггерная свеча · v0.2", overlay = true, max_labels_count = 500)
 
 // ─────────────────────────── ПРАВИЛО ─────────────────────────────────
 gP = "Правило"
@@ -149,17 +159,17 @@ cOk  = color.new(color.green, 70)
 cNet = color.new(color.gray, 85)
 
 if tbOn and barstate.islast
-    table.cell(TBL, 0, 0, "ТРИГГЕРНАЯ СВЕЧА", text_color = color.white, text_size = tSz, bgcolor = cZag)
-    table.cell(TBL, 1, 0, "v0.1", text_color = color.gray, text_size = tSz, bgcolor = cZag)
+    table.cell(TBL, 0, 0, "ТРИГГЕРНАЯ СВЕЧА", text_color = chart.fg_color, text_size = tSz, bgcolor = cZag)
+    table.cell(TBL, 1, 0, "v0.2", text_color = color.gray, text_size = tSz, bgcolor = cZag)
 
     table.cell(TBL, 0, 1, "сейчас", text_color = color.gray, text_size = tSz)
-    table.cell(TBL, 1, 1, trig ? "ДА" : srez ? "срезана размером" : "нет", text_color = trig ? color.white : color.gray, text_size = tSz, bgcolor = trig ? cOk : cNet)
+    table.cell(TBL, 1, 1, trig ? "ДА" : srez ? "срезана размером" : "нет", text_color = trig ? chart.fg_color : color.gray, text_size = tSz, bgcolor = trig ? cOk : cNet)
 
     table.cell(TBL, 0, 2, "фитили: разница", text_color = color.gray, text_size = tSz)
-    table.cell(TBL, 1, 2, rng > 0 ? str.tostring(razn, "#.#") + " из " + str.tostring(simMax, "#.#") : "—", text_color = formaOk ? color.white : color.gray, text_size = tSz)
+    table.cell(TBL, 1, 2, rng > 0 ? str.tostring(razn, "#.#") + " из " + str.tostring(simMax, "#.#") : "—", text_color = formaOk ? chart.fg_color : color.gray, text_size = tSz)
 
     table.cell(TBL, 0, 3, "размер к обычному", text_color = color.gray, text_size = tSz)
-    table.cell(TBL, 1, 3, otn > 0 ? str.tostring(otn, "#.##") + "x из " + str.tostring(porog, "#.#") + "x" : "—", text_color = razmOk ? color.white : color.gray, text_size = tSz)
+    table.cell(TBL, 1, 3, otn > 0 ? str.tostring(otn, "#.##") + "x из " + str.tostring(porog, "#.#") + "x" : "—", text_color = razmOk ? chart.fg_color : color.gray, text_size = tSz)
 
     table.cell(TBL, 0, 4, "обычная высота", text_color = color.gray, text_size = tSz)
     table.cell(TBL, 1, 4, na(sredPred) ? "—" : str.tostring(sredPred, "#.###") + "%", text_color = color.gray, text_size = tSz)
@@ -168,8 +178,8 @@ if tbOn and barstate.islast
     table.cell(TBL, 1, 5, str.tostring(shk, "#.###") + "%  тело " + str.tostring(bodP, "#") + "%", text_color = color.gray, text_size = tSz)
 
 if tbOn and barstate.islast
-    table.cell(TBL, 0, 6, "НАЙДЕНО", text_color = color.white, text_size = tSz, bgcolor = cZag)
-    table.cell(TBL, 1, 6, str.tostring(nTrig) + (nVsego > 0 ? "  " + str.tostring(100.0 * nTrig / nVsego, "#.#") + "%" : ""), text_color = color.white, text_size = tSz, bgcolor = cZag)
+    table.cell(TBL, 0, 6, "НАЙДЕНО", text_color = chart.fg_color, text_size = tSz, bgcolor = cZag)
+    table.cell(TBL, 1, 6, str.tostring(nTrig) + (nVsego > 0 ? "  " + str.tostring(100.0 * nTrig / nVsego, "#.#") + "%" : ""), text_color = chart.fg_color, text_size = tSz, bgcolor = cZag)
 
     table.cell(TBL, 0, 7, "подошло по форме", text_color = color.gray, text_size = tSz)
     table.cell(TBL, 1, 7, str.tostring(nForma) + (nVsego > 0 ? "  " + str.tostring(100.0 * nForma / nVsego, "#.#") + "%" : ""), text_color = color.gray, text_size = tSz)
