@@ -17,6 +17,9 @@
 import csv, sys
 
 OKNO=20; POROG=2.0; SIMM=8.0
+# ПОТОЛОК ПО ЦЕНЕ — третье условие, З65, внесён в пайн v0.3 05.11.2026.
+# CAP=None в точности воспроизводит прежний прогон, то есть Н60.
+CAP = 0.40 if '--cap' in sys.argv else None
 
 # старая библиотека — только для сравнения, ничего из неё не берём
 tb=[12.6,14.7,17.0,32.0,20.2,4.1,23.0,27.9,30.7,35.2,24.5,41.9,26.0,25.9,11.6,23.3,49.3,14.0,18.3,25.4,27.9,45.7,29.2,40.6,41.9,10.4,41.5,23.6,32.2,18.8,35.5,32.2,54.2,10.8,47.3,16.0,21.6,19.8,9.9,27.5]
@@ -65,7 +68,8 @@ for nm,p in (("1H, два года","data/XAUUSD_1h_2y.csv"),("5m, 3.5 меся�
             otn.append(k)
             for por in po_porogu:
                 if k<=por: po_porogu[por]+=1
-            if k<=POROG:
+            cap_ok = True if CAP is None else (shkala[i] <= CAP)
+            if k<=POROG and cap_ok:
                 oba+=1; tela.append(b)
                 if lib(f): v_lib+=1
             else:
@@ -75,7 +79,7 @@ for nm,p in (("1H, два года","data/XAUUSD_1h_2y.csv"),("5m, 3.5 меся�
     print("%s — свечей в счёте %d (первые %d окна не имеют)" % (nm,schit,OKNO))
     print()
     print("  1 · ФОРМА, симметрия <= %.0f п.п.      %6d  %5.1f%% баров" % (SIMM,f_ok,100.0*f_ok/schit))
-    print("  2 · и РАЗМЕР не больше %.0fx средней   %6d  %5.1f%% баров   <== ПРАВИЛО" % (POROG,oba,100.0*oba/schit))
+    print("  2 · и РАЗМЕР не больше %.0fx средней   %6d  %5.1f%% баров   <== ПРАВИЛО%s" % (POROG,oba,100.0*oba/schit,"" if CAP is None else "  (+ потолок %.2f%%)"%CAP))
     print("      фильтр размера отсёк               %6d  = %.1f%% формы" % (rezal,100.0*rezal/f_ok))
     print()
     print("  для сравнения: старая библиотека       %6d  %5.1f%% баров" % (lib_vsego,100.0*lib_vsego/schit))

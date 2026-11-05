@@ -1,6 +1,6 @@
 //@version=5
 // ══════════════════════════════════════════════════════════════════════
-//  ТРИГГЕРНАЯ СВЕЧА · v0.2 · 05.11.2026
+//  ТРИГГЕРНАЯ СВЕЧА · v0.3 · 05.11.2026
 //
 //  ОТДЕЛЬНЫЙ ИНДИКАТОР, БЕЗ СЛОЁВ. Слово владельца 03.11.2026:
 //  «да, вноси подсветку в пайн, только сделай отдельный пайн без слоёв,
@@ -30,6 +30,22 @@
 //  не отвечает за риск, и её автоматическое появление без остальных
 //  критериев, которые формируют вход, бессмысленно». Это ОРИЕНТИР.
 //
+//  v0.3 · З65 · ДОБАВЛЕН ПОТОЛОК ПО ЦЕНЕ. Правило стало из ТРЁХ условий.
+//  Его слово 03.11 было «не должны быть большие относительно ЦЕНЫ И
+//  свечей рядом» — ДВЕ меры. Я построил одну, и он нашёл дыру своим
+//  примером 05.11: «когда возрастает волатильность и средний размер
+//  всех свечей увеличивается, он такие свечи пропускает».
+//  ЗАМЕР подтвердил: в штиль пропущенная свеча 0.195% цены, в бурю
+//  0.481%, максимум 2.938% — разрыв 2.48 раза при одинаковом числе
+//  свечей в каждом режиме. Варианты «долгая средняя» и «средняя по
+//  триггерным» (его мысль) дыру НЕ чинят: 2.20x и 2.23-2.51x. Чинит
+//  только потолок в % от цены: 1.52x при 0.40%.
+//  ИМЯ ЗАКРЕПЛЕНО его словом: ТРИГГЕРНАЯ СВЕЧА. «Симметричная» —
+//  слово внутри описания формы, именем не становится.
+//  ДОБАВЛЕНА строка табло «средняя за N» — по ней выставлять потолок
+//  при переходе на другой таймфрейм. На отбор свечей не влияет.
+//  Ничего не убрано: все 10 прежних строк табло на месте.
+//
 //  v0.2 · З64 · ПОЧИНЕН ПОКАЗ, СЧЁТ НЕ ТРОНУТ.
 //  В v0.1 число красилось в color.white, КОГДА УСЛОВИЕ ПРОЙДЕНО, а у
 //  двух ячеек нет своего фона — белым по светлому графику. Владелец
@@ -40,7 +56,7 @@
 //  за светлой и тёмной темой. Шесть ячеек табло.
 //  Белый на МЕТКЕ оставлен: у неё свой цветной фон, она читается.
 // ══════════════════════════════════════════════════════════════════════
-indicator("Триггерная свеча · v0.2", overlay = true, max_labels_count = 500)
+indicator("Триггерная свеча · v0.3", overlay = true, max_labels_count = 500)
 
 // ─────────────────────────── ПРАВИЛО ─────────────────────────────────
 gP = "Правило"
@@ -48,6 +64,7 @@ trOn   = input.bool(true,  "Искать триггерные свечи", group
 simMax = input.float(8.0,  "Фитили: разница не больше, % высоты свечи", minval = 0.0, maxval = 50.0, step = 0.5, group = gP, tooltip = "Насколько «одинаковые» фитили. 8 — согласованное значение: медиана разницы фитилей у ваших 40 шаблонов 7.7, у обычной свечи 20.5.")
 okno   = input.int(20,     "Соседей для обычного размера", minval = 2, maxval = 200, group = gP, tooltip = "Сколько ПРЕДЫДУЩИХ свечей брать, чтобы понять обычный размер. Текущая свеча в среднее не входит.")
 porog  = input.float(2.0,  "Пропускать, если свеча больше средней в N раз", minval = 1.0, maxval = 10.0, step = 0.1, group = gP, tooltip = "Ваш пример 0.8% против 0.3% — это 2.7 раза. При 2.0 отсекается 8.8% формы на 1H.")
+capMax = input.float(0.40, "Потолок: свеча не выше, % от цены", minval = 0.01, maxval = 5.0, step = 0.01, group = gP, tooltip = "ВТОРАЯ половина вашей фразы «не должны быть большие относительно ЦЕНЫ и свечей рядом». Порог выше смотрит на соседей и слепнет, когда растёт вся волатильность: в штиль пропущенная свеча 0.195% цены, в бурю 0.481%, разрыв 2.48 раза. Потолок в процентах от цены не подстраивается ни под что и закрывает дыру: разрыв падает до 1.52. Число СВОЁ на каждом таймфрейме — смотрите строку «средняя за N» в табло.")
 
 // ─────────────────────────── ПОКАЗ ───────────────────────────────────
 gS = "Показ"
@@ -63,6 +80,7 @@ gT = "Табло"
 tbOn  = input.bool(true,   "Показывать табло", group = gT)
 tbPos = input.string("Справа вверху", "Где табло", options = ["Справа вверху", "Справа внизу", "Слева вверху", "Слева внизу"], group = gT)
 tbSz  = input.string("Обычный", "Размер текста табло", options = ["Крошечный", "Мелкий", "Обычный", "Крупный"], group = gT)
+srOkn = input.int(500,     "Средняя высота за сколько баров", minval = 10, maxval = 2000, group = gT, tooltip = "Только для ТАБЛО, на отбор свечей не влияет. Показывает, какой высоты свеча на этом инструменте и таймфрейме вообще бывает, и во сколько раз потолок её больше. По этой строке удобно выставлять потолок при переходе на другой таймфрейм.")
 
 // ══════════════════════════ СЧЁТ ФОРМЫ ═══════════════════════════════
 // Доли считаются от ВЫСОТЫ свечи. Три доли всегда дают в сумме 100.
@@ -100,6 +118,12 @@ if not na(sredPred)
     if sredPred > 0
         otn := shk / sredPred
 
+// Средняя высота за ДОЛГИЙ период. Только для табло, на отбор не влияет.
+sredDlg = ta.sma(shk, srOkn)
+float sredPok = na
+if bar_index >= srOkn
+    sredPok := sredDlg[1]
+
 // ══════════════════════════ ВЕРДИКТ ══════════════════════════════════
 // Сторожа пишутся через if, а не через логическую связку: пайн считает
 // обе половины `and` всегда, обрыва нет.
@@ -113,11 +137,25 @@ if otn > 0
     if otn <= porog
         razmOk := true
 
+// ПОТОЛОК ПО ЦЕНЕ — вторая половина условия РАЗМЕРА, замечание З65.
+// Он НЕ подстраивается под рынок, и этим чинит дыру: средняя по соседям
+// растёт вместе с волатильностью, а процент от цены — нет.
+bool capOk = false
+if rng > 0
+    if shk <= capMax
+        capOk := true
+
+// Размер проходит, только когда верны ОБЕ половины
+bool razmVse = false
+if razmOk
+    if capOk
+        razmVse := true
+
 bool trig = false
 bool srez = false
 if trOn
     if formaOk
-        if razmOk
+        if razmVse
             trig := true
         else
             if otn > 0
@@ -152,7 +190,7 @@ if mtOn and trig
 // ══════════════════════════ ТАБЛО ════════════════════════════════════
 tPos = tbPos == "Справа внизу" ? position.bottom_right : tbPos == "Слева вверху" ? position.top_left : tbPos == "Слева внизу" ? position.bottom_left : position.top_right
 tSz  = tbSz == "Крошечный" ? size.tiny : tbSz == "Мелкий" ? size.small : tbSz == "Крупный" ? size.large : size.normal
-var table TBL = table.new(tPos, 2, 10, border_width = 1)
+var table TBL = table.new(tPos, 2, 11, border_width = 1)
 
 cZag = color.new(color.gray, 70)
 cOk  = color.new(color.green, 70)
@@ -160,7 +198,7 @@ cNet = color.new(color.gray, 85)
 
 if tbOn and barstate.islast
     table.cell(TBL, 0, 0, "ТРИГГЕРНАЯ СВЕЧА", text_color = chart.fg_color, text_size = tSz, bgcolor = cZag)
-    table.cell(TBL, 1, 0, "v0.2", text_color = color.gray, text_size = tSz, bgcolor = cZag)
+    table.cell(TBL, 1, 0, "v0.3", text_color = color.gray, text_size = tSz, bgcolor = cZag)
 
     table.cell(TBL, 0, 1, "сейчас", text_color = color.gray, text_size = tSz)
     table.cell(TBL, 1, 1, trig ? "ДА" : srez ? "срезана размером" : "нет", text_color = trig ? chart.fg_color : color.gray, text_size = tSz, bgcolor = trig ? cOk : cNet)
@@ -175,17 +213,20 @@ if tbOn and barstate.islast
     table.cell(TBL, 1, 4, na(sredPred) ? "—" : str.tostring(sredPred, "#.###") + "%", text_color = color.gray, text_size = tSz)
 
     table.cell(TBL, 0, 5, "эта свеча", text_color = color.gray, text_size = tSz)
-    table.cell(TBL, 1, 5, str.tostring(shk, "#.###") + "%  тело " + str.tostring(bodP, "#") + "%", text_color = color.gray, text_size = tSz)
+    table.cell(TBL, 1, 5, str.tostring(shk, "#.###") + "% из " + str.tostring(capMax, "#.##") + "%  тело " + str.tostring(bodP, "#") + "%", text_color = capOk ? chart.fg_color : color.gray, text_size = tSz)
+
+    table.cell(TBL, 0, 6, "средняя за " + str.tostring(srOkn), text_color = color.gray, text_size = tSz)
+    table.cell(TBL, 1, 6, na(sredPok) ? "—" : str.tostring(sredPok, "#.###") + "%  потолок " + str.tostring(capMax / sredPok, "#.##") + "x", text_color = color.gray, text_size = tSz)
 
 if tbOn and barstate.islast
-    table.cell(TBL, 0, 6, "НАЙДЕНО", text_color = chart.fg_color, text_size = tSz, bgcolor = cZag)
-    table.cell(TBL, 1, 6, str.tostring(nTrig) + (nVsego > 0 ? "  " + str.tostring(100.0 * nTrig / nVsego, "#.#") + "%" : ""), text_color = chart.fg_color, text_size = tSz, bgcolor = cZag)
+    table.cell(TBL, 0, 7, "НАЙДЕНО", text_color = chart.fg_color, text_size = tSz, bgcolor = cZag)
+    table.cell(TBL, 1, 7, str.tostring(nTrig) + (nVsego > 0 ? "  " + str.tostring(100.0 * nTrig / nVsego, "#.#") + "%" : ""), text_color = chart.fg_color, text_size = tSz, bgcolor = cZag)
 
-    table.cell(TBL, 0, 7, "подошло по форме", text_color = color.gray, text_size = tSz)
-    table.cell(TBL, 1, 7, str.tostring(nForma) + (nVsego > 0 ? "  " + str.tostring(100.0 * nForma / nVsego, "#.#") + "%" : ""), text_color = color.gray, text_size = tSz)
+    table.cell(TBL, 0, 8, "подошло по форме", text_color = color.gray, text_size = tSz)
+    table.cell(TBL, 1, 8, str.tostring(nForma) + (nVsego > 0 ? "  " + str.tostring(100.0 * nForma / nVsego, "#.#") + "%" : ""), text_color = color.gray, text_size = tSz)
 
-    table.cell(TBL, 0, 8, "срезано размером", text_color = color.gray, text_size = tSz)
-    table.cell(TBL, 1, 8, str.tostring(nSrez) + (nForma > 0 ? "  " + str.tostring(100.0 * nSrez / nForma, "#.#") + "% формы" : ""), text_color = color.gray, text_size = tSz)
+    table.cell(TBL, 0, 9, "срезано размером", text_color = color.gray, text_size = tSz)
+    table.cell(TBL, 1, 9, str.tostring(nSrez) + (nForma > 0 ? "  " + str.tostring(100.0 * nSrez / nForma, "#.#") + "% формы" : ""), text_color = color.gray, text_size = tSz)
 
-    table.cell(TBL, 0, 9, "последняя была", text_color = color.gray, text_size = tSz)
-    table.cell(TBL, 1, 9, na(lastTB) ? "—" : str.tostring(bar_index - lastTB) + " баров назад", text_color = color.gray, text_size = tSz)
+    table.cell(TBL, 0, 10, "последняя была", text_color = color.gray, text_size = tSz)
+    table.cell(TBL, 1, 10, na(lastTB) ? "—" : str.tostring(bar_index - lastTB) + " баров назад", text_color = color.gray, text_size = tSz)
