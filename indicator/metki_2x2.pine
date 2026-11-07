@@ -1,6 +1,6 @@
 //@version=5
 // ═══════════════════════════════════════════════════════════════════
-// МЕТКИ 2/2 · v3.38     ОДИН СЛОЙ, ВСЕ ПРАВИЛА
+// МЕТКИ 2/2 · v3.39     ОДИН СЛОЙ, ВСЕ ПРАВИЛА
 // 12.10.2026
 //
 // Номера читаются «три-двадцать восемь», «три-двадцать девять».
@@ -1605,7 +1605,7 @@
 //   python3 research/sverka.py indicator/ЭТАЛОН_v2.3.pine indicator/metki_2x2.pine
 // Исчезнувшее в ней — ровно список выше, и ничего сверх него.
 // ═══════════════════════════════════════════════════════════════════
-indicator("Метки 2/2 · v3.38", overlay = true, max_lines_count = 500, max_labels_count = 500, max_bars_back = 3000)
+indicator("Метки 2/2 · v3.39", overlay = true, max_lines_count = 500, max_labels_count = 500, max_bars_back = 3000)
 
 // ═══════════════════════════════════════════════════════════════════
 //                        ПОЛОВИНА  ·  ВИД
@@ -1774,6 +1774,29 @@ rzCol = input.color(color.new(color.gray, 0), "Цвет срезанных", gro
 rzPrz = input.int(88,      "Прозрачность срезанных", minval = 0, maxval = 95, group = g12, tooltip = "Было жёстко вшито 88. Значение по умолчанию то же, картинка не меняется.")
 rzMt  = input.bool(false,  "Ставить метку под срезанной", group = g12)
 rzMSz = input.string("Обычный", "Размер метки срезанных", options = ["Крошечный", "Мелкий", "Обычный", "Крупный"], group = g12)
+
+g14 = "⑪ ФИБОНАЧЧИ"
+// ══════════════════════════════════════════════════════════════════
+// Заведено 07.11.2026 по его рассказу со скринами, свод ПРАВИЛА-ФИБО.
+//
+// УРОВНИ ЗАШИТЫ ЧИСЛАМИ И РУЧЕК НЕ ИМЕЮТ. Это канон, а не порог под
+// подстройку, как потолок у триггерной свечи: там число СВОЁ на каждом
+// таймфрейме и он крутит его сам по табло, а 0,382 и 0,618 не зависят
+// ни от инструмента, ни от таймфрейма. Его список дословно: «0,382 ·
+// 0,5 · 0,618 · 0,75-0,79, единственный, который отмечаю как ЗОНУ».
+//
+// ПОДСКАЗОК ЗДЕСЬ НЕТ НАРОЧНО. Предел 80 000 токенов на весь файл
+// неизмерим, а подсказки — главный его потребитель; v3.31 выносила их
+// из файла ровно по этой причине. Подсказки Фибоначчи лежат в
+// indicator/ПОДСКАЗКИ.md
+// ══════════════════════════════════════════════════════════════════
+fiOn   = input.bool(true, "Показывать сетку", group = g14)
+fiCol  = input.color(#ab47bc, "Цвет линий", group = g14)
+fiZn   = input.color(#ff7043, "Цвет зоны 0,75-0,79", group = g14)
+fiZnP  = input.int(88, "Прозрачность зоны", minval = 0, maxval = 95, group = g14)
+fiEdge = input.int(70, "Бледность краёв 0 и 1", minval = 0, maxval = 95, group = g14)
+fiLab  = input.bool(true, "Подписи уровней", group = g14)
+fiTbl  = input.bool(true, "Показывать строки в табло", group = g14)
 
 g13 = "⑩ ТРИГГЕРНАЯ СВЕЧА · ТАБЛО"
 tbOn  = input.bool(true,   "Показывать строки свечи", group = g13, tooltip = "Одиннадцать строк внизу табло, сразу после блока «сломы». Угол экрана и размер текста — общие, они в ⑤ ТАБЛО.")
@@ -2014,6 +2037,30 @@ var int[]    tBB  = array.new_int(2, -1)       // бар рождения
 // ТОЛЬКО ДЛЯ ПОКАЗА: ни одно правило её не читает
 var int[]    tZB0 = array.new_int(2, -1)
 var int[]    tPZB = array.new_int(2, -1)       // ноль ПРОШЛОГО счёта
+// ── ПАМЯТЬ ДВУХ ПОСЛЕДНИХ ТОЧЕК СЧЁТА. v3.39, ФИБОНАЧЧИ ──
+//
+// Его слово 07.11.2026: сетка КОРОТКАЯ, на одно колено — «от прошлой
+// цифры счёта до новой». Значит нужны две точки, и цепочка колен для
+// этого не годится: номер счёта присваивается внутри движка своей
+// логикой `knw`, и восстанавливать её снаружи вторым кодом — это ровно
+// тот путь, на котором проект горел дважды.
+//
+// ЭТИ ЧЕТЫРЕ МАССИВА ТОЛЬКО ПИШУТСЯ. Ни одно правило тренда их не
+// читает: ни рождение, ни счёт, ни уровень, ни смерть, ни продолжение,
+// ни сломы. Значит ни один тренд не сдвинется ни на бар, и старые
+// замеры остаются верными. Такая же по классу правка, как `tZB0` в
+// v3.33 — запись при рождении, которую тоже никто не читает.
+//
+// Цены лежат СЫРЫМИ, как и всё в движке: в ячейке 1 они отрицательные.
+// Переворот делается при показе, умножением на sg
+var int[]    tFB   = array.new_int(2, -1)      // бар ТЕКУЩЕЙ точки счёта
+var float[]  tFP   = array.new_float(2, na)    // её цена, сырая
+var int[]    tFBp  = array.new_int(2, -1)      // бар ПРЕДЫДУЩЕЙ точки
+var float[]  tFPp  = array.new_float(2, na)    // её цена, сырая
+// Сетка отменена выходом за 0,79. Единственное, что её гасит, Ф4.6.
+// Сбрасывается только появлением НОВОЙ точки счёта: переезд сетки —
+// это новая сетка, и прошлая отмена к ней отношения не имеет
+var bool[]   tFKill = array.new_bool(2, false)
 // перебитая вершина — от неё считается ЗАПАСНОЕ подтверждение У7
 var float[]  tBP  = array.new_float(2, na)
 var int[]    tBB2 = array.new_int(2, -1)
@@ -2111,7 +2158,7 @@ f_swapSeq(_s) =>
 // Раньше его три строки стояли вплотную под нисходящим и читались как
 // его продолжение — отсюда вопрос владельца «есть отличия между
 // трендами по строкам». Отличий в подписях нет, это был третий блок
-var table TBL = table.new(tblPos == "справа вверху" ? position.top_right : tblPos == "справа внизу" ? position.bottom_right : tblPos == "слева вверху" ? position.top_left : position.bottom_left, 3, 30, border_width = 1, frame_width = 1, frame_color = color.new(color.gray, 60), border_color = color.new(color.gray, 80))
+var table TBL = table.new(tblPos == "справа вверху" ? position.top_right : tblPos == "справа внизу" ? position.bottom_right : tblPos == "слева вверху" ? position.top_left : position.bottom_left, 3, 32, border_width = 1, frame_width = 1, frame_color = color.new(color.gray, 60), border_color = color.new(color.gray, 80))
 // ── З62 · РАСТЯЖКА НА ДВА СТОЛБЦА ──
 // Его слово 31.10.2026 после v3.35 на графике: «первая строка должна
 // быть на два столбика и раздел сломы тоже должен быть не в одном
@@ -2131,6 +2178,7 @@ var table TBL = table.new(tblPos == "справа вверху" ? position.top_r
 var bool mrgTop = false
 var bool mrgSlm = false
 var bool mrgSv  = false
+var bool mrgFi  = false
 // Фон строки-заголовка блока. Прозрачность 88 — полоска видна, а текст
 // читается так же, как раньше. Правило показа: ЦВЕТ полоски говорит,
 // чей это блок
@@ -2469,6 +2517,13 @@ f_trend(_i, _P, _B, _H, _L, _nwN, _fr, _o, _h, _l, _c, _leg, _depth, _brk) =>
                         array.set(tZL,  _i, lb)
                         array.set(tCNT, _i, 0)
                         array.set(tMAX, _i, 0)
+                        // ФИБОНАЧЧИ: ноль продолжения становится точкой (0).
+                        // Колена ещё нет, значит и сетки нет — Ф2.4
+                        array.set(tFB,   _i, bbK)
+                        array.set(tFP,   _i, prK)
+                        array.set(tFBp,  _i, -1)
+                        array.set(tFPp,  _i, na)
+                        array.set(tFKill,_i, false)
                         array.set(tRST, _i, array.get(tRST, _i) + 1)
                         array.set(tLL,  _i, false)
                         // У10: уровень СРАЗУ настоящий, ноль и есть HL, —
@@ -2499,6 +2554,15 @@ f_trend(_i, _P, _B, _H, _L, _nwN, _fr, _o, _h, _l, _c, _leg, _depth, _brk) =>
                     if knw and cnt < 5
                         array.set(tCNT, _i, cnt + 1)
                         array.set(tMAX, _i, math.max(array.get(tMAX, _i), array.get(tCNT, _i)))
+                        // ФИБОНАЧЧИ: текущая точка уезжает в прошлую, новое
+                        // колено становится сеткой. Его слово — «как только
+                        // появляется следующий счёт, фибоначчи переносится
+                        // туда». Прошлая отмена сюда не переходит
+                        array.set(tFBp,  _i, array.get(tFB, _i))
+                        array.set(tFPp,  _i, array.get(tFP, _i))
+                        array.set(tFB,   _i, bbK)
+                        array.set(tFP,   _i, prK)
+                        array.set(tFKill,_i, false)
                     // ПОДТВЕРЖДЕНИЕ, подраздел 2, одно правило: пришёл HL —
                     // тренд подтверждён. СВОЙ или ВСТАВЛЕННЫЙ — разницы нет,
                     // движок их не различает и не должен. Важна только
@@ -2631,6 +2695,14 @@ f_trend(_i, _P, _B, _H, _L, _nwN, _fr, _o, _h, _l, _c, _leg, _depth, _brk) =>
                         array.set(tZL,  _i, array.get(_L, j))
                         array.set(tCNT, _i, 1)
                         array.set(tMAX, _i, 1)
+                        // ФИБОНАЧЧИ: рождение объявляет (1) сразу, и сетка
+                        // есть с первой минуты — ноль это колено j, точка (1)
+                        // это колено k. Ровно его первый скрин, (0) LL → (1) HH
+                        array.set(tFBp,  _i, array.get(_B, j))
+                        array.set(tFPp,  _i, array.get(_P, j))
+                        array.set(tFB,   _i, bbK)
+                        array.set(tFP,   _i, prK)
+                        array.set(tFKill,_i, false)
                         array.set(tPZB, _i, -1)
                         array.set(tRST, _i, 0)
                         array.set(tLL,  _i, false)
@@ -2993,6 +3065,46 @@ u11 = f_lvPush(V2P, V2B, V2H, V2L, hl2, 2, false, "HL")
 u12 = f_lvPush(V2P, V2B, V2H, V2L, ll2, 2, false, "LL")
 
 v03 = f_purgeL(V2P, V2B, V2H, V2L)
+
+// ══════════════ ФИБОНАЧЧИ · ОТМЕНА ══════════════
+// У СЕТКИ СВОИ ПРАВИЛА, И ИХ РОВНО ДВА. Его слово 07.11.2026: «у тренда
+// свои правила, у сетки свои… касание за зону 0,79 отменяет только
+// сетку, к тренду не должно иметь отношение». Значит:
+//    гасит её  — ТОЛЬКО выход за 0,79;
+//    переезжает — ТОЛЬКО на новую цифру счёта.
+// Смерть тренда, архив и счёт (5) сетку НЕ ТРОГАЮТ. Смерть её
+// ПЕРЕДАЁТ другому направлению, а не гасит — это его Ф6.1, и прочитал
+// я его так не сразу: 07.11 я написал «гаснет при смерти» и он меня
+// поправил. Разбор ошибки — в своде, пункты Ф4.6 и Ф5.4.
+//
+// «ЛЮБОЙ ВЫХОД, И ТЕНЬ СЧИТАЕТСЯ» — его слово. Поэтому смотрим низ и
+// верх свечи, а не закрытие, и проверяем КАЖДЫЙ бар, а не последний.
+// Отмена необратима: once вышла — сетки нет до новой цифры счёта.
+//
+// ЗАДЕРЖКА ДВА БАРА ЗДЕСЬ ТА ЖЕ, ЧТО У ВСЕГО ИНДИКАТОРА: колено
+// известно через два бара после пивота, значит и сетка встаёт через
+// два бара после своей точки. Это не свойство Фибоначчи, а свойство
+// слоя, и лечить его тут нечем.
+for fw = 0 to 1
+    int    fwB = array.get(tFBp, fw)
+    float  fwN = array.get(tFP,  fw)
+    float  fwP = array.get(tFPp, fw)
+    if fwB >= 0
+        if not array.get(tFKill, fw)
+            if not na(fwN)
+                if not na(fwP)
+                    // сырой мир: в ячейке 1 цены отрицательные
+                    float fwSg = fw >= 1 ? -1.0 : 1.0
+                    float fwNr = fwN * fwSg
+                    float fwPr = fwP * fwSg
+                    float fw79 = fwNr + 0.79 * (fwPr - fwNr)
+                    // колено вверх — коррекция идёт ВНИЗ, и наоборот
+                    if fwNr > fwPr
+                        if low < fw79
+                            array.set(tFKill, fw, true)
+                    else
+                        if high > fw79
+                            array.set(tFKill, fw, true)
 
 // ══════════════ ОТРИСОВКА ══════════════
 var line[]  LNS = array.new<line>()
@@ -4334,6 +4446,159 @@ if barstate.islast
         table.cell(TBL, 1, 29, na(lastTB) ? "—" : str.tostring(bar_index - lastTB) + " баров назад", text_color = color.gray, text_size = tSz)
 
 // ══════════════════════════════════════════════════════════════════
+//                    ФИБОНАЧЧИ · ПОКАЗ
+//
+// Его рассказ 06.11.2026 и ответы 07.11. Свод — ПРАВИЛА-ФИБО.md.
+//
+// СЕТКА КОРОТКАЯ, его слово: «короткая». От ПРОШЛОЙ цифры счёта до
+// НОВОЙ, одно колено. Ноль сетки на свежей точке, проценты идут от
+// него НАЗАД — ровно как подписано на обоих его скринах.
+//
+// ОДНА СЕТКА, его слово: «одна сетка». Чья — его же правило приоритета,
+// прочитанное через то, что в индикаторе УЖЕ ЕСТЬ: рождение тренда и
+// есть перебитие противоположной структуры, так написано в подсказке
+// метки «слом ↑». Значит сетка у того, КТО РОДИЛСЯ ПОЗЖЕ — он и сломал
+// другого, — и держит её, пока жив. Его слово на это прочтение: «да,
+// так». Умер — сетка уходит к другому, если у того есть колено счёта.
+//
+// ЧТО ЕЁ ГАСИТ — только выход за 0,79, считается выше, каждый бар.
+// Смерть, архив и (5) её не трогают: это события ТРЕНДА.
+//
+// «НЕ БЫЛО» — ЕДИНСТВЕННОЕ СОСТОЯНИЕ, КОТОРОЕ СЕТКУ УБИРАЕТ, и это не
+// новое правило, а следствие старого: ST_CAN СТИРАЕТ номера счёта с
+// графика, а вешать сетку на стёртые концы нечего. Смерть и архив
+// номера ОСТАВЛЯЮТ, поэтому и сетка остаётся.
+// ══════════════════════════════════════════════════════════════════
+var box[] FBX = array.new<box>()
+
+// годится ли направление под сетку
+f_fiOk(_i) =>
+    bool r = false
+    if array.get(tFBp, _i) >= 0
+        if not array.get(tFKill, _i)
+            int fs = array.get(tTR, _i)
+            if fs != ST_CAN
+                if fs != ST_NO
+                    r := true
+    r
+
+// одна линия сетки плюс её подпись справа
+f_fiLn(_b1, _b2, _p, _c, _w, _txt) =>
+    array.push(LNS, line.new(_b1, _p, _b2, _p, color = _c, width = _w))
+    if fiLab
+        array.push(LBS, label.new(_b2, _p, _txt, style = label.style_label_left, color = color.new(color.black, 100), textcolor = _c, size = size.tiny))
+    0
+
+if barstate.islast
+    // свои ящики чистим сами: линии и метки убирает первый блок показа,
+    // а зона нарисована box, и его там нет
+    while array.size(FBX) > 0
+        box.delete(array.pop(FBX))
+
+    int    fiIdx = -1
+    bool   fiKl  = false
+    float  fiFr  = na
+    string fiTx  = "нет сетки"
+    bool   fiS0  = false
+    bool   fiS1  = false
+
+    if fiOn
+        // сетка подчиняется выбору «какой тренд рисовать»: тренда на
+        // экране нет — значит и концов сетки глазу не видно
+        if drwIdx == 0
+            fiS0 := true
+        if drwIdx == 1
+            fiS1 := true
+        if drwBoth
+            fiS0 := true
+            fiS1 := true
+        bool fiC0 = false
+        bool fiC1 = false
+        if fiS0
+            fiC0 := f_fiOk(0)
+        if fiS1
+            fiC1 := f_fiOk(1)
+        if fiC0 and not fiC1
+            fiIdx := 0
+        if fiC1 and not fiC0
+            fiIdx := 1
+        if fiC0 and fiC1
+            int  fa0 = array.get(tTR, 0)
+            int  fa1 = array.get(tTR, 1)
+            bool fL0 = fa0 == ST_MAY or fa0 == ST_LIVE
+            bool fL1 = fa1 == ST_MAY or fa1 == ST_LIVE
+            if fL0 and not fL1
+                fiIdx := 0
+            else if fL1 and not fL0
+                fiIdx := 1
+            else
+                // оба живы или оба нет — решает свежесть РОЖДЕНИЯ.
+                // Индекс держим валидным: пайн считает обе ветки
+                // тернарника, сторож в нём не спасает
+                int fg0 = f_lastG(0)
+                int fg1 = f_lastG(1)
+                int fb0 = -1
+                int fb1 = -1
+                if fg0 >= 0
+                    fb0 := array.get(GDB, fg0)
+                if fg1 >= 0
+                    fb1 := array.get(GDB, fg1)
+                fiIdx := fb1 > fb0 ? 1 : 0
+        // сетка была и её сняло ценой — это НЕ то же, что «сетки нет»
+        if fiIdx < 0
+            if fiS0
+                if array.get(tFBp, 0) >= 0
+                    if array.get(tFKill, 0)
+                        fiKl := true
+            if fiS1
+                if array.get(tFBp, 1) >= 0
+                    if array.get(tFKill, 1)
+                        fiKl := true
+
+    if fiIdx >= 0
+        float fSg = fiIdx >= 1 ? -1.0 : 1.0
+        float fNr = array.get(tFP,  fiIdx) * fSg
+        float fPr = array.get(tFPp, fiIdx) * fSg
+        int   fB1 = array.get(tFBp, fiIdx)
+        float fRn = fPr - fNr
+        if fRn != 0
+            fiFr := (close - fNr) / fRn
+            float fp382 = fNr + 0.382 * fRn
+            float fp500 = fNr + 0.500 * fRn
+            float fp618 = fNr + 0.618 * fRn
+            float fp750 = fNr + 0.750 * fRn
+            float fp790 = fNr + 0.790 * fRn
+            color fcE = color.new(fiCol, fiEdge)
+            // ЗОНА рисуется первой, чтобы линии легли поверх заливки
+            array.push(FBX, box.new(fB1, math.max(fp750, fp790), bar_index, math.min(fp750, fp790), border_color = color.new(fiZn, 60), bgcolor = color.new(fiZn, fiZnP)))
+            // края 0 и 1 — бледные: это концы сетки, а не уровни
+            fq1 = f_fiLn(fB1, bar_index, fNr, fcE, 1, "0")
+            fq2 = f_fiLn(fB1, bar_index, fPr, fcE, 1, "1")
+            fq3 = f_fiLn(fB1, bar_index, fp382, fiCol, 1, "0,382")
+            fq4 = f_fiLn(fB1, bar_index, fp500, fiCol, 1, "0,5")
+            fq5 = f_fiLn(fB1, bar_index, fp618, fiCol, 1, "0,618")
+
+    if fiTbl
+        string fiWho = "—"
+        if fiIdx == 0
+            fiWho := "ВОСХ"
+        if fiIdx == 1
+            fiWho := "НИСХ"
+        if fiIdx < 0
+            if fiKl
+                fiTx := "отменена, вышла за 0,79"
+        else
+            if na(fiFr)
+                fiTx := "—"
+            else
+                string fiGd = fiFr < 0.382 ? "не дошла до 0,382" : fiFr < 0.5 ? "0,382 … 0,5" : fiFr < 0.618 ? "0,5 … 0,618" : fiFr < 0.75 ? "0,618 … 0,75" : "В ЗОНЕ 0,75-0,79"
+                fiTx := str.tostring(fiFr, "#.###") + "  " + fiGd
+        table.cell(TBL, 0, 30, "фибоначчи", text_color = color.gray, text_size = tSz, bgcolor = cBlkS)
+        table.cell(TBL, 1, 30, fiWho, text_color = color.gray, text_size = tSz, bgcolor = cBlkS)
+        table.cell(TBL, 0, 31, "цена в сетке", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 1, 31, fiTx, text_color = fiIdx < 0 ? color.gray : chart.fg_color, text_size = tSz)
+
+// ══════════════════════════════════════════════════════════════════
 //      З62 · СЛИЯНИЕ. ПОСЛЕДНЕЕ В ФАЙЛЕ И НЕ СДВИГАЕТСЯ С МЕСТА
 //
 // Сливать можно только ячейки, которые уже созданы `table.cell`. Блок
@@ -4367,4 +4632,10 @@ if barstate.islast
             table.cell(TBL, 2, r, "", text_size = tSz)
             table.merge_cells(TBL, 1, r, 2, r)
         mrgSv := true
+    // Сетка ОДНА на оба направления — делить её строки пополам нечего
+    if fiTbl and not mrgFi
+        for r = 30 to 31
+            table.cell(TBL, 2, r, "", text_size = tSz)
+            table.merge_cells(TBL, 1, r, 2, r)
+        mrgFi := true
 
