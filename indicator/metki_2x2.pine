@@ -1,6 +1,6 @@
 //@version=5
 // ═══════════════════════════════════════════════════════════════════
-// МЕТКИ 2/2 · v3.40     ОДИН СЛОЙ, ВСЕ ПРАВИЛА
+// МЕТКИ 2/2 · v3.41     ОДИН СЛОЙ, ВСЕ ПРАВИЛА
 // 12.10.2026
 //
 // Номера читаются «три-двадцать восемь», «три-двадцать девять».
@@ -1605,7 +1605,7 @@
 //   python3 research/sverka.py indicator/ЭТАЛОН_v2.3.pine indicator/metki_2x2.pine
 // Исчезнувшее в ней — ровно список выше, и ничего сверх него.
 // ═══════════════════════════════════════════════════════════════════
-indicator("Метки 2/2 · v3.40", overlay = true, max_lines_count = 500, max_labels_count = 500, max_bars_back = 3000)
+indicator("Метки 2/2 · v3.41", overlay = true, max_lines_count = 500, max_labels_count = 500, max_bars_back = 3000)
 
 // ═══════════════════════════════════════════════════════════════════
 //                        ПОЛОВИНА  ·  ВИД
@@ -1795,6 +1795,7 @@ fiCol  = input.color(#ab47bc, "Цвет линий", group = g14)
 fiZn   = input.color(#ff7043, "Цвет зоны 0,75-0,79", group = g14)
 fiZnP  = input.int(88, "Прозрачность зоны", minval = 0, maxval = 95, group = g14)
 fiEdge = input.int(70, "Бледность краёв 0 и 1", minval = 0, maxval = 95, group = g14)
+fiMin  = input.float(0.5, "Колено не меньше, долей среднего колена", minval = 0.0, maxval = 5.0, step = 0.05, group = g14)
 fiLab  = input.bool(true, "Подписи уровней", group = g14)
 fiTbl  = input.bool(true, "Показывать строки в табло", group = g14)
 
@@ -2061,6 +2062,27 @@ var float[]  tFPp  = array.new_float(2, na)    // её цена, сырая
 // Сбрасывается только появлением НОВОЙ точки счёта: переезд сетки —
 // это новая сетка, и прошлая отмена к ней отношения не имеет
 var bool[]   tFKill = array.new_bool(2, false)
+// ── ЯКОРЬ ТОЛЬКО НА ВЕРШИНЕ СЧЁТА. v3.41, Ф2.5 ──
+//
+// Его слово 07.11.2026: «сетка как раз и должна строиться ОТ 0 ДО 1, и
+// счёт 2 — это здоровая коррекция тренда… потом ОТ СЧЁТА 2 К СЧЁТУ 3, и
+// коррекция — счёт 4». У восходящего нечётные точки счёта ВЕРШИНЫ,
+// чётные НИЗЫ — это следует из чередования колен. Значит сетка стоит
+// только на колене, ведущем к ВЕРШИНЕ, а колена (1)→(2) и (3)→(4) —
+// сами коррекции, на них натягивать нечего.
+//
+// Отсюда нужна ВТОРАЯ пара: якоря сетки меняются только на нечётной
+// цифре, а последнюю точку счёта помнить надо ВСЕГДА — иначе на (3) не
+// от чего тянуть.
+var int[]    tLB  = array.new_int(2, -1)       // бар ПОСЛЕДНЕЙ точки счёта
+var float[]  tLP  = array.new_float(2, na)     // её цена, сырая
+var int[]    tFK  = array.new_int(2, -1)       // номер вершины под сеткой: 1, 3 или 5
+// Счётчики для табло: сколько сеток было и сколько срезано коленом.
+// Массивами, а не простыми числами, НАРОЧНО: пайн не даёт функции
+// писать в глобальную переменную, но даёт писать в глобальный массив —
+// отсюда и всё состояние движка в массивах
+var int[]    tFN  = array.new_int(2, 0)
+var int[]    tFC  = array.new_int(2, 0)
 // перебитая вершина — от неё считается ЗАПАСНОЕ подтверждение У7
 var float[]  tBP  = array.new_float(2, na)
 var int[]    tBB2 = array.new_int(2, -1)
@@ -2158,7 +2180,7 @@ f_swapSeq(_s) =>
 // Раньше его три строки стояли вплотную под нисходящим и читались как
 // его продолжение — отсюда вопрос владельца «есть отличия между
 // трендами по строкам». Отличий в подписях нет, это был третий блок
-var table TBL = table.new(tblPos == "справа вверху" ? position.top_right : tblPos == "справа внизу" ? position.bottom_right : tblPos == "слева вверху" ? position.top_left : position.bottom_left, 3, 32, border_width = 1, frame_width = 1, frame_color = color.new(color.gray, 60), border_color = color.new(color.gray, 80))
+var table TBL = table.new(tblPos == "справа вверху" ? position.top_right : tblPos == "справа внизу" ? position.bottom_right : tblPos == "слева вверху" ? position.top_left : position.bottom_left, 3, 37, border_width = 1, frame_width = 1, frame_color = color.new(color.gray, 60), border_color = color.new(color.gray, 80))
 // ── З62 · РАСТЯЖКА НА ДВА СТОЛБЦА ──
 // Его слово 31.10.2026 после v3.35 на графике: «первая строка должна
 // быть на два столбика и раздел сломы тоже должен быть не в одном
@@ -2518,11 +2540,15 @@ f_trend(_i, _P, _B, _H, _L, _nwN, _fr, _o, _h, _l, _c, _leg, _depth, _brk) =>
                         array.set(tCNT, _i, 0)
                         array.set(tMAX, _i, 0)
                         // ФИБОНАЧЧИ: ноль продолжения становится точкой (0).
-                        // Колена ещё нет, значит и сетки нет — Ф2.4
-                        array.set(tFB,   _i, bbK)
-                        array.set(tFP,   _i, prK)
+                        // Колена ещё нет, значит и сетки нет — Ф2.4.
+                        // Якоря СТИРАЮТСЯ, последняя точка счёта помнится
+                        array.set(tLB,   _i, bbK)
+                        array.set(tLP,   _i, prK)
+                        array.set(tFB,   _i, -1)
+                        array.set(tFP,   _i, na)
                         array.set(tFBp,  _i, -1)
                         array.set(tFPp,  _i, na)
+                        array.set(tFK,   _i, -1)
                         array.set(tFKill,_i, false)
                         array.set(tRST, _i, array.get(tRST, _i) + 1)
                         array.set(tLL,  _i, false)
@@ -2554,15 +2580,36 @@ f_trend(_i, _P, _B, _H, _L, _nwN, _fr, _o, _h, _l, _c, _leg, _depth, _brk) =>
                     if knw and cnt < 5
                         array.set(tCNT, _i, cnt + 1)
                         array.set(tMAX, _i, math.max(array.get(tMAX, _i), array.get(tCNT, _i)))
-                        // ФИБОНАЧЧИ: текущая точка уезжает в прошлую, новое
-                        // колено становится сеткой. Его слово — «как только
-                        // появляется следующий счёт, фибоначчи переносится
-                        // туда». Прошлая отмена сюда не переходит
-                        array.set(tFBp,  _i, array.get(tFB, _i))
-                        array.set(tFPp,  _i, array.get(tFP, _i))
-                        array.set(tFB,   _i, bbK)
-                        array.set(tFP,   _i, prK)
-                        array.set(tFKill,_i, false)
+                        // ── ФИБОНАЧЧИ: ЯКОРЬ ТОЛЬКО НА ВЕРШИНЕ. Ф2.5, Ф2.6 ──
+                        // Нечётная цифра — вершина: сетка встаёт на колено
+                        // от ПРЕДЫДУЩЕЙ точки счёта к ней. Чётная — это
+                        // сама коррекция, якоря не трогаются, и сетка
+                        // продолжает мерить её собой.
+                        // В v3.40 переезд был на КАЖДУЮ цифру, и сетка
+                        // вставала на коррекционные колена. Это была моя
+                        // ошибка в самом якоре, его слово её отменило
+                        int fiVr = cnt + 1
+                        if fiVr % 2 == 1
+                            array.set(tFBp,  _i, array.get(tLB, _i))
+                            array.set(tFPp,  _i, array.get(tLP, _i))
+                            array.set(tFB,   _i, bbK)
+                            array.set(tFP,   _i, prK)
+                            array.set(tFK,   _i, fiVr)
+                            array.set(tFKill,_i, false)
+                            array.set(tFN,   _i, array.get(tFN, _i) + 1)
+                            // срезано ли это колено порогом — для табло.
+                            // Сторож через if: na в сравнении даст na, а не false
+                            float fgLg = na
+                            if not na(array.get(tLP, _i))
+                                fgLg := math.abs(prK - array.get(tLP, _i))
+                            float fgAv = array.get(tLEG, _i)
+                            if not na(fgLg)
+                                if fgAv > 0
+                                    if fgLg < fiMin * fgAv
+                                        array.set(tFC, _i, array.get(tFC, _i) + 1)
+                        // последняя точка счёта помнится ВСЕГДА, любой чётности
+                        array.set(tLB, _i, bbK)
+                        array.set(tLP, _i, prK)
                     // ПОДТВЕРЖДЕНИЕ, подраздел 2, одно правило: пришёл HL —
                     // тренд подтверждён. СВОЙ или ВСТАВЛЕННЫЙ — разницы нет,
                     // движок их не различает и не должен. Важна только
@@ -2695,14 +2742,24 @@ f_trend(_i, _P, _B, _H, _L, _nwN, _fr, _o, _h, _l, _c, _leg, _depth, _brk) =>
                         array.set(tZL,  _i, array.get(_L, j))
                         array.set(tCNT, _i, 1)
                         array.set(tMAX, _i, 1)
-                        // ФИБОНАЧЧИ: рождение объявляет (1) сразу, и сетка
-                        // есть с первой минуты — ноль это колено j, точка (1)
-                        // это колено k. Ровно его первый скрин, (0) LL → (1) HH
+                        // ФИБОНАЧЧИ: рождение объявляет (1), а (1) — ВЕРШИНА,
+                        // значит сетка есть с первой минуты: ноль это колено
+                        // j, точка (1) это колено k. Ровно его первый скрин,
+                        // (0) LL → (1) HH
                         array.set(tFBp,  _i, array.get(_B, j))
                         array.set(tFPp,  _i, array.get(_P, j))
                         array.set(tFB,   _i, bbK)
                         array.set(tFP,   _i, prK)
+                        array.set(tFK,   _i, 1)
                         array.set(tFKill,_i, false)
+                        array.set(tLB,   _i, bbK)
+                        array.set(tLP,   _i, prK)
+                        array.set(tFN,   _i, array.get(tFN, _i) + 1)
+                        float fjLg = math.abs(prK - array.get(_P, j))
+                        float fjAv = array.get(tLEG, _i)
+                        if fjAv > 0
+                            if fjLg < fiMin * fjAv
+                                array.set(tFC, _i, array.get(tFC, _i) + 1)
                         array.set(tPZB, _i, -1)
                         array.set(tRST, _i, 0)
                         array.set(tLL,  _i, false)
@@ -4512,9 +4569,14 @@ if barstate.islast
     while array.size(FBX) > 0
         box.delete(array.pop(FBX))
 
+    // fiOwn — кого выбрало правило приоритета. fiIdx — чья сетка
+    // РИСУЕТСЯ. Разведены нарочно: числа колена нужны в табло и тогда,
+    // когда сетка не нарисована, — иначе порог нечем крутить
+    int    fiOwn = -1
     int    fiIdx = -1
-    bool   fiKl  = false
     float  fiFr  = na
+    float  fiLg  = na
+    float  fiAv  = na
     string fiTx  = "нет сетки"
     bool   fiS0  = false
     bool   fiS1  = false
@@ -4536,9 +4598,9 @@ if barstate.islast
         if fiS1
             fiC1 := f_fiOk(1)
         if fiC0 and not fiC1
-            fiIdx := 0
+            fiOwn := 0
         if fiC1 and not fiC0
-            fiIdx := 1
+            fiOwn := 1
         if fiC0 and fiC1
             // ── ОБА ЖИВЫ: РЕШАЕТ, КТО НАРИСОВАН РАНЬШЕ. Ф6.3 ──
             //
@@ -4563,21 +4625,42 @@ if barstate.islast
             // минус первый меньше любого бара. Живой тренд без бара
             // рождения — случай невозможный, сторож стоит дешевле отладки
             if fn0 < 0
-                fiIdx := 1
+                fiOwn := 1
             else
                 if fn1 < 0
-                    fiIdx := 0
+                    fiOwn := 0
                 else
-                    fiIdx := fn0 <= fn1 ? 0 : 1
+                    fiOwn := fn0 <= fn1 ? 0 : 1
 
-    // ── ОТМЕНА ПРОВЕРЯЕТСЯ У ВЛАДЕЛЬЦА, И ТОЛЬКО У НЕГО. Ф6.3 ──
-    // Пока владелец жив, сетка ЕГО. Снятая ценой сетка не переходит к
-    // другому направлению — её просто нет до его новой цифры счёта.
-    // «Отменена» и «сетки нет» это разные вещи, и табло их различает
-    if fiIdx >= 0
-        if array.get(tFKill, fiIdx)
-            fiKl  := true
+    // ── ДВА СТОРОЖА, И ОБА СМОТРЯТ ТОЛЬКО НА ВЛАДЕЛЬЦА. Ф6.3, Ф9.1 ──
+    //
+    // Пока владелец жив, сетка ЕГО. Снятая ценой или срезанная коленом
+    // сетка НЕ переходит к другому направлению — её просто нет до его
+    // новой цифры счёта. Это один принцип на оба сторожа, и он взят из
+    // порядка проверки Ф6.3, а не выдуман отдельно.
+    //
+    // ПОРОГ КОЛЕНА — его слово 08.11.2026 «порог 0.5 ставь», поводом
+    // было его же «на маленьких коленях нет смысла натягивать сетку».
+    // Мерило — скользящее среднее колено слоя, то самое, на котором
+    // стоит порог смерти тренда.
+    //
+    // Числа колена считаются ДО сторожей: в табло они нужны и тогда,
+    // когда сетки нет, иначе порог нечем крутить
+    if fiOwn >= 0
+        if not na(array.get(tFP, fiOwn))
+            if not na(array.get(tFPp, fiOwn))
+                fiLg := math.abs(array.get(tFP, fiOwn) - array.get(tFPp, fiOwn))
+        fiAv  := array.get(tLEG, fiOwn)
+        fiIdx := fiOwn
+        if array.get(tFKill, fiOwn)
             fiIdx := -1
+            fiTx  := "отменена, вышла за 0,79"
+        else
+            if not na(fiLg)
+                if fiAv > 0
+                    if fiLg < fiMin * fiAv
+                        fiIdx := -1
+                        fiTx  := "колено мелкое"
 
     if fiIdx >= 0
         float fSg = fiIdx >= 1 ? -1.0 : 1.0
@@ -4602,25 +4685,79 @@ if barstate.islast
             fq4 = f_fiLn(fB1, bar_index, fp500, fiCol, 1, "0,5")
             fq5 = f_fiLn(fB1, bar_index, fp618, fiCol, 1, "0,618")
 
+    // ══════════════════════════════════════════════════════════════
+    //            БЛОК ТАБЛО ПОД СЕТКУ · СЕМЬ СТРОК, 30-36
+    //
+    // Его вопрос 08.11.2026: «может, для раздела фибоначчи сделать
+    // таблицу, как ты сделал для триггерной свечи?» — и его «да, табло».
+    //
+    // ДОВОД ТОТ ЖЕ, ЧТО СРАБОТАЛ У СВЕЧИ, и он не про красоту: у сетки
+    // появился ПОРОГ, который он крутит сам, а крутить его можно только
+    // по числам. Про потолок свечи он сказал ровно это: «я по таблице
+    // вручную могу определить порог, который нужен, и подкрутить».
+    // Поэтому строка «колено» показывает ТРИ числа — само колено,
+    // среднее и требуемый минимум, — а строка «сеток» говорит, сколько
+    // порог режет.
+    //
+    // ПРЕЖНИЕ ДВЕ СТРОКИ НЕ ПРОПАЛИ: «фибоначчи» стала первой, «цена в
+    // сетке» — шестой, слово в слово
     if fiTbl
         string fiWho = "—"
-        if fiIdx == 0
+        if fiOwn == 0
             fiWho := "ВОСХ"
-        if fiIdx == 1
+        if fiOwn == 1
             fiWho := "НИСХ"
-        if fiIdx < 0
-            if fiKl
-                fiTx := "отменена, вышла за 0,79"
-        else
+        // на каком колене и какая из трёх
+        string fiNa = "—"
+        if fiOwn >= 0
+            int fk = array.get(tFK, fiOwn)
+            if fk >= 1
+                fiNa := "(" + str.tostring(fk - 1) + ")→(" + str.tostring(fk) + ")  " + str.tostring((fk + 1) / 2) + "-я из 3"
+        // колено против среднего и против требуемого минимума
+        string fiLgT = "—"
+        if not na(fiLg)
+            if not na(fiAv)
+                fiLgT := str.tostring(fiLg, format.mintick) + "  средн. " + str.tostring(fiAv, format.mintick) + "  нужно " + str.tostring(fiMin * fiAv, format.mintick)
+        // цены уровней и зоны — считаются у ВЛАДЕЛЬЦА, а не у
+        // нарисованной сетки: когда её срезало, числа тем и нужнее
+        string fiLvT = "—"
+        string fiZnT = "—"
+        if fiOwn >= 0
+            float gSg = fiOwn >= 1 ? -1.0 : 1.0
+            float gNr = array.get(tFP,  fiOwn) * gSg
+            float gPr = array.get(tFPp, fiOwn) * gSg
+            float gRn = gPr - gNr
+            if gRn != 0
+                fiLvT := str.tostring(gNr + 0.382 * gRn, format.mintick) + " · " + str.tostring(gNr + 0.500 * gRn, format.mintick) + " · " + str.tostring(gNr + 0.618 * gRn, format.mintick)
+                fiZnT := str.tostring(gNr + 0.750 * gRn, format.mintick) + " … " + str.tostring(gNr + 0.790 * gRn, format.mintick)
+        // где цена внутри сетки — прежняя строка, слово в слово
+        if fiIdx >= 0
             if na(fiFr)
                 fiTx := "—"
             else
                 string fiGd = fiFr < 0.382 ? "не дошла до 0,382" : fiFr < 0.5 ? "0,382 … 0,5" : fiFr < 0.618 ? "0,5 … 0,618" : fiFr < 0.75 ? "0,618 … 0,75" : "В ЗОНЕ 0,75-0,79"
                 fiTx := str.tostring(fiFr, "#.###") + "  " + fiGd
+        // сколько сеток было и сколько срезал порог. Сумма по ОБОИМ
+        // направлениям: порог один на оба, и крутится он по общей доле
+        int fiNo  = array.get(tFN, 0) + array.get(tFN, 1)
+        int fiCut = array.get(tFC, 0) + array.get(tFC, 1)
+        string fiCnT = str.tostring(fiNo)
+        if fiNo > 0
+            fiCnT := str.tostring(fiNo) + " сеток  ·  коленом срезано " + str.tostring(fiCut) + "  " + str.tostring(100.0 * fiCut / fiNo, "#.#") + "%"
         table.cell(TBL, 0, 30, "фибоначчи", text_color = color.gray, text_size = tSz, bgcolor = cBlkS)
         table.cell(TBL, 1, 30, fiWho, text_color = color.gray, text_size = tSz, bgcolor = cBlkS)
-        table.cell(TBL, 0, 31, "цена в сетке", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 31, fiTx, text_color = fiIdx < 0 ? color.gray : chart.fg_color, text_size = tSz)
+        table.cell(TBL, 0, 31, "на колене", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 1, 31, fiNa, text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 0, 32, "колено", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 1, 32, fiLgT, text_color = fiIdx < 0 ? color.gray : chart.fg_color, text_size = tSz)
+        table.cell(TBL, 0, 33, "уровни", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 1, 33, fiLvT, text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 0, 34, "зона 0,75-0,79", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 1, 34, fiZnT, text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 0, 35, "цена в сетке", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 1, 35, fiTx, text_color = fiIdx < 0 ? color.gray : chart.fg_color, text_size = tSz)
+        table.cell(TBL, 0, 36, "сеток", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 1, 36, fiCnT, text_color = color.gray, text_size = tSz)
 
 // ══════════════════════════════════════════════════════════════════
 //      З62 · СЛИЯНИЕ. ПОСЛЕДНЕЕ В ФАЙЛЕ И НЕ СДВИГАЕТСЯ С МЕСТА
@@ -4658,7 +4795,7 @@ if barstate.islast
         mrgSv := true
     // Сетка ОДНА на оба направления — делить её строки пополам нечего
     if fiTbl and not mrgFi
-        for r = 30 to 31
+        for r = 30 to 36
             table.cell(TBL, 2, r, "", text_size = tSz)
             table.merge_cells(TBL, 1, r, 2, r)
         mrgFi := true
