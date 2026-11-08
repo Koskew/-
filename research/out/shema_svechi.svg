@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="1000" viewBox="0 0 1180 1000">
+<rect width="1180" height="1000" fill="#ffffff"/>
+<text x="40" y="46" font-family="system-ui,Segoe UI,Arial" font-size="26" fill="#111" text-anchor="start" font-weight="700" >ТРИГГЕРНАЯ СВЕЧА — из чего считается и что выбрать</text>
+<text x="40" y="74" font-family="system-ui,Segoe UI,Arial" font-size="15" fill="#666" text-anchor="start" font-weight="400" >Схема к вопросу ТС2.1 «как она выглядит». Пиши номерами: «Т3 да, Т6 нет».</text>
+<text x="40" y="126" font-family="system-ui,Segoe UI,Arial" font-size="18" fill="#111" text-anchor="start" font-weight="700" >А · АНАТОМИЯ. Все доли считаются от ВЫСОТЫ свечи и в сумме дают 100</text>
+<line x1="150" y1="160" x2="150" y2="460" stroke="#222" stroke-width="1.5"/>
+<rect x="122" y="250" width="56" height="120" fill="#2b2b2b" stroke="#222" stroke-width="1.5"/>
+<line x1="190" y1="160" x2="760" y2="160" stroke="#bbb" stroke-width="1" stroke-dasharray="7 5"/>
+<text x="766" y="165" font-family="system-ui,Segoe UI,Arial" font-size="13" fill="#888" text-anchor="start" font-weight="400" >максимум</text>
+<line x1="190" y1="250" x2="760" y2="250" stroke="#bbb" stroke-width="1" stroke-dasharray="7 5"/>
+<text x="766" y="255" font-family="system-ui,Segoe UI,Arial" font-size="13" fill="#888" text-anchor="start" font-weight="400" >верх тела</text>
+<line x1="190" y1="370" x2="760" y2="370" stroke="#bbb" stroke-width="1" stroke-dasharray="7 5"/>
+<text x="766" y="375" font-family="system-ui,Segoe UI,Arial" font-size="13" fill="#888" text-anchor="start" font-weight="400" >низ тела</text>
+<line x1="190" y1="460" x2="760" y2="460" stroke="#bbb" stroke-width="1" stroke-dasharray="7 5"/>
+<text x="766" y="465" font-family="system-ui,Segoe UI,Arial" font-size="13" fill="#888" text-anchor="start" font-weight="400" >минимум</text>
+<line x1="260" y1="160" x2="260" y2="250" stroke="#c2410c" stroke-width="2"/>
+<line x1="253" y1="160" x2="267" y2="160" stroke="#c2410c" stroke-width="2"/>
+<line x1="253" y1="250" x2="267" y2="250" stroke="#c2410c" stroke-width="2"/>
+<text x="272" y="203" font-family="system-ui,Segoe UI,Arial" font-size="14" fill="#c2410c" text-anchor="start" font-weight="600" >верхний фитиль</text>
+<text x="272" y="221" font-family="system-ui,Segoe UI,Arial" font-size="13" fill="#777" text-anchor="start" font-weight="400" >30% высоты</text>
+<line x1="430" y1="250" x2="430" y2="370" stroke="#1d4ed8" stroke-width="2"/>
+<line x1="423" y1="250" x2="437" y2="250" stroke="#1d4ed8" stroke-width="2"/>
+<line x1="423" y1="370" x2="437" y2="370" stroke="#1d4ed8" stroke-width="2"/>
+<text x="442" y="308" font-family="system-ui,Segoe UI,Arial" font-size="14" fill="#1d4ed8" text-anchor="start" font-weight="600" >ТЕЛО</text>
+<text x="442" y="326" font-family="system-ui,Segoe UI,Arial" font-size="13" fill="#777" text-anchor="start" font-weight="400" >40% высоты</text>
+<line x1="600" y1="370" x2="600" y2="460" stroke="#15803d" stroke-width="2"/>
+<line x1="593" y1="370" x2="607" y2="370" stroke="#15803d" stroke-width="2"/>
+<line x1="593" y1="460" x2="607" y2="460" stroke="#15803d" stroke-width="2"/>
+<text x="612" y="413" font-family="system-ui,Segoe UI,Arial" font-size="14" fill="#15803d" text-anchor="start" font-weight="600" >нижний фитиль</text>
+<text x="612" y="431" font-family="system-ui,Segoe UI,Arial" font-size="13" fill="#777" text-anchor="start" font-weight="400" >30% высоты</text>
+<line x1="96" y1="160" x2="96" y2="460" stroke="#111" stroke-width="2"/>
+<line x1="89" y1="160" x2="103" y2="160" stroke="#111" stroke-width="2"/>
+<line x1="89" y1="460" x2="103" y2="460" stroke="#111" stroke-width="2"/>
+<text x="44" y="308" font-family="system-ui,Segoe UI,Arial" font-size="14" fill="#111" text-anchor="start" font-weight="700" >ВЫСОТА</text>
+<text x="44" y="326" font-family="system-ui,Segoe UI,Arial" font-size="13" fill="#777" text-anchor="start" font-weight="400" >= 100%</text>
+<text x="880" y="168" font-family="system-ui,Segoe UI,Arial" font-size="15" fill="#111" text-anchor="start" font-weight="700" >ТРИ УСЛОВИЯ ОТБОРА</text>
+<text x="880" y="202" font-family="system-ui,Segoe UI,Arial" font-size="14" fill="#111" text-anchor="start" font-weight="700" >① ФОРМА</text>
+<text x="880" y="222" font-family="system-ui,Segoe UI,Arial" font-size="13" fill="#555" text-anchor="start" font-weight="400" >|верхний − нижний| ≤ 8 п.п.</text>
+<text x="880" y="264" font-family="system-ui,Segoe UI,Arial" font-size="14" fill="#111" text-anchor="start" font-weight="700" >② РАЗМЕР</text>
+<text x="880" y="284" font-family="system-ui,Segoe UI,Arial" font-size="13" fill="#555" text-anchor="start" font-weight="400" >высота ≤ 2× средней по 20</text>
+<text x="880" y="326" font-family="system-ui,Segoe UI,Arial" font-size="14" fill="#111" text-anchor="start" font-weight="700" >③ ПОТОЛОК</text>
+<text x="880" y="346" font-family="system-ui,Segoe UI,Arial" font-size="13" fill="#555" text-anchor="start" font-weight="400" >высота ≤ 0.40% цены</text>
+<text x="880" y="392" font-family="system-ui,Segoe UI,Arial" font-size="14" fill="#b91c1c" text-anchor="start" font-weight="700" >ТЕЛО В ОТБОРЕ НЕ УЧАСТВУЕТ</text>
+<text x="880" y="412" font-family="system-ui,Segoe UI,Arial" font-size="13" fill="#777" text-anchor="start" font-weight="400" >ваше слово 03.11: тело ЛЮБОЕ</text>
+<text x="880" y="432" font-family="system-ui,Segoe UI,Arial" font-size="13" fill="#777" text-anchor="start" font-weight="400" >— это и есть то, что решаем</text>
+<text x="40" y="514" font-family="system-ui,Segoe UI,Arial" font-size="18" fill="#111" text-anchor="start" font-weight="700" >Б · ТЕЛО. У всех фитили РОВНЫЕ — разница 0, форма проходит у каждой</text>
+<line x1="118" y1="540" x2="118" y2="725" stroke="#222" stroke-width="1.5"/>
+<rect x="101" y="632.5" width="34" height="1.5" fill="#2b2b2b" stroke="#222" stroke-width="1.5"/>
+<text x="118" y="755" font-family="system-ui,Segoe UI,Arial" font-size="20" fill="#111" text-anchor="middle" font-weight="700" >Т1</text>
+<text x="118" y="777" font-family="system-ui,Segoe UI,Arial" font-size="14" fill="#444" text-anchor="middle" font-weight="400" >тело 0%</text>
+<text x="118" y="797" font-family="system-ui,Segoe UI,Arial" font-size="13" fill="#888" text-anchor="middle" font-weight="400" >фитили 50 / 50</text>
+<line x1="268" y1="540" x2="268" y2="725" stroke="#222" stroke-width="1.5"/>
+<rect x="251" y="623.25" width="34" height="18.5" fill="#2b2b2b" stroke="#222" stroke-width="1.5"/>
+<text x="268" y="755" font-family="system-ui,Segoe UI,Arial" font-size="20" fill="#111" text-anchor="middle" font-weight="700" >Т2</text>
+<text x="268" y="777" font-family="system-ui,Segoe UI,Arial" font-size="14" fill="#444" text-anchor="middle" font-weight="400" >тело 10%</text>
+<text x="268" y="797" font-family="system-ui,Segoe UI,Arial" font-size="13" fill="#888" text-anchor="middle" font-weight="400" >фитили 45 / 45</text>
+<line x1="418" y1="540" x2="418" y2="725" stroke="#222" stroke-width="1.5"/>
+<rect x="401" y="609.375" width="34" height="46.25" fill="#2b2b2b" stroke="#222" stroke-width="1.5"/>
+<text x="418" y="755" font-family="system-ui,Segoe UI,Arial" font-size="20" fill="#111" text-anchor="middle" font-weight="700" >Т3</text>
+<text x="418" y="777" font-family="system-ui,Segoe UI,Arial" font-size="14" fill="#444" text-anchor="middle" font-weight="400" >тело 25%</text>
+<text x="418" y="797" font-family="system-ui,Segoe UI,Arial" font-size="13" fill="#888" text-anchor="middle" font-weight="400" >фитили 37.5 / 37.5</text>
+<line x1="568" y1="540" x2="568" y2="725" stroke="#222" stroke-width="1.5"/>
+<rect x="551" y="595.5" width="34" height="74" fill="#2b2b2b" stroke="#222" stroke-width="1.5"/>
+<text x="568" y="755" font-family="system-ui,Segoe UI,Arial" font-size="20" fill="#111" text-anchor="middle" font-weight="700" >Т4</text>
+<text x="568" y="777" font-family="system-ui,Segoe UI,Arial" font-size="14" fill="#444" text-anchor="middle" font-weight="400" >тело 40%</text>
+<text x="568" y="797" font-family="system-ui,Segoe UI,Arial" font-size="13" fill="#888" text-anchor="middle" font-weight="400" >фитили 30 / 30</text>
+<line x1="718" y1="540" x2="718" y2="725" stroke="#222" stroke-width="1.5"/>
+<rect x="701" y="581.625" width="34" height="101.75" fill="#2b2b2b" stroke="#222" stroke-width="1.5"/>
+<text x="718" y="755" font-family="system-ui,Segoe UI,Arial" font-size="20" fill="#111" text-anchor="middle" font-weight="700" >Т5</text>
+<text x="718" y="777" font-family="system-ui,Segoe UI,Arial" font-size="14" fill="#444" text-anchor="middle" font-weight="400" >тело 55%</text>
+<text x="718" y="797" font-family="system-ui,Segoe UI,Arial" font-size="13" fill="#888" text-anchor="middle" font-weight="400" >фитили 22.5 / 22.5</text>
+<line x1="868" y1="540" x2="868" y2="725" stroke="#222" stroke-width="1.5"/>
+<rect x="851" y="567.75" width="34" height="129.5" fill="#2b2b2b" stroke="#222" stroke-width="1.5"/>
+<text x="868" y="755" font-family="system-ui,Segoe UI,Arial" font-size="20" fill="#111" text-anchor="middle" font-weight="700" >Т6</text>
+<text x="868" y="777" font-family="system-ui,Segoe UI,Arial" font-size="14" fill="#444" text-anchor="middle" font-weight="400" >тело 70%</text>
+<text x="868" y="797" font-family="system-ui,Segoe UI,Arial" font-size="13" fill="#888" text-anchor="middle" font-weight="400" >фитили 15 / 15</text>
+<line x1="1018" y1="540" x2="1018" y2="725" stroke="#222" stroke-width="1.5"/>
+<rect x="1001" y="549.25" width="34" height="166.5" fill="#2b2b2b" stroke="#222" stroke-width="1.5"/>
+<text x="1018" y="755" font-family="system-ui,Segoe UI,Arial" font-size="20" fill="#111" text-anchor="middle" font-weight="700" >Т7</text>
+<text x="1018" y="777" font-family="system-ui,Segoe UI,Arial" font-size="14" fill="#444" text-anchor="middle" font-weight="400" >тело 90%</text>
+<text x="1018" y="797" font-family="system-ui,Segoe UI,Arial" font-size="13" fill="#888" text-anchor="middle" font-weight="400" >фитили 5 / 5</text>
+<line x1="40" y1="530" x2="1140" y2="530" stroke="#ddd" stroke-width="1" stroke-dasharray="7 5"/>
+<line x1="40" y1="735" x2="1140" y2="735" stroke="#ddd" stroke-width="1" stroke-dasharray="7 5"/>
+<text x="1146" y="534" font-family="system-ui,Segoe UI,Arial" font-size="12" fill="#333" text-anchor="start" font-weight="400" ></text>
+<text x="40" y="814" font-family="system-ui,Segoe UI,Arial" font-size="18" fill="#111" text-anchor="start" font-weight="700" >В · ФИТИЛИ. Тело у всех одно, меняется только РАЗНИЦА. Порог сейчас 8 п.п.</text>
+<line x1="118" y1="840" x2="118" y2="950" stroke="#222" stroke-width="1.5"/>
+<rect x="101" y="878.5" width="34" height="33" fill="#2b2b2b" stroke="#222" stroke-width="1.5"/>
+<text x="118" y="978" font-family="system-ui,Segoe UI,Arial" font-size="20" fill="#111" text-anchor="middle" font-weight="700" >С1</text>
+<text x="118" y="1000" font-family="system-ui,Segoe UI,Arial" font-size="14" fill="#444" text-anchor="middle" font-weight="400" >разница 0</text>
+<text x="118" y="1020" font-family="system-ui,Segoe UI,Arial" font-size="13" fill="#15803d" text-anchor="middle" font-weight="600" >проходит</text>
+<line x1="268" y1="840" x2="268" y2="950" stroke="#222" stroke-width="1.5"/>
+<rect x="251" y="882.9" width="34" height="33" fill="#2b2b2b" stroke="#222" stroke-width="1.5"/>
+<text x="268" y="978" font-family="system-ui,Segoe UI,Arial" font-size="20" fill="#111" text-anchor="middle" font-weight="700" >С2</text>
+<text x="268" y="1000" font-family="system-ui,Segoe UI,Arial" font-size="14" fill="#444" text-anchor="middle" font-weight="400" >разница 8</text>
+<text x="268" y="1020" font-family="system-ui,Segoe UI,Arial" font-size="13" fill="#15803d" text-anchor="middle" font-weight="600" >проходит</text>
+<line x1="418" y1="840" x2="418" y2="950" stroke="#222" stroke-width="1.5"/>
+<rect x="401" y="889.5" width="34" height="33" fill="#2b2b2b" stroke="#222" stroke-width="1.5"/>
+<text x="418" y="978" font-family="system-ui,Segoe UI,Arial" font-size="20" fill="#111" text-anchor="middle" font-weight="700" >С3</text>
+<text x="418" y="1000" font-family="system-ui,Segoe UI,Arial" font-size="14" fill="#444" text-anchor="middle" font-weight="400" >разница 20</text>
+<text x="418" y="1020" font-family="system-ui,Segoe UI,Arial" font-size="13" fill="#b91c1c" text-anchor="middle" font-weight="600" >НЕ проходит</text>
+<line x1="568" y1="840" x2="568" y2="950" stroke="#222" stroke-width="1.5"/>
+<rect x="551" y="900.5" width="34" height="33" fill="#2b2b2b" stroke="#222" stroke-width="1.5"/>
+<text x="568" y="978" font-family="system-ui,Segoe UI,Arial" font-size="20" fill="#111" text-anchor="middle" font-weight="700" >С4</text>
+<text x="568" y="1000" font-family="system-ui,Segoe UI,Arial" font-size="14" fill="#444" text-anchor="middle" font-weight="400" >разница 40</text>
+<text x="568" y="1020" font-family="system-ui,Segoe UI,Arial" font-size="13" fill="#b91c1c" text-anchor="middle" font-weight="600" >НЕ проходит</text>
+<line x1="718" y1="840" x2="718" y2="950" stroke="#222" stroke-width="1.5"/>
+<rect x="701" y="917" width="34" height="33" fill="#2b2b2b" stroke="#222" stroke-width="1.5"/>
+<text x="718" y="978" font-family="system-ui,Segoe UI,Arial" font-size="20" fill="#111" text-anchor="middle" font-weight="700" >С5</text>
+<text x="718" y="1000" font-family="system-ui,Segoe UI,Arial" font-size="14" fill="#444" text-anchor="middle" font-weight="400" >разница 70</text>
+<text x="718" y="1020" font-family="system-ui,Segoe UI,Arial" font-size="13" fill="#b91c1c" text-anchor="middle" font-weight="600" >НЕ проходит</text>
+<line x1="40" y1="830" x2="1140" y2="830" stroke="#ddd" stroke-width="1" stroke-dasharray="7 5"/>
+</svg>
