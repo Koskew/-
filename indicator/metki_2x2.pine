@@ -1,9 +1,35 @@
 //@version=5
 // ═══════════════════════════════════════════════════════════════════
-// МЕТКИ 2/2 · v3.42     ОДИН СЛОЙ, ВСЕ ПРАВИЛА
+// МЕТКИ 2/2 · v3.43     ОДИН СЛОЙ, ВСЕ ПРАВИЛА
 // 12.10.2026
 //
 // Номера читаются «три-двадцать восемь», «три-двадцать девять».
+//
+// ── v3.43: ПРАВИЛО ФОРМЫ ТРИГГЕРНОЙ СВЕЧИ ПО ЕГО РАЗМЕТКЕ ──
+//
+// 08.11.2026, его слово «вноси». Он разобрал карту всех 90 форм
+// девятилетнего файла и назвал по каждой клетке, триггерная свеча или
+// нет. Разметка легла двумя ровными границами, и обе — не те, что
+// стояли в правиле:
+//
+//   перекос фитилей — меньший не меньше ПОЛОВИНЫ большего
+//   тело            — меньше 70% высоты свечи
+//
+// Замер Н63: прежнее условие находило 32.3% того, что он отметил
+// «да» и «скорее да», и 22.1% взятого лежало в его «нет». Новое —
+// 81.4% и 0.0% при том же потолке 0.40%.
+//
+// ⚠️ СТАРОЕ ПРАВИЛО НЕ УДАЛЕНО И НЕ СПРЯТАНО. Оно выбирается ручкой
+// «Правило формы», и ручка «Фитили: разница» живёт для него. Можно
+// переключить и сравнить прямо на графике, не меняя файл.
+//
+// ⚠️ ДВИЖОК СЛОЯ 2/2 НЕ ТРОНУТ. Проверено побайтово: f_absorb,
+// f_push и все 477 строк f_trend совпадают с v3.42 знак в знак.
+// Тронуты ровно три места — настройки свечи, её счёт формы и табло.
+//
+// ⚠️ БЕРЁТ БОЛЬШЕ, А НЕ МЕНЬШЕ: 13 611 свечей против 8 692 на девяти
+// годах 1H. Причина не в правиле, а в разметке — его «да+скорее да»
+// это 31.8% всех баров. Густо на графике — крутить ПОТОЛОК.
 //
 // ── v3.38: ТРИГГЕРНАЯ СВЕЧА ПЕРЕЕХАЛА СЮДА ИЗ ВЕРСТАКА ──
 //
@@ -1605,7 +1631,7 @@
 //   python3 research/sverka.py indicator/ЭТАЛОН_v2.3.pine indicator/metki_2x2.pine
 // Исчезнувшее в ней — ровно список выше, и ничего сверх него.
 // ═══════════════════════════════════════════════════════════════════
-indicator("Метки 2/2 · v3.42", overlay = true, max_lines_count = 500, max_labels_count = 500, max_bars_back = 3000)
+indicator("Метки 2/2 · v3.43", overlay = true, max_lines_count = 500, max_labels_count = 500, max_bars_back = 3000)
 
 // ═══════════════════════════════════════════════════════════════════
 //                        ПОЛОВИНА  ·  ВИД
@@ -1758,9 +1784,31 @@ hLB    = input.int(3, "Глубина пивота старших ТФ", minval 
 
 g11 = "⑩ ТРИГГЕРНАЯ СВЕЧА · ПРАВИЛО"
 tsOn   = input.bool(true,  "Искать триггерные свечи", group = g11)
-simMax = input.float(8.0,  "Фитили: разница не больше, % высоты свечи", minval = 0.0, maxval = 50.0, step = 0.5, group = g11, tooltip = "Насколько «одинаковые» фитили. 8 — согласованное значение: медиана разницы фитилей у ваших 40 шаблонов 7.7, у обычной свечи 20.5.")
+simMax = input.float(8.0,  "Фитили: разница не больше, % высоты свечи", minval = 0.0, maxval = 50.0, step = 0.5, group = g11, tooltip = "Насколько «одинаковые» фитили. 8 — согласованное значение: медиана разницы фитилей у ваших 40 шаблонов 7.7, у обычной свечи 20.5. Работает только при СТАРОМ правиле формы.")
 okno   = input.int(20,     "Соседей для обычного размера", minval = 2, maxval = 200, group = g11, tooltip = "Сколько ПРЕДЫДУЩИХ свечей брать, чтобы понять обычный размер. Текущая свеча в среднее не входит.")
 porog  = input.float(2.0,  "Пропускать, если свеча больше средней в N раз", minval = 1.0, maxval = 10.0, step = 0.1, group = g11, tooltip = "Ваш пример 0.8% против 0.3% — это 2.7 раза. При 2.0 отсекается 8.8% формы на 1H.")
+// ── ПРАВИЛО ФОРМЫ ПЕРЕПИСАНО ПО ЕГО РАЗМЕТКЕ 90 КЛЕТОК. v3.43 ──
+//
+// 08.11.2026 он разобрал карту всех форм и назвал, какие свечи
+// триггерные. Разметка легла ДВУМЯ ровными границами, и обе — не те,
+// что стояли в правиле:
+//   симметрия меряется ОТНОШЕНИЕМ фитилей, а не разницей в пунктах;
+//   тело ВСЁ-ТАКИ участвует: от 80% высоты он отверг всё.
+//
+// Замер Н63: старое условие находило 32.3% того, что он хочет, и 22.1%
+// взятого лежало в его «нет». Новое — 81.4% и 0.0% при том же потолке.
+//
+// ⚠️ СТАРОЕ ПРАВИЛО НЕ УДАЛЕНО И НЕ СПРЯТАНО. Оно выбирается первой
+// ручкой ниже, и ручка «Фитили: разница» живёт для него. Так он может
+// переключить и сравнить прямо на графике, а откат не требует файла.
+tsForm = input.string("перекос и тело · новое", "Правило формы", options = ["перекос и тело · новое", "разница фитилей · старое"], group = g11, tooltip = "Какое из двух условий формы работает. НОВОЕ собрано по вашей разметке карты всех форм 08.11: находит 81% того, что вы отметили «да» и «скорее да», и НИ ОДНОЙ из отмеченных «нет». СТАРОЕ — разница фитилей в пунктах: находило 32% и 22% взятого лежало в вашем «нет». Старое оставлено, чтобы можно было переключить и сравнить на графике.")
+// Ручка ОДНА, и она его словами: «меньший фитиль не меньше половины
+// большего». Это ровно перекос 33,33-66,67, но считанное ОТНОШЕНИЕМ,
+// а не порогом-числом — значит без округления. Округление не бесплатно:
+// пороги 33,3 и 66,7 вместо точных взяли бы на девяти годах лишние
+// 37 свечей, и 31 из них лежит в его «нет»
+tsPkMin = input.float(50.0, "Меньший фитиль не меньше, % от большего", minval = 0.0, maxval = 100.0, step = 1.0, group = g11, tooltip = "Симметрия, замеренная ОТНОШЕНИЕМ, а не разницей. 50 значит «меньший фитиль не меньше половины большего» — это ваши слова. Строка табло «перекос фитилей» показывает, в какие границы это превращается: при 50 — от 33 до 67. Больше 50 — строже, 100 — ровно пополам, 0 — любой перекос. Работает только при новом правиле формы.")
+tsTelo = input.float(70.0, "Тело меньше, % высоты свечи", minval = 1.0, maxval = 100.0, step = 1.0, group = g11, tooltip = "Второе из двух новых условий. По вашей разметке от 80% тела отвергнуто ВСЁ, ряды И и К целиком. Условие нужно ещё и потому, что доли тела и фитилей в сумме дают 100: при теле 92% на оба фитиля остаётся 8, и проверка симметрии перестаёт что-либо проверять. Таких свечей за девять лет 1024, и прежнее правило брало все 1024. Работает только при новом правиле формы.")
 capMax = input.float(0.40, "Потолок: свеча не выше, % от цены", minval = 0.01, maxval = 5.0, step = 0.01, group = g11, tooltip = "ВТОРАЯ половина вашей фразы «не должны быть большие относительно ЦЕНЫ и свечей рядом». Порог выше смотрит на соседей и слепнет, когда растёт вся волатильность: в штиль пропущенная свеча 0.195% цены, в бурю 0.481%, разрыв 2.48 раза. Потолок в процентах от цены не подстраивается ни под что и закрывает дыру: разрыв падает до 1.52. Число СВОЁ на каждом таймфрейме — смотрите строку «средняя за N» в табло.")
 
 g12 = "⑩ ТРИГГЕРНАЯ СВЕЧА · ПОКАЗ"
@@ -2180,7 +2228,7 @@ f_swapSeq(_s) =>
 // Раньше его три строки стояли вплотную под нисходящим и читались как
 // его продолжение — отсюда вопрос владельца «есть отличия между
 // трендами по строкам». Отличий в подписях нет, это был третий блок
-var table TBL = table.new(tblPos == "справа вверху" ? position.top_right : tblPos == "справа внизу" ? position.bottom_right : tblPos == "слева вверху" ? position.top_left : position.bottom_left, 3, 37, border_width = 1, frame_width = 1, frame_color = color.new(color.gray, 60), border_color = color.new(color.gray, 80))
+var table TBL = table.new(tblPos == "справа вверху" ? position.top_right : tblPos == "справа внизу" ? position.bottom_right : tblPos == "слева вверху" ? position.top_left : position.bottom_left, 3, 39, border_width = 1, frame_width = 1, frame_color = color.new(color.gray, 60), border_color = color.new(color.gray, 80))
 // ── З62 · РАСТЯЖКА НА ДВА СТОЛБЦА ──
 // Его слово 31.10.2026 после v3.35 на графике: «первая строка должна
 // быть на два столбика и раздел сломы тоже должен быть не в одном
@@ -3654,10 +3702,64 @@ if bar_index >= srOkn
 // ── ВЕРДИКТ ──
 // Сторожа пишутся через if, а не через логическую связку: пайн считает
 // обе половины `and` всегда, обрыва нет.
-bool formaOk = false
+// ── ПЕРЕКОС ФИТИЛЕЙ: доля ВЕРХНЕГО от суммы обоих ──
+//
+// Это и есть мера, которую он выбрал глазом по карте форм. 50 — фитили
+// поровну, 0 — весь фитиль снизу, 100 — весь сверху. Диапазон 33-67
+// это ровно «меньший фитиль не меньше половины большего».
+//
+// Почему это лучше разницы в пунктах — замер Н62: доли в сумме дают
+// 100, значит на оба фитиля остаётся ровно 100 минус тело, и при теле
+// 92% порог в 8 пунктов перестаёт что-либо проверять. Свечей с телом
+// от 92% в девяти годах 1024, и форму прошли ВСЕ 1024.
+//
+// Фитилей нет вовсе — перекос считаем серединой: делить нечего, и
+// такую свечу отсекает условие ТЕЛА, а не перекоса
+float perek = 50.0
+float wmin  = math.min(upS, loS)
+float wmax  = math.max(upS, loS)
+if rng > 0
+    float wsum = upS + loS
+    if wsum > 0
+        perek := upS / wsum * 100.0
+
+// Границы перекоса СЧИТАЮТСЯ ИЗ РУЧКИ, а не вбиты числом: при 50 это
+// 33,33-66,67, при 0 — вся шкала, при 100 — ровно пополам. Табло
+// показывает их, чтобы крутить порог было видно по чему
+float pkLo = 100.0 * tsPkMin / (100.0 + tsPkMin)
+float pkHi = 10000.0 / (100.0 + tsPkMin)
+
+// Три вердикта ПОРОЗНЬ: табло красит КАЖДУЮ строку своим условием, а не
+// общим `formaOk`. Иначе строка «фитили: разница» в новом режиме
+// светилась бы по чужому вердикту — то есть врала
+bool oldMode = tsForm == "разница фитилей · старое"
+bool znOk = false
+bool pkOk = false
+bool tlOk = false
 if rng > 0
     if razn <= simMax
-        formaOk := true
+        znOk := true
+    if wmax > 0
+        if wmin * 100.0 >= tsPkMin * wmax
+            pkOk := true
+    else
+        pkOk := true
+    if bodP < tsTelo
+        tlOk := true
+
+// Деления на ноль тут нет нарочно: сторож `wmax > 0` стоит отдельным
+// `if`, а не связкой — в пайне `and` НЕ обрывается, обе половины
+// считаются всегда. Фитилей нет вовсе — перекос делить нечего, такую
+// свечу отсекает ТЕЛО (у неё оно 100%), а не перекос
+bool formaOk = false
+if rng > 0
+    if oldMode
+        if znOk
+            formaOk := true
+    else
+        if pkOk
+            if tlOk
+                formaOk := true
 
 bool razmOk = false
 if otn > 0
@@ -4524,33 +4626,43 @@ if barstate.islast
         table.cell(TBL, 1, 20, trig ? "ДА" : srez ? "срезана размером" : "нет", text_color = trig ? chart.fg_color : color.gray, text_size = tSz, bgcolor = trig ? cOk : cNet)
 
         table.cell(TBL, 0, 21, "фитили: разница", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 21, rng > 0 ? str.tostring(razn, "#.#") + " из " + str.tostring(simMax, "#.#") : "—", text_color = formaOk ? chart.fg_color : color.gray, text_size = tSz)
+        table.cell(TBL, 1, 21, rng > 0 ? str.tostring(razn, "#.#") + (oldMode ? " из " + str.tostring(simMax, "#.#") : "") : "—", text_color = oldMode and znOk ? chart.fg_color : color.gray, text_size = tSz)
 
-        table.cell(TBL, 0, 22, "размер к обычному", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 22, otn > 0 ? str.tostring(otn, "#.##") + "x из " + str.tostring(porog, "#.#") + "x" : "—", text_color = razmOk ? chart.fg_color : color.gray, text_size = tSz)
+        // ── ДВЕ НОВЫЕ СТРОКИ: ровно то, что меряет правило с v3.43 ──
+        // Порог рядом с числом нарочно — он сам сказал про потолок
+        // «я по таблице вручную могу определить порог, который нужен,
+        // и подкрутить». Эти два порога крутятся так же
+        table.cell(TBL, 0, 22, "перекос фитилей", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 1, 22, rng > 0 ? str.tostring(perek, "#") + "%" + (oldMode ? "" : " из " + str.tostring(pkLo, "#") + "-" + str.tostring(pkHi, "#")) : "—", text_color = not oldMode and pkOk ? chart.fg_color : color.gray, text_size = tSz)
 
-        table.cell(TBL, 0, 23, "обычная высота", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 23, na(sredPred) ? "—" : str.tostring(sredPred, "#.###") + "%", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 0, 23, "тело", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 1, 23, rng > 0 ? str.tostring(bodP, "#") + "%" + (oldMode ? "" : " из " + str.tostring(tsTelo, "#") + "%") : "—", text_color = not oldMode and tlOk ? chart.fg_color : color.gray, text_size = tSz)
 
-        table.cell(TBL, 0, 24, "эта свеча", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 24, str.tostring(shk, "#.###") + "% из " + str.tostring(capMax, "#.##") + "%  тело " + str.tostring(bodP, "#") + "%", text_color = capOk ? chart.fg_color : color.gray, text_size = tSz)
+        table.cell(TBL, 0, 24, "размер к обычному", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 1, 24, otn > 0 ? str.tostring(otn, "#.##") + "x из " + str.tostring(porog, "#.#") + "x" : "—", text_color = razmOk ? chart.fg_color : color.gray, text_size = tSz)
 
-        table.cell(TBL, 0, 25, "средняя за " + str.tostring(srOkn), text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 25, na(sredPok) ? "—" : str.tostring(sredPok, "#.###") + "%  потолок " + str.tostring(capMax / sredPok, "#.##") + "x", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 0, 25, "обычная высота", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 1, 25, na(sredPred) ? "—" : str.tostring(sredPred, "#.###") + "%", text_color = color.gray, text_size = tSz)
+
+        table.cell(TBL, 0, 26, "эта свеча", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 1, 26, str.tostring(shk, "#.###") + "% из " + str.tostring(capMax, "#.##") + "%  тело " + str.tostring(bodP, "#") + "%", text_color = capOk ? chart.fg_color : color.gray, text_size = tSz)
+
+        table.cell(TBL, 0, 27, "средняя за " + str.tostring(srOkn), text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 1, 27, na(sredPok) ? "—" : str.tostring(sredPok, "#.###") + "%  потолок " + str.tostring(capMax / sredPok, "#.##") + "x", text_color = color.gray, text_size = tSz)
 
 if barstate.islast
     if tbOn
-        table.cell(TBL, 0, 26, "НАЙДЕНО", text_color = chart.fg_color, text_size = tSz, bgcolor = cZag)
-        table.cell(TBL, 1, 26, str.tostring(nTrig) + (nVsego > 0 ? "  " + str.tostring(100.0 * nTrig / nVsego, "#.#") + "%" : ""), text_color = chart.fg_color, text_size = tSz, bgcolor = cZag)
+        table.cell(TBL, 0, 28, "НАЙДЕНО", text_color = chart.fg_color, text_size = tSz, bgcolor = cZag)
+        table.cell(TBL, 1, 28, str.tostring(nTrig) + (nVsego > 0 ? "  " + str.tostring(100.0 * nTrig / nVsego, "#.#") + "%" : ""), text_color = chart.fg_color, text_size = tSz, bgcolor = cZag)
 
-        table.cell(TBL, 0, 27, "подошло по форме", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 27, str.tostring(nForma) + (nVsego > 0 ? "  " + str.tostring(100.0 * nForma / nVsego, "#.#") + "%" : ""), text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 0, 29, "подошло по форме", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 1, 29, str.tostring(nForma) + (nVsego > 0 ? "  " + str.tostring(100.0 * nForma / nVsego, "#.#") + "%" : ""), text_color = color.gray, text_size = tSz)
 
-        table.cell(TBL, 0, 28, "срезано размером", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 28, str.tostring(nSrez) + (nForma > 0 ? "  " + str.tostring(100.0 * nSrez / nForma, "#.#") + "% формы" : ""), text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 0, 30, "срезано размером", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 1, 30, str.tostring(nSrez) + (nForma > 0 ? "  " + str.tostring(100.0 * nSrez / nForma, "#.#") + "% формы" : ""), text_color = color.gray, text_size = tSz)
 
-        table.cell(TBL, 0, 29, "последняя была", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 29, na(lastTB) ? "—" : str.tostring(bar_index - lastTB) + " баров назад", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 0, 31, "последняя была", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 1, 31, na(lastTB) ? "—" : str.tostring(bar_index - lastTB) + " баров назад", text_color = color.gray, text_size = tSz)
 
 // ══════════════════════════════════════════════════════════════════
 //                    ФИБОНАЧЧИ · ПОКАЗ
@@ -4794,20 +4906,20 @@ if barstate.islast
         string fiCnT = str.tostring(fiNo)
         if fiNo > 0
             fiCnT := str.tostring(fiNo) + " сеток  ·  коленом срезано " + str.tostring(fiCut) + "  " + str.tostring(100.0 * fiCut / fiNo, "#.#") + "%"
-        table.cell(TBL, 0, 30, "фибоначчи", text_color = color.gray, text_size = tSz, bgcolor = cBlkS)
-        table.cell(TBL, 1, 30, fiWho, text_color = color.gray, text_size = tSz, bgcolor = cBlkS)
-        table.cell(TBL, 0, 31, "на колене", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 31, fiNa, text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 32, "колено", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 32, fiLgT, text_color = fiIdx < 0 ? color.gray : chart.fg_color, text_size = tSz)
-        table.cell(TBL, 0, 33, "уровни", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 33, fiLvT, text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 34, "зона 0,75-0,79", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 34, fiZnT, text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 35, "цена в сетке", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 35, fiTx, text_color = fiIdx < 0 ? color.gray : chart.fg_color, text_size = tSz)
-        table.cell(TBL, 0, 36, "сеток", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 36, fiCnT, text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 0, 32, "фибоначчи", text_color = color.gray, text_size = tSz, bgcolor = cBlkS)
+        table.cell(TBL, 1, 32, fiWho, text_color = color.gray, text_size = tSz, bgcolor = cBlkS)
+        table.cell(TBL, 0, 33, "на колене", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 1, 33, fiNa, text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 0, 34, "колено", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 1, 34, fiLgT, text_color = fiIdx < 0 ? color.gray : chart.fg_color, text_size = tSz)
+        table.cell(TBL, 0, 35, "уровни", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 1, 35, fiLvT, text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 0, 36, "зона 0,75-0,79", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 1, 36, fiZnT, text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 0, 37, "цена в сетке", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 1, 37, fiTx, text_color = fiIdx < 0 ? color.gray : chart.fg_color, text_size = tSz)
+        table.cell(TBL, 0, 38, "сеток", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 1, 38, fiCnT, text_color = color.gray, text_size = tSz)
 
 // ══════════════════════════════════════════════════════════════════
 //      З62 · СЛИЯНИЕ. ПОСЛЕДНЕЕ В ФАЙЛЕ И НЕ СДВИГАЕТСЯ С МЕСТА
@@ -4839,13 +4951,13 @@ if barstate.islast
     // Свеча не принадлежит ни восходящему, ни нисходящему: делить её
     // строки пополам нечего, правая колонка там была бы пустой
     if tbOn and not mrgSv
-        for r = 19 to 29
+        for r = 19 to 31
             table.cell(TBL, 2, r, "", text_size = tSz)
             table.merge_cells(TBL, 1, r, 2, r)
         mrgSv := true
     // Сетка ОДНА на оба направления — делить её строки пополам нечего
     if fiTbl and not mrgFi
-        for r = 30 to 36
+        for r = 32 to 38
             table.cell(TBL, 2, r, "", text_size = tSz)
             table.merge_cells(TBL, 1, r, 2, r)
         mrgFi := true
