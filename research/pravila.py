@@ -53,6 +53,7 @@ FILES = [
     'indicator/ПРАВИЛА-БОКОВИК.md',
     'indicator/ПРАВИЛА-ТРИГГЕР.md',
     'indicator/ПРАВИЛА-ФИБО.md',
+    'indicator/ПРАВИЛА-РИСК.md',
     'indicator/РЕШЕНИЯ-ИТОГ.md',
 ]
 
