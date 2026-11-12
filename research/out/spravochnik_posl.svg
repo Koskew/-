@@ -1,0 +1,197 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1280" viewBox="0 0 1280 1280">
+<rect width="1280" height="1280" fill="#ffffff"/>
+<text x="30" y="40" font-size="24" fill="#222" font-weight="bold" text-anchor="start" font-family="Arial, sans-serif">Справочник последовательностей · слой 2/2 · metki_2x2 v3.43</text>
+<text x="30" y="64" font-size="14" fill="#777" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">Строка табло «посл-ть». Индикатор не предсказывает — он узнаёт форму счёта и называет её номером, как шаблон свечи.</text>
+<text x="30" y="100" font-size="16" fill="#222" font-weight="bold" text-anchor="start" font-family="Arial, sans-serif">КАК ИНДИКАТОР ПОДБИРАЕТ</text>
+<text x="30" y="124" font-size="15" fill="#222" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">1.  Берёт метку (0) тренда — LL у рождения, HL у продолжения — и до пяти меток после неё: (1)…(5).</text>
+<text x="30" y="148" font-size="15" fill="#222" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">2.  В восходящем каждый низ обязан быть HL, иначе это не восходящий. Свободны только вершины (1), (3), (5) — HH или LH.</text>
+<text x="30" y="172" font-size="15" fill="#222" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">      Отсюда ровно 2 × 2 × 2 = 8 форм. Других не бывает.</text>
+<text x="30" y="196" font-size="15" fill="#222" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">3.  Пока счёт не дошёл до (5), ищет все формы, которые НАЧИНАЮТСЯ так же, как уже нарисованное:</text>
+<text x="30" y="220" font-size="15" fill="#222" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">      подошли 1–3 формы → пишет их имена, например  П16/П25</text>
+<text x="30" y="244" font-size="15" fill="#222" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">      подошло больше трёх → пишет число, например  4 вар.</text>
+<text x="30" y="268" font-size="15" fill="#222" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">      не подошла ни одна → «вне справ.» оранжевым: значит, какой-то низ вышел LL, а не HL. Это та же «манипуляция», что в строке «за тренд» (Н39).</text>
+<text x="30" y="292" font-size="15" fill="#222" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">4.  На (5) остаётся одна форма — пишет её имя цветом тренда.</text>
+<text x="30" y="316" font-size="15" fill="#222" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">5.  Нисходящий — точное зеркало: имена С1…С29, метки меняются HH↔LL, HL↔LH. Колонка вершин становится колонкой низов.</text>
+<text x="30" y="340" font-size="15" fill="#222" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">На рисунках: серый пунктир — вершина ДО (0). По ней (1) называется HH (выше неё) или LH (ниже). Красным — LH, вершина ниже предыдущей.</text>
+<text x="30" y="370" font-size="13" fill="#d73027" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">Частоты — перепись 9 лет часовика, посчитана 07.10.2026 на СТАРОМ движке, до октябрьских правок счёта. Как подпись к формам годятся, как замер нынешнего движка — нет.</text>
+<rect x="30" y="380" width="284" height="284" rx="10" fill="#f7f7f7" stroke="#ddd"/>
+<line x1="58" y1="517.0943396226415" x2="94" y2="602.0" stroke="#bbb" stroke-dasharray="4,3" stroke-width="2"/>
+<line x1="52" y1="517.0943396226415" x2="284" y2="517.0943396226415" stroke="#ccc" stroke-dasharray="2,4"/>
+<polyline points="94,602.0 130,531.2452830188679 166,573.6981132075472 202,508.60377358490564 238,562.377358490566 274,485.9622641509434" fill="none" stroke="#1a9850" stroke-width="3"/>
+<circle cx="94" cy="602.0" r="4" fill="#222"/>
+<text x="94" y="620.0" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(0) LL</text>
+<circle cx="130" cy="531.2452830188679" r="4" fill="#1a9850"/>
+<text x="130" y="521.2452830188679" font-size="11" fill="#d73027" font-weight="bold" text-anchor="middle" font-family="Arial, sans-serif">(1) LH</text>
+<circle cx="166" cy="573.6981132075472" r="4" fill="#222"/>
+<text x="166" y="591.6981132075472" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(2) HL</text>
+<circle cx="202" cy="508.60377358490564" r="4" fill="#1a9850"/>
+<text x="202" y="498.60377358490564" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(3) HH</text>
+<circle cx="238" cy="562.377358490566" r="4" fill="#222"/>
+<text x="238" y="580.377358490566" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(4) HL</text>
+<circle cx="274" cy="485.9622641509434" r="4" fill="#1a9850"/>
+<text x="274" y="475.9622641509434" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(5) HH</text>
+<text x="44" y="408" font-size="24" fill="#1a9850" font-weight="bold" text-anchor="start" font-family="Arial, sans-serif">П1</text>
+<text x="100" y="408" font-size="12" fill="#777" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">зеркало: С1</text>
+<text x="44" y="428" font-size="12" fill="#222" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">LH·HL·HH·HL·HH</text>
+<text x="44" y="642" font-size="12" fill="#222" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">восх.: рождений 151 · продолжений 18</text>
+<text x="44" y="658" font-size="12" fill="#777" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">нисх. С1: рождений 140 · продолжений 17</text>
+<rect x="330" y="380" width="284" height="284" rx="10" fill="#f7f7f7" stroke="#ddd"/>
+<line x1="358" y1="517.0943396226415" x2="394" y2="602.0" stroke="#bbb" stroke-dasharray="4,3" stroke-width="2"/>
+<line x1="352" y1="517.0943396226415" x2="584" y2="517.0943396226415" stroke="#ccc" stroke-dasharray="2,4"/>
+<polyline points="394,602.0 430,531.2452830188679 466,573.6981132075472 502,508.60377358490564 538,562.377358490566 574,519.9245283018868" fill="none" stroke="#1a9850" stroke-width="3"/>
+<circle cx="394" cy="602.0" r="4" fill="#222"/>
+<text x="394" y="620.0" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(0) LL</text>
+<circle cx="430" cy="531.2452830188679" r="4" fill="#1a9850"/>
+<text x="430" y="521.2452830188679" font-size="11" fill="#d73027" font-weight="bold" text-anchor="middle" font-family="Arial, sans-serif">(1) LH</text>
+<circle cx="466" cy="573.6981132075472" r="4" fill="#222"/>
+<text x="466" y="591.6981132075472" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(2) HL</text>
+<circle cx="502" cy="508.60377358490564" r="4" fill="#1a9850"/>
+<text x="502" y="498.60377358490564" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(3) HH</text>
+<circle cx="538" cy="562.377358490566" r="4" fill="#222"/>
+<text x="538" y="580.377358490566" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(4) HL</text>
+<circle cx="574" cy="519.9245283018868" r="4" fill="#1a9850"/>
+<text x="574" y="509.92452830188677" font-size="11" fill="#d73027" font-weight="bold" text-anchor="middle" font-family="Arial, sans-serif">(5) LH</text>
+<text x="344" y="408" font-size="24" fill="#1a9850" font-weight="bold" text-anchor="start" font-family="Arial, sans-serif">П5</text>
+<text x="400" y="408" font-size="12" fill="#777" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">зеркало: С5</text>
+<text x="344" y="428" font-size="12" fill="#222" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">LH·HL·HH·HL·LH</text>
+<text x="344" y="642" font-size="12" fill="#222" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">восх.: рождений 95 · продолжений 11</text>
+<text x="344" y="658" font-size="12" fill="#777" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">нисх. С5: рождений 98 · продолжений 8</text>
+<rect x="630" y="380" width="284" height="284" rx="10" fill="#f7f7f7" stroke="#ddd"/>
+<line x1="658" y1="517.0943396226415" x2="694" y2="602.0" stroke="#bbb" stroke-dasharray="4,3" stroke-width="2"/>
+<line x1="652" y1="517.0943396226415" x2="884" y2="517.0943396226415" stroke="#ccc" stroke-dasharray="2,4"/>
+<polyline points="694,602.0 730,502.9433962264151 766,573.6981132075472 802,480.3018867924528 838,562.377358490566 874,457.66037735849056" fill="none" stroke="#1a9850" stroke-width="3"/>
+<circle cx="694" cy="602.0" r="4" fill="#222"/>
+<text x="694" y="620.0" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(0) LL</text>
+<circle cx="730" cy="502.9433962264151" r="4" fill="#1a9850"/>
+<text x="730" y="492.9433962264151" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(1) HH</text>
+<circle cx="766" cy="573.6981132075472" r="4" fill="#222"/>
+<text x="766" y="591.6981132075472" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(2) HL</text>
+<circle cx="802" cy="480.3018867924528" r="4" fill="#1a9850"/>
+<text x="802" y="470.3018867924528" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(3) HH</text>
+<circle cx="838" cy="562.377358490566" r="4" fill="#222"/>
+<text x="838" y="580.377358490566" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(4) HL</text>
+<circle cx="874" cy="457.66037735849056" r="4" fill="#1a9850"/>
+<text x="874" y="447.66037735849056" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(5) HH</text>
+<text x="644" y="408" font-size="24" fill="#1a9850" font-weight="bold" text-anchor="start" font-family="Arial, sans-serif">П6</text>
+<text x="700" y="408" font-size="12" fill="#777" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">зеркало: С6</text>
+<text x="644" y="428" font-size="12" fill="#222" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">HH·HL·HH·HL·HH</text>
+<text x="644" y="642" font-size="12" fill="#222" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">восх.: рождений 66 · продолжений 35</text>
+<text x="644" y="658" font-size="12" fill="#777" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">нисх. С6: рождений 60 · продолжений 14</text>
+<rect x="930" y="380" width="284" height="284" rx="10" fill="#f7f7f7" stroke="#ddd"/>
+<line x1="958" y1="517.0943396226415" x2="994" y2="602.0" stroke="#bbb" stroke-dasharray="4,3" stroke-width="2"/>
+<line x1="952" y1="517.0943396226415" x2="1184" y2="517.0943396226415" stroke="#ccc" stroke-dasharray="2,4"/>
+<polyline points="994,602.0 1030,502.9433962264151 1066,573.6981132075472 1102,480.3018867924528 1138,562.377358490566 1174,491.62264150943395" fill="none" stroke="#1a9850" stroke-width="3"/>
+<circle cx="994" cy="602.0" r="4" fill="#222"/>
+<text x="994" y="620.0" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(0) LL</text>
+<circle cx="1030" cy="502.9433962264151" r="4" fill="#1a9850"/>
+<text x="1030" y="492.9433962264151" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(1) HH</text>
+<circle cx="1066" cy="573.6981132075472" r="4" fill="#222"/>
+<text x="1066" y="591.6981132075472" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(2) HL</text>
+<circle cx="1102" cy="480.3018867924528" r="4" fill="#1a9850"/>
+<text x="1102" y="470.3018867924528" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(3) HH</text>
+<circle cx="1138" cy="562.377358490566" r="4" fill="#222"/>
+<text x="1138" y="580.377358490566" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(4) HL</text>
+<circle cx="1174" cy="491.62264150943395" r="4" fill="#1a9850"/>
+<text x="1174" y="481.62264150943395" font-size="11" fill="#d73027" font-weight="bold" text-anchor="middle" font-family="Arial, sans-serif">(5) LH</text>
+<text x="944" y="408" font-size="24" fill="#1a9850" font-weight="bold" text-anchor="start" font-family="Arial, sans-serif">П12</text>
+<text x="1000" y="408" font-size="12" fill="#777" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">зеркало: С12</text>
+<text x="944" y="428" font-size="12" fill="#222" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">HH·HL·HH·HL·LH</text>
+<text x="944" y="642" font-size="12" fill="#222" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">восх.: рождений 56 · продолжений 46</text>
+<text x="944" y="658" font-size="12" fill="#777" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">нисх. С12: рождений 52 · продолжений 23</text>
+<rect x="30" y="680" width="284" height="284" rx="10" fill="#f7f7f7" stroke="#ddd"/>
+<line x1="58" y1="817.0943396226415" x2="94" y2="902.0" stroke="#bbb" stroke-dasharray="4,3" stroke-width="2"/>
+<line x1="52" y1="817.0943396226415" x2="284" y2="817.0943396226415" stroke="#ccc" stroke-dasharray="2,4"/>
+<polyline points="94,902.0 130,802.9433962264151 166,873.6981132075472 202,814.2641509433962 238,862.377358490566 274,791.622641509434" fill="none" stroke="#1a9850" stroke-width="3"/>
+<circle cx="94" cy="902.0" r="4" fill="#222"/>
+<text x="94" y="920.0" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(0) LL</text>
+<circle cx="130" cy="802.9433962264151" r="4" fill="#1a9850"/>
+<text x="130" y="792.9433962264151" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(1) HH</text>
+<circle cx="166" cy="873.6981132075472" r="4" fill="#222"/>
+<text x="166" y="891.6981132075472" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(2) HL</text>
+<circle cx="202" cy="814.2641509433962" r="4" fill="#1a9850"/>
+<text x="202" y="804.2641509433962" font-size="11" fill="#d73027" font-weight="bold" text-anchor="middle" font-family="Arial, sans-serif">(3) LH</text>
+<circle cx="238" cy="862.377358490566" r="4" fill="#222"/>
+<text x="238" y="880.377358490566" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(4) HL</text>
+<circle cx="274" cy="791.622641509434" r="4" fill="#1a9850"/>
+<text x="274" y="781.622641509434" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(5) HH</text>
+<text x="44" y="708" font-size="24" fill="#1a9850" font-weight="bold" text-anchor="start" font-family="Arial, sans-serif">П16</text>
+<text x="100" y="708" font-size="12" fill="#777" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">зеркало: С16</text>
+<text x="44" y="728" font-size="12" fill="#222" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">HH·HL·LH·HL·HH</text>
+<text x="44" y="942" font-size="12" fill="#222" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">восх.: рождений 58 · продолжений 22</text>
+<text x="44" y="958" font-size="12" fill="#777" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">нисх. С16: рождений 72 · продолжений 22</text>
+<rect x="330" y="680" width="284" height="284" rx="10" fill="#f7f7f7" stroke="#ddd"/>
+<line x1="358" y1="817.0943396226415" x2="394" y2="902.0" stroke="#bbb" stroke-dasharray="4,3" stroke-width="2"/>
+<line x1="352" y1="817.0943396226415" x2="584" y2="817.0943396226415" stroke="#ccc" stroke-dasharray="2,4"/>
+<polyline points="394,902.0 430,831.2452830188679 466,873.6981132075472 502,842.566037735849 538,862.377358490566 574,819.9245283018868" fill="none" stroke="#1a9850" stroke-width="3"/>
+<circle cx="394" cy="902.0" r="4" fill="#222"/>
+<text x="394" y="920.0" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(0) LL</text>
+<circle cx="430" cy="831.2452830188679" r="4" fill="#1a9850"/>
+<text x="430" y="821.2452830188679" font-size="11" fill="#d73027" font-weight="bold" text-anchor="middle" font-family="Arial, sans-serif">(1) LH</text>
+<circle cx="466" cy="873.6981132075472" r="4" fill="#222"/>
+<text x="466" y="891.6981132075472" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(2) HL</text>
+<circle cx="502" cy="842.566037735849" r="4" fill="#1a9850"/>
+<text x="502" y="832.566037735849" font-size="11" fill="#d73027" font-weight="bold" text-anchor="middle" font-family="Arial, sans-serif">(3) LH</text>
+<circle cx="538" cy="862.377358490566" r="4" fill="#222"/>
+<text x="538" y="880.377358490566" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(4) HL</text>
+<circle cx="574" cy="819.9245283018868" r="4" fill="#1a9850"/>
+<text x="574" y="809.9245283018868" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(5) HH</text>
+<text x="344" y="708" font-size="24" fill="#1a9850" font-weight="bold" text-anchor="start" font-family="Arial, sans-serif">П20</text>
+<text x="400" y="708" font-size="12" fill="#777" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">зеркало: С20</text>
+<text x="344" y="728" font-size="12" fill="#222" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">LH·HL·LH·HL·HH</text>
+<text x="344" y="942" font-size="12" fill="#222" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">восх.: рождений 65 · продолжений 10</text>
+<text x="344" y="958" font-size="12" fill="#777" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">нисх. С20: рождений 65 · продолжений 2</text>
+<rect x="630" y="680" width="284" height="284" rx="10" fill="#f7f7f7" stroke="#ddd"/>
+<line x1="658" y1="817.0943396226415" x2="694" y2="902.0" stroke="#bbb" stroke-dasharray="4,3" stroke-width="2"/>
+<line x1="652" y1="817.0943396226415" x2="884" y2="817.0943396226415" stroke="#ccc" stroke-dasharray="2,4"/>
+<polyline points="694,902.0 730,802.9433962264151 766,873.6981132075472 802,814.2641509433962 838,862.377358490566 874,825.5849056603773" fill="none" stroke="#1a9850" stroke-width="3"/>
+<circle cx="694" cy="902.0" r="4" fill="#222"/>
+<text x="694" y="920.0" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(0) LL</text>
+<circle cx="730" cy="802.9433962264151" r="4" fill="#1a9850"/>
+<text x="730" y="792.9433962264151" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(1) HH</text>
+<circle cx="766" cy="873.6981132075472" r="4" fill="#222"/>
+<text x="766" y="891.6981132075472" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(2) HL</text>
+<circle cx="802" cy="814.2641509433962" r="4" fill="#1a9850"/>
+<text x="802" y="804.2641509433962" font-size="11" fill="#d73027" font-weight="bold" text-anchor="middle" font-family="Arial, sans-serif">(3) LH</text>
+<circle cx="838" cy="862.377358490566" r="4" fill="#222"/>
+<text x="838" y="880.377358490566" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(4) HL</text>
+<circle cx="874" cy="825.5849056603773" r="4" fill="#1a9850"/>
+<text x="874" y="815.5849056603773" font-size="11" fill="#d73027" font-weight="bold" text-anchor="middle" font-family="Arial, sans-serif">(5) LH</text>
+<text x="644" y="708" font-size="24" fill="#1a9850" font-weight="bold" text-anchor="start" font-family="Arial, sans-serif">П25</text>
+<text x="700" y="708" font-size="12" fill="#777" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">зеркало: С25</text>
+<text x="644" y="728" font-size="12" fill="#222" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">HH·HL·LH·HL·LH</text>
+<text x="644" y="942" font-size="12" fill="#222" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">восх.: рождений 25 · продолжений 6</text>
+<text x="644" y="958" font-size="12" fill="#777" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">нисх. С25: рождений 25 · продолжений 9</text>
+<rect x="930" y="680" width="284" height="284" rx="10" fill="#f7f7f7" stroke="#ddd"/>
+<line x1="958" y1="817.0943396226415" x2="994" y2="902.0" stroke="#bbb" stroke-dasharray="4,3" stroke-width="2"/>
+<line x1="952" y1="817.0943396226415" x2="1184" y2="817.0943396226415" stroke="#ccc" stroke-dasharray="2,4"/>
+<polyline points="994,902.0 1030,831.2452830188679 1066,873.6981132075472 1102,842.566037735849 1138,862.377358490566 1174,853.8867924528302" fill="none" stroke="#1a9850" stroke-width="3"/>
+<circle cx="994" cy="902.0" r="4" fill="#222"/>
+<text x="994" y="920.0" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(0) LL</text>
+<circle cx="1030" cy="831.2452830188679" r="4" fill="#1a9850"/>
+<text x="1030" y="821.2452830188679" font-size="11" fill="#d73027" font-weight="bold" text-anchor="middle" font-family="Arial, sans-serif">(1) LH</text>
+<circle cx="1066" cy="873.6981132075472" r="4" fill="#222"/>
+<text x="1066" y="891.6981132075472" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(2) HL</text>
+<circle cx="1102" cy="842.566037735849" r="4" fill="#1a9850"/>
+<text x="1102" y="832.566037735849" font-size="11" fill="#d73027" font-weight="bold" text-anchor="middle" font-family="Arial, sans-serif">(3) LH</text>
+<circle cx="1138" cy="862.377358490566" r="4" fill="#222"/>
+<text x="1138" y="880.377358490566" font-size="11" fill="#222" font-weight="normal" text-anchor="middle" font-family="Arial, sans-serif">(4) HL</text>
+<circle cx="1174" cy="853.8867924528302" r="4" fill="#1a9850"/>
+<text x="1174" y="843.8867924528302" font-size="11" fill="#d73027" font-weight="bold" text-anchor="middle" font-family="Arial, sans-serif">(5) LH</text>
+<text x="944" y="708" font-size="24" fill="#1a9850" font-weight="bold" text-anchor="start" font-family="Arial, sans-serif">П29</text>
+<text x="1000" y="708" font-size="12" fill="#777" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">зеркало: С29</text>
+<text x="944" y="728" font-size="12" fill="#222" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">LH·HL·LH·HL·LH</text>
+<text x="944" y="942" font-size="12" fill="#222" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">восх.: рождений 25 · продолжений 0</text>
+<text x="944" y="958" font-size="12" fill="#777" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">нисх. С29: рождений 26 · продолжений 3</text>
+<text x="30" y="990" font-size="16" fill="#222" font-weight="bold" text-anchor="start" font-family="Arial, sans-serif">КАК ЧИТАТЬ СТРОКУ «посл-ть» В ТАБЛО</text>
+<text x="50" y="1020" font-size="15" fill="#777" font-weight="bold" text-anchor="start" font-family="Arial, sans-serif">П16/П25</text>
+<text x="200" y="1020" font-size="14" fill="#222" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">счёт идёт, нарисовано HH·HL·LH — подходят две формы</text>
+<text x="50" y="1046" font-size="15" fill="#777" font-weight="bold" text-anchor="start" font-family="Arial, sans-serif">4 вар.</text>
+<text x="200" y="1046" font-size="14" fill="#222" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">нарисована только (1), подходят четыре формы и больше</text>
+<text x="50" y="1072" font-size="15" fill="#1a9850" font-weight="bold" text-anchor="start" font-family="Arial, sans-serif">П20</text>
+<text x="200" y="1072" font-size="14" fill="#222" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">счёт дошёл до (5) — форма одна, имя цветом тренда</text>
+<text x="50" y="1098" font-size="15" fill="#e08214" font-weight="bold" text-anchor="start" font-family="Arial, sans-serif">вне справ.</text>
+<text x="200" y="1098" font-size="14" fill="#222" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">низ вышел LL — ни одна из восьми не подходит; это «манипуляция»</text>
+<text x="50" y="1124" font-size="15" fill="#777" font-weight="bold" text-anchor="start" font-family="Arial, sans-serif">—</text>
+<text x="200" y="1124" font-size="14" fill="#222" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">тренд не жив и не в архиве — показывать нечего</text>
+<text x="30" y="1164" font-size="12" fill="#777" font-weight="normal" text-anchor="start" font-family="Arial, sans-serif">Справочник лежит в коде: PAT (формы), PNM / SNM (имена), PFR / SFR (частоты). Почему номера именно 1, 5, 6, 12, 16, 20, 25, 29 — в коде не записано, достались от прежней нумерации.</text>
+</svg>
