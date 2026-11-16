@@ -1,9 +1,29 @@
 //@version=5
 // ═══════════════════════════════════════════════════════════════════
-// МЕТКИ 2/2 · v3.43     ОДИН СЛОЙ, ВСЕ ПРАВИЛА
+// МЕТКИ 2/2 · v3.44     ОДИН СЛОЙ, ВСЕ ПРАВИЛА
 // 12.10.2026
 //
 // Номера читаются «три-двадцать восемь», «три-двадцать девять».
+//
+// ── v3.44: СЧЁТ БЕЗ ОПОЗДАНИЯ И БЛЕДНАЯ МЕТКА ──
+//
+// 16.11.2026, его слово «да, делай обе сразу». Обе правки — про живой
+// край графика. ИСТОРИЯ НЕ МЕНЯЕТСЯ НИ НА БАР.
+//
+// ① З77. Тренд и счёт считались только на ЗАКРЫТОЙ свече, а сломы,
+// свеча и сетка — на каждом тике. В симуляторе 8 авг 03:00 табло
+// показало новый низ в сломах и прежний счёт (1) — на бар позади.
+// Теперь движок идёт и на незакрытой свече: ручка «Счёт уже на
+// незакрытой свече», выключить — будет как было. На истории все свечи
+// закрыты, значит числа движка, реплика и замеры те же.
+//
+// ② З78. Точка счёта подтверждается через ДВА бара. Бледная метка
+// «(N) предв.» встаёт через ОДИН — его «да». Устоит — станет обычной,
+// нет — пропадёт. В табло — приписка в строке «счёт»; уровень,
+// «рубится», смерть и сетка ждут сплошную — тоже его «да». Движок
+// бледную не читает: ни одна цепочка и ни один массив тренда не пишутся.
+//
+// Прежняя рабочая — v3.43, сумма bc2a843c06910552c98f6a28c4ca0a7c.
 //
 // ── v3.43: ПРАВИЛО ФОРМЫ ТРИГГЕРНОЙ СВЕЧИ ПО ЕГО РАЗМЕТКЕ ──
 //
@@ -1631,7 +1651,7 @@
 //   python3 research/sverka.py indicator/ЭТАЛОН_v2.3.pine indicator/metki_2x2.pine
 // Исчезнувшее в ней — ровно список выше, и ничего сверх него.
 // ═══════════════════════════════════════════════════════════════════
-indicator("Метки 2/2 · v3.43", overlay = true, max_lines_count = 500, max_labels_count = 500, max_bars_back = 3000)
+indicator("Метки 2/2 · v3.44", overlay = true, max_lines_count = 500, max_labels_count = 500, max_bars_back = 3000)
 
 // ═══════════════════════════════════════════════════════════════════
 //                        ПОЛОВИНА  ·  ВИД
@@ -1663,6 +1683,10 @@ trCntSw = input.string("весь, набранный в фоне", "Счёт п�
 swMark  = input.bool(true, "Отмечать, где авто передумало", group = g4)
 slNum   = input.bool(true, "Номера серии сломов", group = g4)
 trBirth = input.bool(false, "Показывать рождение тренда", group = g4)
+// v3.44 · З77 и З78. Обе по умолчанию ВКЛ, его слово 16.11.2026.
+// Выключить — индикатор ведёт себя ровно как v3.43
+trLiveBar = input.bool(true, "Счёт уже на незакрытой свече", group = g4)
+trPale    = input.bool(true, "Бледная метка за бар до подтверждения", group = g4)
 
 // ── РАЗМЕР ПОДПИСЕЙ НА ГРАФИКЕ. З58, причина B, 28.10.2026 ──
 //
@@ -2906,7 +2930,13 @@ f_trend(_i, _P, _B, _H, _L, _nwN, _fr, _o, _h, _l, _c, _leg, _depth, _brk) =>
 ph2 = ta.pivothigh(high, 2, 2)
 pl2 = ta.pivotlow (low,  2, 2)
 
-if barstate.isconfirmed
+// v3.44 · З77. Был только `barstate.isconfirmed`: на незакрытой свече
+// движок стоял, а сломы и свеча уже считались — табло расходилось само с
+// собой на бар. С ручкой движок идёт и на незакрытой свече. Пайн на каждом
+// тике откатывает `var` и массивы к закрытию прошлой свечи, поэтому
+// повторный счёт ничего не копит. На истории все свечи закрыты — там
+// не меняется ничего
+if barstate.isconfirmed or trLiveBar
     // nw2 — СКОЛЬКО новых колен родилось на этом баре: 0, 1 или 2. Счёт
     // двигается по коленам, а не по сырым пивотам: слияние пивота в уже
     // стоящее колено счёт не двигает.
@@ -3819,6 +3849,108 @@ if rzMt and srez
     label.new(bar_index, low, "⟡", style = label.style_label_up, color = color.new(rzCol, 20), textcolor = color.white, size = rSz, yloc = yloc.belowbar)
 
 
+// ══════════════ БЛЕДНАЯ МЕТКА СЧЁТА · v3.44, З78 ══════════════
+// Его слово 16.11.2026: «может можно как то сделать чтобы он показывал
+// бледно… а потом если что перескакивал». Согласовано: бледная — через
+// ОДИН бар после крайней точки, сплошная — через два, как было.
+//
+// ДВИЖОК НЕ ТРОНУТ: здесь только ЧИТАЮТСЯ цепочка P2 и массивы тренда.
+//
+// Кандидат — пивот глубины 2 слева и 1 справа: та же проверка, что у
+// колена, без второго бара справа. Не заберёт следующая свеча его цену —
+// станет сплошным коленом
+pl21 = ta.pivotlow (low,  2, 1)
+ph21 = ta.pivothigh(high, 2, 1)
+
+// Номер, который получил бы кандидат у тренда с нулём на баре _zB.
+// _dn = false — восходящий (ноль — низ), true — нисходящий (ноль — вершина).
+// −1 — номера нет: кандидат хуже стоящего колена, счёт уже за (5), или
+// он коснулся бы нуля — тогда это не точка, а конец тренда.
+// Колено той же стороны, но лучше, ПЕРЕЕЗЖАЕТ — бледная встаёт с ЕГО номером.
+//
+// _hp — вершина-кандидат на ТОМ ЖЕ баре, что и низ-кандидат (свеча-
+// накрышка), иначе na. Движок кладёт сначала вершину, потом низ, значит
+// низ встаёт уже ПОСЛЕ неё. Без этого на накрышке номер низа выходил
+// неверным — поймано сверкой с репликой 16.11.2026
+f_paleK(_P, _B, _H, _zB, _dn, _cp, _chi, _hp) =>
+    int pvRes = -1
+    int pvN = array.size(_P)
+    int pvZx = -1
+    if _zB >= 0 and pvN > 0
+        for q = 0 to pvN - 1
+            if array.get(_B, q) >= _zB and array.get(_H, q) == _dn
+                pvZx := q
+                break
+    if pvZx >= 0
+        float pvZp = array.get(_P, pvZx)
+        bool pvOk = true
+        if _chi == _dn
+            pvOk := _dn ? _cp < pvZp : _cp > pvZp
+        // накрышка: вершина того же бара у нисходящего не должна задеть ноль
+        bool pvHf = not _chi and not na(_hp)
+        if pvHf and _dn
+            if _hp >= pvZp
+                pvOk := false
+        if pvOk and pvHf
+            // вершина легла первой: переехала / поглотилась — колен столько
+            // же, встала новой — на одно больше. Низ после неё — всегда новое
+            int pvNe = array.get(_H, pvN - 1) ? pvN : pvN + 1
+            int pvKh = pvNe - pvZx
+            if pvKh >= 1 and pvKh <= 5
+                pvRes := pvKh
+        else if pvOk
+            if array.get(_H, pvN - 1) == _chi
+                float pvOld = array.get(_P, pvN - 1)
+                bool pvBt = _chi ? _cp > pvOld : _cp < pvOld
+                int pvKm = pvN - 1 - pvZx
+                if pvBt and pvKm >= 1 and pvKm <= 5
+                    pvRes := pvKm
+            else
+                int pvKn = pvN - pvZx
+                if pvKn >= 1 and pvKn <= 5
+                    pvRes := pvKn
+    pvRes
+
+// Цепочка у обоих направлений ОДНА — P2, настоящие цены. Отличается только
+// ноль, от которого считается номер
+int pkUL = -1
+int pkUH = -1
+int pkDL = -1
+int pkDH = -1
+bool pvU = false
+bool pvD = false
+if barstate.islast and trPale
+    int pvRU = not trOn ? 0 : array.get(tTR, 0) == ST_LIVE ? 2 : array.get(tTR, 0) == ST_MAY ? 1 : 0
+    int pvRD = not trDn ? 0 : array.get(tTR, 1) == ST_LIVE ? 2 : array.get(tTR, 1) == ST_MAY ? 1 : 0
+    if pvRU > 0
+        if not na(pl21)
+            pkUL := f_paleK(P2, B2, H2, array.get(tZB, 0), false, low[1], false, ph21)
+        if not na(ph21)
+            pkUH := f_paleK(P2, B2, H2, array.get(tZB, 0), false, high[1], true, float(na))
+    if pvRD > 0
+        if not na(pl21)
+            pkDL := f_paleK(P2, B2, H2, array.get(tZB, 1), true, low[1], false, ph21)
+        if not na(ph21)
+            pkDH := f_paleK(P2, B2, H2, array.get(tZB, 1), true, high[1], true, float(na))
+    // КОГО ВИДНО НА ГРАФИКЕ — то же правило, что в блоке отрисовки ниже
+    if trWho == "оба, пока у обоих есть счёт"
+        pvU := pvRU > 0
+        pvD := pvRD > 0
+    else if trWho == "только восходящий"
+        pvU := pvRU > 0
+    else if trWho == "только нисходящий"
+        pvD := pvRD > 0
+    else
+        if pvRU > pvRD
+            pvU := true
+        else if pvRD > pvRU
+            pvD := true
+        else if pvRU > 0
+            if array.get(tZB, 1) > array.get(tZB, 0)
+                pvD := true
+            else
+                pvU := true
+
 // ══════════════ РИСУЕМ ══════════════
 if barstate.islast
     while array.size(LNS) > 0
@@ -4206,6 +4338,30 @@ if barstate.islast
     // предварительного колена не бывает, и значит она просто повторяет
     // строку «счёт». Уйдёт, если владелец скажет.
 
+// ── БЛЕДНАЯ МЕТКА НА ГРАФИКЕ · v3.44, З78 ──
+// Отдельным блоком нарочно: у одного `if` есть предел длины (З46).
+// Метки кладутся в LBS — блок «РИСУЕМ» сотрёт их на следующем тике
+if barstate.islast and trPale and labOn and trNum
+    bool pvTwo = pvU and pvD
+    for pvS = 0 to 1
+        bool isH = pvS == 1
+        bool pvHas = isH ? not na(ph21) : not na(pl21)
+        if pvHas
+            int pvKU = isH ? pkUH : pkUL
+            int pvKD = isH ? pkDH : pkDL
+            bool pvSU = pvU and pvKU >= 0
+            bool pvSD = pvD and pvKD >= 0
+            if pvSU or pvSD
+                string pvTxt = ""
+                if pvSU
+                    pvTxt := "(" + str.tostring(pvKU) + ")" + (pvTwo ? "↑" : "") + " "
+                if pvSD
+                    pvTxt := pvTxt + "(" + str.tostring(pvKD) + ")" + (pvTwo ? "↓" : "") + " "
+                pvTxt := pvTxt + "предв."
+                color pvCol = pvSU and pvSD ? color.new(color.gray, 40) : color.new(pvSU ? cTrUp : cTrDn, 60)
+                float pvY = isH ? high[1] : low[1]
+                array.push(LBS, label.new(bar_index - 1, pvY, pvTxt, style = isH ? label.style_label_down : label.style_label_up, color = color.new(color.black, 100), textcolor = pvCol, size = szS, tooltip = "Бледная: точка видна через один бар, подтвердится через два. Не устоит — пропадёт. Уровень, смерть и сетка её не видят."))
+
 // ═══════════════════════════════════════════════════════════════════
 //                  ВТОРОЙ БЛОК «ПОСЛЕДНИЙ БАР» — ТАБЛО
 // ═══════════════════════════════════════════════════════════════════
@@ -4363,6 +4519,10 @@ if barstate.islast
         table.cell(TBL, 1, 2, f_stWord(0, false), text_color = cG, text_size = tSz)
         int cntRaw = array.get(tCNT, 0)
         string cntTxt = sU == ST_ARC ? "(5)/5 ✓" : liv ? "(" + str.tostring(cntRaw) + ")/5" : "—"
+        // v3.44, З78. Бледная точка — приписка в этой же строке, новой строки нет
+        int pkU = pkUL >= 0 ? pkUL : pkUH
+        if liv and pkU >= 0
+            cntTxt := cntTxt + " · (" + str.tostring(pkU) + ") предв."
         table.cell(TBL, 1, 3, cntTxt, text_color = cG, text_size = tSz)
         // З52. Строка считает ЗАВЕРШЁННЫЕ СЧЁТА, а не продолжения.
         // tRST растёт только при продолжении, поэтому счёт, дошедший
@@ -4472,7 +4632,12 @@ if barstate.islast
         color  cD   = f_stColor(1, true)
         table.cell(TBL, 2, 2, f_stWord(1, true), text_color = cD, text_size = tSz)
         int cntRawD = array.get(tCNT, 1)
-        table.cell(TBL, 2, 3, sD == ST_ARC ? "(5)/5 ✓" : livD ? "(" + str.tostring(cntRawD) + ")/5" : "—", text_color = cD, text_size = tSz)
+        string cntTxtD = sD == ST_ARC ? "(5)/5 ✓" : livD ? "(" + str.tostring(cntRawD) + ")/5" : "—"
+        // v3.44, З78 — зеркало приписки восходящего
+        int pkD = pkDL >= 0 ? pkDL : pkDH
+        if livD and pkD >= 0
+            cntTxtD := cntTxtD + " · (" + str.tostring(pkD) + ") предв."
+        table.cell(TBL, 2, 3, cntTxtD, text_color = cD, text_size = tSz)
         int fullD = array.get(tRST, 1) + (array.get(tMAX, 1) >= 5 ? 1 : 0)
         table.cell(TBL, 2, 10, livD or sD == ST_ARC ? str.tostring(fullD) : "—", text_color = color.gray, text_size = tSz)
         table.cell(TBL, 2, 6, not livD ? "—" : na(lvD) ? "нет" : (array.get(tLHL, 1) ? "LH " : "HH ") + str.tostring(-lvD, format.mintick), text_color = livD and not na(lvD) ? (array.get(tLHL, 1) ? cTrDn : color.new(cTrDn, 45)) : color.gray, text_size = tSz)
