@@ -1,9 +1,24 @@
 //@version=5
 // ═══════════════════════════════════════════════════════════════════
-// МЕТКИ 2/2 · v3.44     ОДИН СЛОЙ, ВСЕ ПРАВИЛА
+// МЕТКИ 2/2 · v3.45     ОДИН СЛОЙ, ВСЕ ПРАВИЛА
 // 12.10.2026
 //
 // Номера читаются «три-двадцать восемь», «три-двадцать девять».
+//
+// ── v3.45: НОВАЯ ТАБЛИЦА ВХОД · РИСК · СТАТИСТИКА ──
+//
+// 21.11.2026, его слово «да, пиши v3.45». Одна правка по сентябрьскому
+// списку (ПЛАН-РАБОТ.md). Движок 2/2 НЕ тронут: новое только читает.
+//   · вторая таблица: сделка (лонг и шорт) · за и против · статистика —
+//     ПРАВИЛА-РИСК.md РИ7.9–РИ7.20;
+//   · зелёная подсветка вместо жёлтой, если свеча дошла до входа — З73;
+//   · отменённая сетка переходит к другому тренду — Ф6.6, З79;
+//   · сетку гасит и тень в два бара до её появления — З81;
+//   · «серия и уровни»: класс перевеса и цвет по нему, без оранжевого —
+//     СЛ6.3, Н64, Н65;
+//   · табло короче: шесть пар строк свечи и сетки сведены в шесть строк,
+//     «фитили: разница» — только при старом правиле — З82;
+//   · настройки фона и цвета букв табло — З68.
 //
 // ── v3.44: СЧЁТ БЕЗ ОПОЗДАНИЯ И БЛЕДНАЯ МЕТКА ──
 //
@@ -1651,7 +1666,7 @@
 //   python3 research/sverka.py indicator/ЭТАЛОН_v2.3.pine indicator/metki_2x2.pine
 // Исчезнувшее в ней — ровно список выше, и ничего сверх него.
 // ═══════════════════════════════════════════════════════════════════
-indicator("Метки 2/2 · v3.44", overlay = true, max_lines_count = 500, max_labels_count = 500, max_bars_back = 3000)
+indicator("Метки 2/2 · v3.45", overlay = true, max_lines_count = 500, max_labels_count = 500, max_bars_back = 3000)
 
 // ═══════════════════════════════════════════════════════════════════
 //                        ПОЛОВИНА  ·  ВИД
@@ -1713,6 +1728,8 @@ tblSize = input.string("мелкий", "Размер", options = ["мелкий"
 blkUp   = input.bool(true, "восходящий", inline = "blk", group = g5)
 blkDn   = input.bool(true, "нисходящий", inline = "blk", group = g5)
 blkSl   = input.bool(true, "сломы",      inline = "blk", group = g5)
+tbBg    = input.color(color.new(color.black, 100), "Фон табло", group = g5)
+tbTx    = input.color(color.gray, "Цвет букв табло", group = g5)
 
 g6 = "⑥ ЦВЕТА"
 c2H    = input.color(#7e57c2, "Вершина / низ слоя", inline = "c2", group = g6)
@@ -1769,6 +1786,8 @@ dnBrk   = input.string("выше вершины на 0.20 колена", "Зап
 g9 = "⑧ ПРАВИЛА СЛОМОВ"
 slOn    = input.bool(true, "Считать сломы", group = g9)
 slNoCap = input.bool(true, "Счёт без потолка", group = g9)
+perYav  = input.float(0.3, "Перевес «явный»: ближнее/дальнее ниже", minval = 0.0, maxval = 1.0, step = 0.05, group = g9)
+perRov  = input.float(0.8, "Перевес «поровну»: от", minval = 0.0, maxval = 1.0, step = 0.05, group = g9)
 
 g10 = "⑨ СТАРШИЕ ТФ"
 hOn    = input.bool(true, "Показывать", inline = "h", group = g10)
@@ -1874,6 +1893,20 @@ fiTbl  = input.bool(true, "Показывать строки в табло", gro
 g13 = "⑩ ТРИГГЕРНАЯ СВЕЧА · ТАБЛО"
 tbOn  = input.bool(true,   "Показывать строки свечи", group = g13, tooltip = "Одиннадцать строк внизу табло, сразу после блока «сломы». Угол экрана и размер текста — общие, они в ⑤ ТАБЛО.")
 srOkn = input.int(500,     "Средняя высота за сколько баров", minval = 10, maxval = 2000, group = g13, tooltip = "Только для ТАБЛО, на отбор свечей не влияет. Показывает, какой высоты свеча на этом инструменте и таймфрейме вообще бывает, и во сколько раз потолок её больше. По этой строке удобно выставлять потолок при переходе на другой таймфрейм.")
+
+g15 = "⑫ ВХОД · РИСК · СТАТИСТИКА"
+vxOn   = input.bool(true, "Таблица вход · риск · статистика", group = g15)
+vxPos  = input.string("справа внизу", "Угол экрана", options = ["справа вверху", "справа внизу", "слева вверху", "слева внизу"], group = g15)
+vxB1   = input.bool(true, "сделка", inline = "vx", group = g15)
+vxB2   = input.bool(true, "за и против", inline = "vx", group = g15)
+vxB3   = input.bool(true, "статистика", inline = "vx", group = g15)
+stepL  = input.float(1.0, "Шаг круглого уровня для стопа", minval = 0.0001, step = 0.01, group = g15)
+offS   = input.float(0.15, "Отступ стопа за уровень", minval = 0.0, step = 0.01, group = g15)
+tpOff  = input.float(0.02, "Тейк не доходя до вершины", minval = 0.0, step = 0.01, group = g15)
+tzH    = input.int(3, "Часовой пояс, часов от UTC", minval = -12, maxval = 14, group = g15)
+zelOn  = input.bool(true, "Зелёная свеча — дошла до входа", group = g15)
+zelCol = input.color(color.new(color.green, 0), "Цвет зелёной", group = g15)
+zelPrz = input.int(75, "Прозрачность зелёной", minval = 0, maxval = 95, group = g15)
 
 
 // ══════════════ ПРОИЗВОДНЫЕ ОТ НАСТРОЕК ══════════════
@@ -2252,7 +2285,7 @@ f_swapSeq(_s) =>
 // Раньше его три строки стояли вплотную под нисходящим и читались как
 // его продолжение — отсюда вопрос владельца «есть отличия между
 // трендами по строкам». Отличий в подписях нет, это был третий блок
-var table TBL = table.new(tblPos == "справа вверху" ? position.top_right : tblPos == "справа внизу" ? position.bottom_right : tblPos == "слева вверху" ? position.top_left : position.bottom_left, 3, 39, border_width = 1, frame_width = 1, frame_color = color.new(color.gray, 60), border_color = color.new(color.gray, 80))
+var table TBL = table.new(tblPos == "справа вверху" ? position.top_right : tblPos == "справа внизу" ? position.bottom_right : tblPos == "слева вверху" ? position.top_left : position.bottom_left, 3, 39, bgcolor = tbBg, border_width = 1, frame_width = 1, frame_color = color.new(color.gray, 60), border_color = color.new(color.gray, 80))
 // ── З62 · РАСТЯЖКА НА ДВА СТОЛБЦА ──
 // Его слово 31.10.2026 после v3.35 на графике: «первая строка должна
 // быть на два столбика и раздел сломы тоже должен быть не в одном
@@ -2286,6 +2319,7 @@ cZag = color.new(color.gray, 70)
 cOk  = color.new(color.green, 70)
 cNet = color.new(color.gray, 85)
 tSz = tblSize == "мелкий" ? size.tiny : size.small
+cTx = tbTx
 // последнее рождение слоя _i в истории, -1 если нет
 f_lastG(_i) =>
     int r = -1
@@ -3270,6 +3304,35 @@ v03 = f_purgeL(V2P, V2B, V2H, V2L)
 // известно через два бара после пивота, значит и сетка встаёт через
 // два бара после своей точки. Это не свойство Фибоначчи, а свойство
 // слоя, и лечить его тут нечем.
+// ── v3.45 · З81 · ТЕНЬ ДО ПОЯВЛЕНИЯ СЕТКИ ──
+// Ф4.2: любой выход за 0,79 гасит сетку. Сетку видно через два бара после
+// её вершины (задержка слоя 2/2), и эти бары раньше не проверялись. Когда
+// у сетки новая вершина — досматриваем бары после неё.
+var int[] tFBchk = array.new_int(2, -1)
+for fz = 0 to 1
+    int fzB = array.get(tFB, fz)
+    if array.get(tFBp, fz) >= 0 and fzB >= 0
+        if fzB != array.get(tFBchk, fz)
+            array.set(tFBchk, fz, fzB)
+            float fzN = array.get(tFP, fz)
+            float fzP = array.get(tFPp, fz)
+            if not array.get(tFKill, fz)
+                if not na(fzN)
+                    if not na(fzP)
+                        float fzSg = fz >= 1 ? -1.0 : 1.0
+                        float fzNr = fzN * fzSg
+                        float fzPr = fzP * fzSg
+                        float fz79 = fzNr + 0.79 * (fzPr - fzNr)
+                        int fzK = math.min(bar_index - fzB - 1, 60)
+                        if fzK >= 0
+                            for q = 0 to fzK
+                                if fzNr > fzPr
+                                    if low[q] < fz79
+                                        array.set(tFKill, fz, true)
+                                else
+                                    if high[q] > fz79
+                                        array.set(tFKill, fz, true)
+
 for fw = 0 to 1
     int    fwB = array.get(tFBp, fw)
     float  fwN = array.get(tFP,  fw)
@@ -3653,7 +3716,7 @@ f_stWord(_i, _dn) =>
 f_stColor(_i, _dn) =>
     s = array.get(tTR, _i)
     color cDir = _dn ? cTrDn : cTrUp
-    s == ST_LIVE ? cDir : s == ST_MAY ? color.new(cDir, 45) : s == ST_ARC ? color.new(cDir, 45) : s == ST_DEAD ? (_dn ? cTrUp : cTrDie) : color.gray
+    s == ST_LIVE ? cDir : s == ST_MAY ? color.new(cDir, 45) : s == ST_ARC ? color.new(cDir, 45) : s == ST_DEAD ? (_dn ? cTrUp : cTrDie) : cTx
 
 // подпись у линии уровня: полная, короткая или никакой (З7)
 f_lvTxt(_full, _short) =>
@@ -3836,8 +3899,6 @@ if barstate.isconfirmed
         nSrez := nSrez + 1
 
 // ── ГРАФИК ──
-bgcolor(trig and svOn ? color.new(svCol, svPrz) : na, title = "Подсветка триггерной свечи")
-bgcolor(srez and rzOn ? color.new(rzCol, rzPrz) : na, title = "Подсветка срезанных размером")
 
 mSz = mtSz == "Крошечный" ? size.tiny : mtSz == "Мелкий" ? size.small : mtSz == "Крупный" ? size.large : size.normal
 if mtOn and trig
@@ -3950,6 +4011,563 @@ if barstate.islast and trPale
                 pvD := true
             else
                 pvU := true
+
+// ══════════════ v3.45 · ВХОД · РИСК · СТАТИСТИКА — РАСЧЁТ ══════════════
+// Его слово 21.11.2026 «да, пиши v3.45». Правила — его словами: свод
+// ПРАВИЛА-РИСК.md РИ7.9–РИ7.20, ПРАВИЛА-ФИБО.md Ф1.6 и Ф6.6, СЛ6.3.
+// Таблица СЧИТАЕТ И ПОКАЗЫВАЕТ, решение — его (РИ7.9). Движок 2/2 этот
+// раздел НЕ ТРОГАЕТ: только читает массивы тренда, сломов и сетки и
+// пишет в СВОИ массивы. Считается только на ЗАКРЫТОЙ свече.
+
+// ── ряды табло свечи и сетки после З82: шесть пар сведены в шесть строк ──
+int SV0   = 19
+int SVraz = oldMode ? 21 : -1
+int SVf   = oldMode ? 22 : 21
+int SVl   = SVf + 4
+int FI0   = SVl + 1
+
+// ── кто кого застал при рождении: пункт 2 листа, А15 ──
+var int[] tBrC = array.new_int(2, -9)
+var int[] tBrS = array.new_int(2, 0)
+var int[] tBrB = array.new_int(2, -1)
+for bi = 0 to 1
+    if array.get(tBB, bi) == bar_index
+        if array.get(tBrB, bi) != bar_index
+            array.set(tBrB, bi, bar_index)
+            array.set(tBrC, bi, array.get(tCNT, 1 - bi))
+            array.set(tBrS, bi, array.get(tTR, 1 - bi))
+
+// ── вершины счёта для тейка: ТС8.10, А11. Сплошные, (0) тоже, вершина
+// умершего тренда тоже; держатся, пока цена их не тронула ──
+var float[] CPP = array.new_float()
+var bool[]  CPH = array.new_bool()
+
+f_cpAdd(_p, _h) =>
+    bool have = false
+    int n = array.size(CPP)
+    if n > 0
+        for k = 0 to n - 1
+            if array.get(CPH, k) == _h
+                if math.abs(array.get(CPP, k) - _p) <= syminfo.mintick
+                    have := true
+    if not have
+        if f_alive(V2P, _p)
+            array.push(CPP, _p)
+            array.push(CPH, _h)
+            if array.size(CPP) > 400
+                array.shift(CPP)
+                array.shift(CPH)
+    0
+
+f_cpTail(_P, _B, _H, _i) =>
+    int s  = array.get(tTR, _i)
+    int zb = array.get(tZB, _i)
+    int n  = array.size(_P)
+    if (s == ST_MAY or s == ST_LIVE) and zb >= 0 and n > 0
+        int zi = -1
+        int kLo = math.max(0, n - 12)
+        for k = n - 1 to kLo
+            if array.get(_B, k) >= zb
+                if not array.get(_H, k)
+                    zi := k
+        if zi >= 0
+            int kHi = math.min(zi + 5, n - 1)
+            for k = zi to kHi
+                float pr = array.get(_P, k)
+                bool  hi = array.get(_H, k)
+                cpa = f_cpAdd(_i >= 1 ? -pr : pr, _i >= 1 ? not hi : hi)
+    0
+
+if barstate.isconfirmed
+    int cpi = 0
+    while cpi < array.size(CPP)
+        float cpv = array.get(CPP, cpi)
+        bool cpDead = array.get(CPH, cpi) ? high >= cpv : low <= cpv
+        if cpDead
+            array.remove(CPP, cpi)
+            array.remove(CPH, cpi)
+        else
+            cpi := cpi + 1
+    if trOn
+        cpq1 = f_cpTail(P2, B2, H2, 0)
+    if trDn
+        cpq2 = f_cpTail(P2n, B2n, H2n, 1)
+
+f_tpFind(_long, _e) =>
+    float best = na
+    int n = array.size(CPP)
+    if n > 0
+        for k = 0 to n - 1
+            float p = array.get(CPP, k)
+            bool  h = array.get(CPH, k)
+            if _long and h
+                if p - tpOff > _e
+                    if na(best)
+                        best := p
+                    else if p < best
+                        best := p
+            if not _long and not h
+                if p + tpOff < _e
+                    if na(best)
+                        best := p
+                    else if p > best
+                        best := p
+    best
+
+// ── перевес уровней по ЗАКРЫТОЙ свече: СЛ6.3, Н64 ──
+var string perCls = ""
+var int    perSd  = 0
+if barstate.isconfirmed
+    [pcU, pcD] = f_nearest(V2P, V2H)
+    perCls := ""
+    perSd  := 0
+    if not na(pcU)
+        if not na(pcD)
+            float pdu = pcU - close
+            float pdd = close - pcD
+            if pdu > 0 and pdd > 0
+                perSd := pdu < pdd ? 1 : -1
+                float prr = math.min(pdu, pdd) / math.max(pdu, pdd)
+                perCls := prr < perYav ? "явный" : prr >= perRov ? "поровну" : "слабый"
+
+// ── сетка: чья она на этом баре, Ф6.3 + Ф6.6 (передача при отмене) ──
+f_fiG(_i) =>
+    bool r = false
+    if array.get(tFBp, _i) >= 0
+        int fs = array.get(tTR, _i)
+        if fs == ST_MAY or fs == ST_LIVE
+            r := true
+    r
+
+f_fiBig(_i) =>
+    bool r = true
+    float a = array.get(tFP, _i)
+    float b = array.get(tFPp, _i)
+    if not na(a)
+        if not na(b)
+            float av = array.get(tLEG, _i)
+            if av > 0
+                if math.abs(a - b) < fiMin * av
+                    r := false
+    r
+
+f_fiPick(_s0, _s1) =>
+    bool c0 = false
+    bool c1 = false
+    if _s0
+        c0 := f_fiG(0)
+    if _s1
+        c1 := f_fiG(1)
+    int own = -1
+    if c0 and not c1
+        own := 0
+    if c1 and not c0
+        own := 1
+    if c0 and c1
+        int b0 = array.get(tBB, 0)
+        int b1 = array.get(tBB, 1)
+        if b0 < 0
+            own := 1
+        else
+            if b1 < 0
+                own := 0
+            else
+                own := b0 <= b1 ? 0 : 1
+        if array.get(tFKill, own)
+            int oth = 1 - own
+            if not array.get(tFKill, oth)
+                if f_fiBig(oth)
+                    own := oth
+    own
+
+// ── закрытия с вершины сетки: Ф1.5, линия пробита закрытием навсегда ──
+var float[] fMnC = array.new_float(2, na)
+var int[]   fMnB = array.new_int(2, -1)
+if barstate.isconfirmed
+    for fm = 0 to 1
+        int   fmB  = array.get(tFB, fm)
+        float fmSg = fm >= 1 ? -1.0 : 1.0
+        if fmB >= 0
+            if fmB != array.get(fMnB, fm)
+                array.set(fMnB, fm, fmB)
+                float mn = na
+                int fmK = math.min(bar_index - fmB - 1, 300)
+                if fmK >= 0
+                    for q = 0 to fmK
+                        float cq = close[q] * fmSg
+                        mn := na(mn) ? cq : math.min(mn, cq)
+                array.set(fMnC, fm, mn)
+            else
+                float cn  = close * fmSg
+                float old = array.get(fMnC, fm)
+                array.set(fMnC, fm, na(old) ? cn : math.min(old, cn))
+
+// ── периоды по ЕГО часам: РИ7.19 ──
+f_dKey(_t) =>
+    int(math.floor((_t + tzH * 3600000) / 86400000))
+f_wKey(_d) =>
+    int(math.floor((_d + 3) / 7))
+f_mKey(_t) =>
+    year(_t + tzH * 3600000, "UTC") * 12 + month(_t + tzH * 3600000, "UTC")
+
+// ── условные сделки: РИ7.16, РИ7.18. Каждая свеча — своя сделка ──
+var int[]   TRd  = array.new_int()     // +1 лонг, -1 шорт
+var float[] TRs  = array.new_float()   // стоп
+var float[] TRt  = array.new_float()   // тейк
+var float[] TRr  = array.new_float()   // R при тейке
+var int[]   TRst = array.new_int()     // 0 открыта · 1 тейк · 2 стоп · 3 стоп, оба в одной свече
+var int[]   TRdk = array.new_int()
+var int[]   TRwk = array.new_int()
+var int[]   TRmk = array.new_int()
+var bool[]  TRv  = array.new_bool()    // вариант 1:3 — наблюдение
+var int oFirst = 0
+var float eqR  = 0.0
+var float pkR  = 0.0
+var int   stkSL = 0
+var int   totN  = 0
+var int   totTP = 0
+var int   totSL = 0
+
+if barstate.isconfirmed
+    int nT = array.size(TRd)
+    if oFirst < nT
+        for k = oFirst to nT - 1
+            if array.get(TRst, k) == 0
+                int   tdr = array.get(TRd, k)
+                float tst = array.get(TRs, k)
+                float ttp = array.get(TRt, k)
+                bool hs = tdr > 0 ? low <= tst : high >= tst
+                bool ht = tdr > 0 ? high >= ttp : low <= ttp
+                if hs or ht
+                    int res = hs and ht ? 3 : hs ? 2 : 1
+                    array.set(TRst, k, res)
+                    if not array.get(TRv, k)
+                        float rv = res == 1 ? array.get(TRr, k) : -1.0
+                        eqR := eqR + rv
+                        pkR := math.max(pkR, eqR)
+                        stkSL := res == 1 ? 0 : stkSL + 1
+                        totN := totN + 1
+                        totTP := totTP + (res == 1 ? 1 : 0)
+                        totSL := totSL + (res == 1 ? 0 : 1)
+    bool adv = true
+    while adv
+        adv := false
+        if oFirst < array.size(TRst)
+            if array.get(TRst, oFirst) != 0
+                oFirst := oFirst + 1
+                adv := true
+
+// ── снимок последней жёлтой: РИ7.14 ──
+var int lyT = na
+var int lyB = na
+var int[]    vV   = array.new_int(20, 0)       // пункт × сторона: 1 за · 2 за* · -1 против · -2 против* · 0 серый
+var string[] vT   = array.new_string(20, "")
+var string[] vR   = array.new_string(2, "")    // причина закрытия стороны
+var float[]  vE   = array.new_float(2, na)
+var float[]  vS   = array.new_float(2, na)
+var float[]  vP   = array.new_float(2, na)
+var float[]  vRR  = array.new_float(2, na)
+var float[]  vP3  = array.new_float(2, na)
+var int[]    vId  = array.new_int(2, -1)
+var int[]    vId3 = array.new_int(2, -1)
+
+// ── счётчики периода: жёлтых · серых · дошли до входа ──
+var int kD = -1
+var int kW = -1
+var int kM = -1
+var int[] kntD = array.new_int(3, 0)
+var int[] kntW = array.new_int(3, 0)
+var int[] kntM = array.new_int(3, 0)
+
+bool zelB = false
+
+if barstate.isconfirmed
+    int dK = f_dKey(time)
+    int wK = f_wKey(dK)
+    int mK = f_mKey(time)
+    if dK != kD
+        kD := dK
+        array.fill(kntD, 0)
+    if wK != kW
+        kW := wK
+        array.fill(kntW, 0)
+    if mK != kM
+        kM := mK
+        array.fill(kntM, 0)
+    if srez
+        array.set(kntD, 1, array.get(kntD, 1) + 1)
+        array.set(kntW, 1, array.get(kntW, 1) + 1)
+        array.set(kntM, 1, array.get(kntM, 1) + 1)
+    if trig
+        array.set(kntD, 0, array.get(kntD, 0) + 1)
+        array.set(kntW, 0, array.get(kntW, 0) + 1)
+        array.set(kntM, 0, array.get(kntM, 0) + 1)
+        lyT := time
+        lyB := bar_index
+        int gOwn = f_fiPick(trWho != "только нисходящий", trWho != "только восходящий")
+        bool anyOk = false
+        for sd = 0 to 1
+            int  e    = 1 - sd
+            int  dir  = sd == 0 ? 1 : -1
+            bool sOn  = sd == 0 ? trOn : trDn
+            bool eOn  = sd == 0 ? trDn : trOn
+            int  sO   = sOn ? array.get(tTR, sd) : ST_NO
+            int  sE   = eOn ? array.get(tTR, e) : ST_NO
+            int  cO   = array.get(tCNT, sd)
+            int  cE   = array.get(tCNT, e)
+            bool aliveO = sO == ST_MAY or sO == ST_LIVE
+            string hard = ""
+            int b0 = sd * 10
+
+            // бледная точка своего тренда — как в табло (v3.44)
+            int pk = -1
+            if aliveO
+                int pkL = -1
+                int pkH = -1
+                if not na(pl21)
+                    pkL := f_paleK(P2, B2, H2, array.get(tZB, sd), sd == 1, low[1], false, ph21)
+                if not na(ph21)
+                    pkH := f_paleK(P2, B2, H2, array.get(tZB, sd), sd == 1, high[1], true, float(na))
+                pk := pkL >= 0 ? pkL : pkH
+
+            // 1 · сторона
+            array.set(vV, b0 + 0, sO == ST_LIVE ? 1 : -1)
+            array.set(vT, b0 + 0, sO == ST_LIVE ? "подтверждён" : sO == ST_MAY ? "возможен" : "нет тренда")
+
+            // 2 · встречный (РИ7.15, РИ7.20)
+            int v2 = 0
+            string t2 = ""
+            if sE == ST_MAY
+                int bcE = array.get(tBrC, e)
+                int bsE = array.get(tBrS, e)
+                bool bAl = bsE == ST_MAY or bsE == ST_LIVE
+                if bAl and (bcE == 1 or bcE == 3)
+                    v2 := 1
+                    t2 := "возможен на коррекции — шум"
+                else if bAl and bcE == 5
+                    v2 := -1
+                    t2 := "возможен после (5) — кандидат"
+                else
+                    t2 := "возможен"
+            else if sE == ST_LIVE
+                if cE == 5
+                    v2 := 1
+                    t2 := "подтверждён, (5) — в конце"
+                else
+                    v2 := -1
+                    t2 := "подтверждён (" + str.tostring(cE) + ")/5"
+            else
+                v2 := 1
+                t2 := sE == ST_DEAD ? "умер" : sE == ST_ARC ? "архив" : "нет"
+            // жёстко: свой «возможен» родился на коррекции другого (А15)
+            int bcO = array.get(tBrC, sd)
+            int bsO = array.get(tBrS, sd)
+            if sO == ST_MAY
+                if bsO == ST_MAY or bsO == ST_LIVE
+                    if bcO == 1 or bcO == 3
+                        hard := hard + "возможен на коррекции · "
+                        v2 := -1
+                        t2 := "⛔ свой возможен родился на коррекции"
+            array.set(vV, b0 + 1, v2)
+            array.set(vT, b0 + 1, t2)
+
+            // 3 · колено (жёстко: (5), бледная (5), коррекция — ТС8.12, ТС8.13, А3)
+            int v3 = 0
+            string t3 = "—"
+            if aliveO and cO >= 0
+                string kn = "(" + str.tostring(cO) + ")→(" + str.tostring(cO + 1) + ")"
+                if cO == 5
+                    hard := hard + "(5) — сделок нет · "
+                    v3 := -1
+                    t3 := "(5) — сделок нет"
+                else if cO % 2 == 0
+                    if pk == cO + 1
+                        if pk == 5
+                            hard := hard + "(5) предв. · "
+                            v3 := -1
+                            t3 := "(5) предв. — не входим"
+                        else
+                            v3 := -2
+                            t3 := kn + ", (" + str.tostring(pk) + ") предв. — могло кончиться"
+                    else
+                        v3 := 1
+                        t3 := kn + (cO == 2 ? " — самое сильное" : "")
+                else
+                    if pk == cO + 1
+                        v3 := 2
+                        t3 := "(" + str.tostring(pk) + ") предв. — с оговоркой"
+                    else
+                        hard := hard + "коррекция " + kn + " · "
+                        v3 := -1
+                        t3 := "коррекция " + kn
+            array.set(vV, b0 + 2, v3)
+            array.set(vT, b0 + 2, t3)
+
+            // 4 · РР (жёстко): вход по закрытию, стоп за круглым уровнем, тейк до вершины счёта
+            float eN  = close
+            float stp = sd == 0 ? math.floor(low / stepL) * stepL - offS : math.ceil(high / stepL) * stepL + offS
+            float rk  = sd == 0 ? eN - stp : stp - eN
+            float vx  = f_tpFind(sd == 0, eN)
+            float tp  = na
+            float rr  = na
+            if not na(vx)
+                tp := sd == 0 ? vx - tpOff : vx + tpOff
+                if rk > 0
+                    rr := (sd == 0 ? tp - eN : eN - tp) / rk
+            bool rrBad = false
+            if na(rr)
+                hard := hard + "нет вершины для тейка · "
+                array.set(vV, b0 + 3, -1)
+                array.set(vT, b0 + 3, "нет вершины счёта")
+            else if rr < 3.0
+                rrBad := true
+                array.set(vV, b0 + 3, -1)
+                array.set(vT, b0 + 3, "1:" + str.tostring(rr, "#.##"))
+            else
+                array.set(vV, b0 + 3, 1)
+                array.set(vT, b0 + 3, "1:" + str.tostring(rr, "#.##"))
+
+            // 5 · сетка: на линии или в зоне, между нельзя (Ф1.4, Ф1.5, Ф1.6)
+            int v5 = -1
+            string t5 = "нет"
+            bool mine = false
+            if gOwn == sd
+                if not array.get(tFKill, sd)
+                    if f_fiBig(sd)
+                        mine := true
+            if mine
+                float fnr = array.get(tFP, sd)
+                float fpr = array.get(tFPp, sd)
+                float frn = fpr - fnr
+                float nlo = sd == 0 ? low : -high
+                float ncl = sd == 0 ? close : -close
+                float mnc = array.get(fMnC, sd)
+                string onL = ""
+                float[]  fxL = array.from(0.382, 0.5, 0.618, 0.75)
+                string[] fxN = array.from("на 0,382", "на 0,5", "на 0,618", "в зоне")
+                for xi = 0 to 3
+                    float lx = fnr + array.get(fxL, xi) * frn
+                    bool brk = false
+                    if not na(mnc)
+                        if mnc < lx
+                            brk := true
+                    if not brk
+                        if nlo <= lx and ncl > lx
+                            onL := array.get(fxN, xi)
+                if onL != ""
+                    v5 := 1
+                    t5 := onL
+                else
+                    hard := hard + "сетка: между · "
+                    t5 := "⛔ между"
+            else
+                if gOwn < 0
+                    t5 := "нет"
+                else if gOwn != sd
+                    t5 := "своей нет — сетка у другого"
+                else if array.get(tFKill, sd)
+                    t5 := "отменена"
+                else
+                    t5 := "колено мелкое"
+            array.set(vV, b0 + 4, v5)
+            array.set(vT, b0 + 4, t5)
+
+            // 6 · колено против среднего — число, серым, без голоса (РИ7.15)
+            string t6 = "—"
+            if array.get(tFBp, sd) >= 0
+                float a6  = array.get(tFP, sd)
+                float b6  = array.get(tFPp, sd)
+                float av6 = array.get(tLEG, sd)
+                if not na(a6)
+                    if not na(b6)
+                        if av6 > 0
+                            t6 := str.tostring(math.abs(a6 - b6), format.mintick) + " / " + str.tostring(av6, format.mintick) + " = " + str.tostring(math.abs(a6 - b6) / av6, "#.#") + "×"
+            array.set(vV, b0 + 5, 0)
+            array.set(vT, b0 + 5, t6)
+
+            // 7 · запас своей стороны — число, серым, без голоса
+            string t7 = "—"
+            if aliveO
+                float lv = array.get(tLVL, sd)
+                if not na(lv)
+                    float lg  = array.get(tLEG, sd)
+                    float dp  = sd == 0 ? depthU : depthD
+                    bool  zo  = array.get(tONZ, sd) or (contTch and array.get(tCZ, sd))
+                    float nl2 = sd == 0 ? low : -high
+                    float nbo = sd == 0 ? math.min(open, close) : math.min(-open, -close)
+                    float zp  = zo ? nl2 - lv : nbo - (lv - dp * lg)
+                    t7 := str.tostring(100 * zp / close, "#.##") + "%"
+            array.set(vV, b0 + 6, 0)
+            array.set(vT, b0 + 6, t7)
+
+            // 8а · чистота · справочник (слиты, Н59)
+            int mcS = 1
+            if aliveO
+                if sd == 0
+                    [zlA, tlA, npA] = f_seqNow(P2, B2, H2, L2, 0)
+                    [mcA, miA, mnA] = f_match(tlA)
+                    mcS := mcA
+                else
+                    [zlB, tlB, npB] = f_seqNow(P2n, B2n, H2n, L2n, 1)
+                    [mcB, miB, mnB] = f_matchS(tlB)
+                    mcS := mcB
+            array.set(vV, b0 + 7, aliveO ? (mcS == 0 ? -1 : 1) : 0)
+            array.set(vT, b0 + 7, aliveO ? (mcS == 0 ? "манипуляция · вне справ." : "чистый") : "—")
+
+            // 8б · сломы за / против
+            int sdr = array.get(sDIR, 0)
+            int srn = array.get(sRUN, 0)
+            array.set(vV, b0 + 8, sdr == 0 ? 0 : sdr == dir ? 1 : -1)
+            array.set(vT, b0 + 8, sdr == 0 ? "—" : (sdr > 0 ? "↑" : "↓") + str.tostring(srn) + (sdr == dir ? " за" : " ПРОТИВ"))
+
+            // 9 · слои — по перевесу уровней (СЛ6.3, Н65)
+            array.set(vV, b0 + 9, perCls == "явный" ? (perSd == dir ? 1 : -1) : 0)
+            array.set(vT, b0 + 9, perCls == "" ? "—" : perCls + (perSd > 0 ? " · ближний сверху" : " · ближний снизу"))
+
+            // итог стороны
+            bool okS = aliveO and hard == "" and not rrBad
+            bool v13 = aliveO and hard == "" and rrBad
+            array.set(vR, sd, not aliveO ? "своего тренда нет" : hard != "" ? hard : rrBad ? "РР 1:" + str.tostring(rr, "#.##") : "")
+            array.set(vE, sd, eN)
+            array.set(vS, sd, stp)
+            array.set(vP, sd, tp)
+            array.set(vRR, sd, rr)
+            array.set(vP3, sd, v13 ? eN + dir * 3.0 * rk : na)
+            array.set(vId, sd, -1)
+            array.set(vId3, sd, -1)
+            if okS
+                anyOk := true
+                array.push(TRd, dir)
+                array.push(TRs, stp)
+                array.push(TRt, tp)
+                array.push(TRr, rr)
+                array.push(TRst, 0)
+                array.push(TRdk, dK)
+                array.push(TRwk, wK)
+                array.push(TRmk, mK)
+                array.push(TRv, false)
+                array.set(vId, sd, array.size(TRd) - 1)
+            if v13
+                array.push(TRd, dir)
+                array.push(TRs, stp)
+                array.push(TRt, eN + dir * 3.0 * rk)
+                array.push(TRr, 3.0)
+                array.push(TRst, 0)
+                array.push(TRdk, dK)
+                array.push(TRwk, wK)
+                array.push(TRmk, mK)
+                array.push(TRv, true)
+                array.set(vId3, sd, array.size(TRd) - 1)
+        if anyOk
+            zelB := true
+            array.set(kntD, 2, array.get(kntD, 2) + 1)
+            array.set(kntW, 2, array.get(kntW, 2) + 1)
+            array.set(kntM, 2, array.get(kntM, 2) + 1)
+
+// ── подсветки: жёлтая и серая — как были; ЗЕЛЁНАЯ вместо жёлтой, З73 ──
+bgcolor(trig and svOn and not (zelOn and zelB) ? color.new(svCol, svPrz) : na, title = "Подсветка триггерной свечи")
+bgcolor(srez and rzOn ? color.new(rzCol, rzPrz) : na, title = "Подсветка срезанных размером")
+bgcolor(zelOn and zelB ? color.new(zelCol, zelPrz) : na, title = "Подсветка: дошла до входа")
 
 // ══════════════ РИСУЕМ ══════════════
 if barstate.islast
@@ -4397,7 +5015,7 @@ if barstate.islast
     [mUp, mDn] = f_nearest(V2P, V2H)
 
     if trTbl
-        table.cell(TBL, 0, 0, "рисует", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 0, 0, "рисует", text_color = cTx, text_size = tSz)
         // О2. Строка отвечает на СВОЙ вопрос — «что на экране», а не на
         // «кого выбрал бы авто». Прежде здесь стоял SWM, и табло писало
         // «нет» при нарисованном архиве. Источник теперь drwIdx/drwSt,
@@ -4462,7 +5080,7 @@ if barstate.islast
                 float klPu = 100 * klZu / close
                 float klPd = 100 * klZd / close
                 dtxt := dtxt + "  ·  ближе к концу " + (klPu < klPd ? "ВОСХ " : "НИСХ ") + str.tostring(math.min(klPu, klPd), "#.##") + "%"
-        table.cell(TBL, 1, 0, dtxt, text_color = drwIdx < 0 ? color.gray : drwIdx == 1 ? cTrDn : cTrUp, text_size = tSz)
+        table.cell(TBL, 1, 0, dtxt, text_color = drwIdx < 0 ? cTx : drwIdx == 1 ? cTrDn : cTrUp, text_size = tSz)
 
     // ── ПОДПИСИ СТРОК — ОБЩИЕ НА ОБЕ КОЛОНКИ, v3.35 ──
     //
@@ -4474,14 +5092,14 @@ if barstate.islast
     // «запас» держит ОБЕ глубины: подпись одна, а у направлений
     // глубина своя, если снята галочка «как у восходящего»
     if trTbl and (blkUp or blkDn)
-        table.cell(TBL, 0, 1, "2/2", text_color = color.gray, text_size = tSz, bgcolor = cBlkS)
-        table.cell(TBL, 0, 2, "состояние", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 3, "счёт", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 10, "полных счётов", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 6, "уровень", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 7, "рубится", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 8, "запас " + (depthU == depthD ? str.tostring(depthU) : str.tostring(depthU) + "/" + str.tostring(depthD)) + " кол.", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 9, "среднее колено", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 0, 1, "2/2", text_color = cTx, text_size = tSz, bgcolor = cBlkS)
+        table.cell(TBL, 0, 2, "состояние", text_color = cTx, text_size = tSz)
+        table.cell(TBL, 0, 3, "счёт", text_color = cTx, text_size = tSz)
+        table.cell(TBL, 0, 10, "полных счётов", text_color = cTx, text_size = tSz)
+        table.cell(TBL, 0, 6, "уровень", text_color = cTx, text_size = tSz)
+        table.cell(TBL, 0, 7, "рубится", text_color = cTx, text_size = tSz)
+        table.cell(TBL, 0, 8, "запас " + (depthU == depthD ? str.tostring(depthU) : str.tostring(depthU) + "/" + str.tostring(depthD)) + " кол.", text_color = cTx, text_size = tSz)
+        table.cell(TBL, 0, 9, "среднее колено", text_color = cTx, text_size = tSz)
         // ── З63 · САМО ЧИСЛО, ОДНО НА ДВА НАПРАВЛЕНИЯ ──
         // Скользящее колено принадлежит СЛОЮ, а не направлению: оно
         // считается модулем разницы соседних колен, и у перевёрнутой
@@ -4489,11 +5107,11 @@ if barstate.islast
         // одним и тем же числом. Берётся ячейка 0 — восходящий
         float legAll = array.get(tLEG, 0)
         string legTxtA = legAll <= 0 ? "—" : str.tostring(legAll, format.mintick) + "  " + str.tostring(100 * legAll / close, "#.##") + "%"
-        table.cell(TBL, 1, 9, legTxtA, text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 11, "баров от (0)", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 12, "прошлая смерть", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 4, "посл-ть", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 5, "за тренд", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 1, 9, legTxtA, text_color = cTx, text_size = tSz)
+        table.cell(TBL, 0, 11, "баров от (0)", text_color = cTx, text_size = tSz)
+        table.cell(TBL, 0, 12, "прошлая смерть", text_color = cTx, text_size = tSz)
+        table.cell(TBL, 0, 4, "посл-ть", text_color = cTx, text_size = tSz)
+        table.cell(TBL, 0, 5, "за тренд", text_color = cTx, text_size = tSz)
 
     if trTbl and blkUp
         // строку последовательности считаем ДО ячеек: пайн не умеет
@@ -4529,8 +5147,8 @@ if barstate.islast
         // до (5) и ушедший в архив, давал НОЛЬ — хотя круг был пройден.
         // tMAX сбрасывается продолжением, значит двойного счёта нет
         int fullU = array.get(tRST, 0) + (array.get(tMAX, 0) >= 5 ? 1 : 0)
-        table.cell(TBL, 1, 10, liv or sU == ST_ARC ? str.tostring(fullU) : "—", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 6, not liv ? "—" : na(lv) ? "нет" : (array.get(tLHL, 0) ? "HL " : "LL ") + str.tostring(lv, format.mintick), text_color = liv and not na(lv) ? (array.get(tLHL, 0) ? cTrUp : color.new(cTrUp, 45)) : color.gray, text_size = tSz)
+        table.cell(TBL, 1, 10, liv or sU == ST_ARC ? str.tostring(fullU) : "—", text_color = cTx, text_size = tSz)
+        table.cell(TBL, 1, 6, not liv ? "—" : na(lv) ? "нет" : (array.get(tLHL, 0) ? "HL " : "LL ") + str.tostring(lv, format.mintick), text_color = liv and not na(lv) ? (array.get(tLHL, 0) ? cTrUp : color.new(cTrUp, 45)) : cTx, text_size = tSz)
         // ── НОВАЯ СТРОКА 6: ЧЕМ РУБИТСЯ СЕЙЧАС. З44, шаг Т4 ──
         // Движок всегда знал, какая ступень работает, а в табло этого
         // не было: видно было только по форме линии уровня на графике
@@ -4538,7 +5156,7 @@ if barstate.islast
         // ПОЧЕМУ рубит касание. У рождения ноль это предположение, у
         // продолжения — подтверждённый HL, и это разные случаи
         string rubU = not liv or na(lv) ? "—" : zOnU ? "касанием " + str.tostring(lv, format.mintick) + (array.get(tCZ, 0) ? " продолж." : "") : "глубиной " + str.tostring(thr, format.mintick)
-        table.cell(TBL, 1, 7, rubU, text_color = not liv or na(lv) ? color.gray : zOnU ? color.orange : color.gray, text_size = tSz)
+        table.cell(TBL, 1, 7, rubU, text_color = not liv or na(lv) ? cTx : zOnU ? color.orange : cTx, text_size = tSz)
         // З44. ЗАПАС СЧИТАЕТСЯ ПО ТОЙ СТУПЕНИ, КОТОРАЯ РАБОТАЕТ СЕЙЧАС.
         // До 15.10.2026 здесь всегда стоял порог глубины, и пока опора
         // на нуле число было завышено на 0.20 колена: рубило КАСАНИЕ, а
@@ -4552,7 +5170,7 @@ if barstate.islast
         // «дальний слом» — одна мерка на всё табло. Знак сохранён:
         // у отрицательного запаса процент тоже отрицательный
         string zapTxt = na(zap) or not liv ? "—" : str.tostring(zap, format.mintick) + "  " + str.tostring(100 * zap / close, "#.##") + "%"
-        table.cell(TBL, 1, 8, zapTxt, text_color = not liv ? color.gray : neg ? cTrDie : color.gray, text_size = tSz)
+        table.cell(TBL, 1, 8, zapTxt, text_color = not liv ? cTx : neg ? cTrDie : cTx, text_size = tSz)
         // ── НОВАЯ СТРОКА 8: САМО СКОЛЬЗЯЩЕЕ КОЛЕНО. 22.10.2026 ──
         // Величина была в движке с самого начала и считалась каждый бар,
         // но на экран не выводилась: табло показывало порог и запас, а
@@ -4563,9 +5181,9 @@ if barstate.islast
         // на обе колонки. Расчёт `leg` тут остаётся: им пользуется
         // строка «запас» ниже
         string ageU = liv and array.get(tZB, 0) >= 0 ? str.tostring(last_bar_index - array.get(tZB, 0)) + (array.get(tZB0, 0) >= 0 ? "  ·  всего " + str.tostring(last_bar_index - array.get(tZB0, 0)) : "") : "—"
-        table.cell(TBL, 1, 11, ageU, text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 1, 11, ageU, text_color = cTx, text_size = tSz)
         db = array.get(tDB, 0)
-        table.cell(TBL, 1, 12, db < 0 ? "—" : str.tostring(last_bar_index - db) + " / " + str.tostring(array.get(tDP, 0), format.mintick), text_color = db < 0 ? color.gray : cTrDie, text_size = tSz)
+        table.cell(TBL, 1, 12, db < 0 ? "—" : str.tostring(last_bar_index - db) + " / " + str.tostring(array.get(tDP, 0), format.mintick), text_color = db < 0 ? cTx : cTrDie, text_size = tSz)
         [mc, mi, mn] = f_match(tlC)
         bool rojd = zlC == "LL"
         // индекс считается отдельно и никогда не уходит в минус: при
@@ -4581,7 +5199,7 @@ if barstate.islast
         string nmU = mc > 0 ? mn : "вне справ."
         bool showsU = liv or sU == ST_ARC
         string cell = not showsU ? "—" : npC < 5 ? (mc <= 3 ? nmU : str.tostring(mc) + " вар.") : nmU
-        table.cell(TBL, 1, 4, cell, text_color = showsU ? (mc == 0 ? color.orange : npC >= 5 ? cTrUp : color.gray) : color.gray, text_size = tSz)
+        table.cell(TBL, 1, 4, cell, text_color = showsU ? (mc == 0 ? color.orange : npC >= 5 ? cTrUp : cTx) : cTx, text_size = tSz)
         // ── НОВАЯ СТРОКА 5: ЧТО ЗА ТРЕНД И ЧТО ПРОТИВ. З54, 24.10.2026 ──
         // Форма выбрана владельцем: ЧАСТИ, а не одно число. Довод против
         // одного числа — веса брать негде, кроме его слова или подгонки, а
@@ -4595,7 +5213,7 @@ if barstate.islast
         string chU  = mc == 0 ? " · манипуляция" : " · чистый"
         string slU  = drS == 0 ? "" : "  ·  сломы " + (drS > 0 ? "↑" : "↓") + str.tostring(rnS) + (drS > 0 ? " за" : " ПРОТИВ")
         string zaU  = not showsU ? "—" : cntTxt + chU + slU
-        table.cell(TBL, 1, 5, zaU, text_color = not showsU ? color.gray : drS < 0 ? color.orange : color.gray, text_size = tSz)
+        table.cell(TBL, 1, 5, zaU, text_color = not showsU ? cTx : drS < 0 ? color.orange : cTx, text_size = tSz)
 
     // ── НИСХОДЯЩИЙ: те же девять строк, ячейка 1 ──
     // Цены в ней отрицательные — перевёрнутый мир. Всё, что идёт в
@@ -4639,11 +5257,11 @@ if barstate.islast
             cntTxtD := cntTxtD + " · (" + str.tostring(pkD) + ") предв."
         table.cell(TBL, 2, 3, cntTxtD, text_color = cD, text_size = tSz)
         int fullD = array.get(tRST, 1) + (array.get(tMAX, 1) >= 5 ? 1 : 0)
-        table.cell(TBL, 2, 10, livD or sD == ST_ARC ? str.tostring(fullD) : "—", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 2, 6, not livD ? "—" : na(lvD) ? "нет" : (array.get(tLHL, 1) ? "LH " : "HH ") + str.tostring(-lvD, format.mintick), text_color = livD and not na(lvD) ? (array.get(tLHL, 1) ? cTrDn : color.new(cTrDn, 45)) : color.gray, text_size = tSz)
+        table.cell(TBL, 2, 10, livD or sD == ST_ARC ? str.tostring(fullD) : "—", text_color = cTx, text_size = tSz)
+        table.cell(TBL, 2, 6, not livD ? "—" : na(lvD) ? "нет" : (array.get(tLHL, 1) ? "LH " : "HH ") + str.tostring(-lvD, format.mintick), text_color = livD and not na(lvD) ? (array.get(tLHL, 1) ? cTrDn : color.new(cTrDn, 45)) : cTx, text_size = tSz)
         // ── НОВАЯ СТРОКА 16: ЧЕМ РУБИТСЯ СЕЙЧАС. З44, зеркало ──
         string rubD = not livD or na(lvD) ? "—" : zOnD ? "касанием " + str.tostring(-lvD, format.mintick) + (array.get(tCZ, 1) ? " продолж." : "") : "глубиной " + str.tostring(-thrD, format.mintick)
-        table.cell(TBL, 2, 7, rubD, text_color = not livD or na(lvD) ? color.gray : zOnD ? color.orange : color.gray, text_size = tSz)
+        table.cell(TBL, 2, 7, rubD, text_color = not livD or na(lvD) ? cTx : zOnD ? color.orange : cTx, text_size = tSz)
         // З44, зеркало. В перевёрнутом мире минимум свечи это −high,
         // поэтому на строгой ступени считается от МАКСИМУМА настоящей
         // свечи: в живых ценах это «уровень − максимум свечи»
@@ -4653,7 +5271,7 @@ if barstate.islast
         // в перевёрнутом мире знак у него тот же, что у восходящего,
         // поэтому делится на НАСТОЯЩУЮ цену close, а не на -close
         string zapTxtD = na(zapD) or not livD ? "—" : str.tostring(zapD, format.mintick) + "  " + str.tostring(100 * zapD / close, "#.##") + "%"
-        table.cell(TBL, 2, 8, zapTxtD, text_color = not livD ? color.gray : negD ? cTrDie : color.gray, text_size = tSz)
+        table.cell(TBL, 2, 8, zapTxtD, text_color = not livD ? cTx : negD ? cTrDie : cTx, text_size = tSz)
         // v3.37: ЗДЕСЬ БЫЛА ВТОРАЯ ЯЧЕЙКА СКОЛЬЗЯЩЕГО КОЛЕНА, и она
         // показывала ТО ЖЕ ЧИСЛО, что у восходящего. Это не совпадение:
         // колено считается как МОДУЛЬ разницы соседних колен, а у
@@ -4662,9 +5280,9 @@ if barstate.islast
         // Его слово 31.10.2026: «да, растяни среднее колено тоже».
         // Ячейка одна, в общем блоке подписей, слита на две колонки.
         string ageD = livD and array.get(tZB, 1) >= 0 ? str.tostring(last_bar_index - array.get(tZB, 1)) + (array.get(tZB0, 1) >= 0 ? "  ·  всего " + str.tostring(last_bar_index - array.get(tZB0, 1)) : "") : "—"
-        table.cell(TBL, 2, 11, ageD, text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 2, 11, ageD, text_color = cTx, text_size = tSz)
         dbD = array.get(tDB, 1)
-        table.cell(TBL, 2, 12, dbD < 0 ? "—" : str.tostring(last_bar_index - dbD) + " / " + str.tostring(-array.get(tDP, 1), format.mintick), text_color = dbD < 0 ? color.gray : cTrUp, text_size = tSz)
+        table.cell(TBL, 2, 12, dbD < 0 ? "—" : str.tostring(last_bar_index - dbD) + " / " + str.tostring(-array.get(tDP, 1), format.mintick), text_color = dbD < 0 ? cTx : cTrUp, text_size = tSz)
         [mcN, miN, mnN] = f_matchS(tlF)
         bool rojdN = zlF == "LL"
         int fiN = miN >= 0 ? miN + (rojdN ? 0 : 8) : 0
@@ -4673,7 +5291,7 @@ if barstate.islast
         string nmD2 = mcN > 0 ? mnN : "вне справ."
         bool showsN = livD or sD == ST_ARC
         string cellN = not showsN ? "—" : npF < 5 ? (mcN <= 3 ? nmD2 : str.tostring(mcN) + " вар.") : nmD2
-        table.cell(TBL, 2, 4, cellN, text_color = showsN ? (mcN == 0 ? color.orange : npF >= 5 ? cTrDn : color.gray) : color.gray, text_size = tSz)
+        table.cell(TBL, 2, 4, cellN, text_color = showsN ? (mcN == 0 ? color.orange : npF >= 5 ? cTrDn : cTx) : cTx, text_size = tSz)
         // то же словами нисходящего: у него «за» — это сломы ВНИЗ
         int    drN  = array.get(sDIR, 0)
         int    rnN  = array.get(sRUN, 0)
@@ -4681,7 +5299,7 @@ if barstate.islast
         string slD  = drN == 0 ? "" : "  ·  сломы " + (drN > 0 ? "↑" : "↓") + str.tostring(rnN) + (drN < 0 ? " за" : " ПРОТИВ")
         string cntD = sD == ST_ARC ? "(5)/5 ✓" : livD ? "(" + str.tostring(cntRawD) + ")/5" : "—"
         string zaD  = not showsN ? "—" : cntD + chD + slD
-        table.cell(TBL, 2, 5, zaD, text_color = not showsN ? color.gray : drN > 0 ? color.orange : color.gray, text_size = tSz)
+        table.cell(TBL, 2, 5, zaD, text_color = not showsN ? cTx : drN > 0 ? color.orange : cTx, text_size = tSz)
 
     // ── СЛОМЫ В ТАБЛО: ЗАГОЛОВОК плюс три строки ──
     //
@@ -4697,23 +5315,23 @@ if barstate.islast
     // Слом не принадлежит ни одному тренду: это цена взяла ближайший
     // непробитый пивот слоя. Со смертью тренда его путать нельзя — З35
     if slOn and blkSl
-        table.cell(TBL, 0, 13, "сломы", text_color = color.gray, text_size = tSz, bgcolor = cBlkS)
-        table.cell(TBL, 1, 13, "2/2", text_color = color.gray, text_size = tSz, bgcolor = cBlkS)
-        table.cell(TBL, 0, 14, "сломов подряд", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 15, "последний слом", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 16, "ближе слом", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 17, "дальний слом", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 18, "серия и уровни", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 0, 13, "сломы", text_color = cTx, text_size = tSz, bgcolor = cBlkS)
+        table.cell(TBL, 1, 13, "2/2", text_color = cTx, text_size = tSz, bgcolor = cBlkS)
+        table.cell(TBL, 0, 14, "сломов подряд", text_color = cTx, text_size = tSz)
+        table.cell(TBL, 0, 15, "последний слом", text_color = cTx, text_size = tSz)
+        table.cell(TBL, 0, 16, "ближе слом", text_color = cTx, text_size = tSz)
+        table.cell(TBL, 0, 17, "дальний слом", text_color = cTx, text_size = tSz)
+        table.cell(TBL, 0, 18, "серия и уровни", text_color = cTx, text_size = tSz)
         int dr = array.get(sDIR, 0)
         int rn = array.get(sRUN, 0)
-        color cS = dr > 0 ? cSlUp : dr < 0 ? cSlDn : color.gray
+        color cS = dr > 0 ? cSlUp : dr < 0 ? cSlDn : cTx
         table.cell(TBL, 1, 14, dr == 0 ? "—" : (dr > 0 ? "↑" : "↓") + str.tostring(rn), text_color = cS, text_size = tSz)
         int lbS = array.get(sLB, 0)
-        table.cell(TBL, 1, 15, lbS < 0 ? "—" : str.tostring(last_bar_index - lbS) + " / " + str.tostring(array.get(sLP, 0), format.mintick), text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 1, 15, lbS < 0 ? "—" : str.tostring(last_bar_index - lbS) + " / " + str.tostring(array.get(sLP, 0), format.mintick), text_color = cTx, text_size = tSz)
         float du = na(mUp) ? 1.0e18 : mUp - close
         float dd = na(mDn) ? 1.0e18 : close - mDn
         string nearTxt = "—"
-        color  nearCol = color.gray
+        color  nearCol = cTx
         if du < dd
             nearTxt := "сверху " + str.tostring(mUp, format.mintick) + "  " + str.tostring(100 * du / close, "#.##") + "%"
             nearCol := cSlUp
@@ -4728,7 +5346,7 @@ if barstate.islast
         // форма «×10» провалила проверку чтением 15.10. Поэтому не
         // отношение, а ВТОРОЕ ЧИСЛО: сравнивается глазами, делить нечего
         string farTxt = "—"
-        color  farCol = color.gray
+        color  farCol = cTx
         bool   bothOk = not na(mUp) and not na(mDn)
         if bothOk
             if du < dd
@@ -4752,11 +5370,13 @@ if barstate.islast
         // описывает СЕЙЧАС, решение владельца 06.10.2026
         int    geoDir = bothOk ? (du < dd ? 1 : -1) : 0
         string relTxt = "—"
-        color  relCol = color.gray
+        color  relCol = cTx
         if dr != 0 and geoDir != 0
             bool agree = (dr > 0) == (geoDir > 0)
-            relTxt := agree ? "согласны" : "спорят"
-            relCol := agree ? (dr > 0 ? cSlUp : cSlDn) : color.orange
+            // v3.45 · СЛ6.3: класс перевеса по ЗАКРЫТОЙ свече, цвет — только
+            // по нему (Н65: серия цвет не меняет). Оранжевый убран его словом
+            relTxt := (agree ? "согласны" : "спорят") + (perCls != "" ? " · " + perCls : "")
+            relCol := perCls == "явный" ? (perSd > 0 ? cSlUp : cSlDn) : cTx
         table.cell(TBL, 1, 18, relTxt, text_color = relCol, text_size = tSz)
 
 
@@ -4784,50 +5404,38 @@ if barstate.islast
 // ══════════════════════════════════════════════════════════════════
 if barstate.islast
     if tbOn
-        table.cell(TBL, 0, 19, "ТРИГГЕРНАЯ СВЕЧА", text_color = chart.fg_color, text_size = tSz, bgcolor = cZag)
-        table.cell(TBL, 1, 19, "", text_size = tSz, bgcolor = cZag)
+        // v3.45 · З82: шесть пар строк сведены в шесть строк, ни одно число
+        // не потеряно; «фитили: разница» — только при старом правиле формы
+        table.cell(TBL, 0, SV0, "ТРИГГЕРНАЯ СВЕЧА", text_color = chart.fg_color, text_size = tSz, bgcolor = cZag)
+        table.cell(TBL, 1, SV0, "", text_size = tSz, bgcolor = cZag)
 
-        table.cell(TBL, 0, 20, "сейчас", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 20, trig ? "ДА" : srez ? "срезана размером" : "нет", text_color = trig ? chart.fg_color : color.gray, text_size = tSz, bgcolor = trig ? cOk : cNet)
+        table.cell(TBL, 0, SV0 + 1, "сейчас", text_color = cTx, text_size = tSz)
+        table.cell(TBL, 1, SV0 + 1, trig ? "ДА" : srez ? "срезана размером" : "нет", text_color = trig ? chart.fg_color : cTx, text_size = tSz, bgcolor = trig ? cOk : cNet)
 
-        table.cell(TBL, 0, 21, "фитили: разница", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 21, rng > 0 ? str.tostring(razn, "#.#") + (oldMode ? " из " + str.tostring(simMax, "#.#") : "") : "—", text_color = oldMode and znOk ? chart.fg_color : color.gray, text_size = tSz)
+        if oldMode
+            table.cell(TBL, 0, SVraz, "фитили: разница", text_color = cTx, text_size = tSz)
+            table.cell(TBL, 1, SVraz, rng > 0 ? str.tostring(razn, "#.#") + " из " + str.tostring(simMax, "#.#") : "—", text_color = znOk ? chart.fg_color : cTx, text_size = tSz)
 
-        // ── ДВЕ НОВЫЕ СТРОКИ: ровно то, что меряет правило с v3.43 ──
-        // Порог рядом с числом нарочно — он сам сказал про потолок
-        // «я по таблице вручную могу определить порог, который нужен,
-        // и подкрутить». Эти два порога крутятся так же
-        table.cell(TBL, 0, 22, "перекос фитилей", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 22, rng > 0 ? str.tostring(perek, "#") + "%" + (oldMode ? "" : " из " + str.tostring(pkLo, "#") + "-" + str.tostring(pkHi, "#")) : "—", text_color = not oldMode and pkOk ? chart.fg_color : color.gray, text_size = tSz)
+        string fmTx = rng > 0 ? "перекос " + str.tostring(perek, "#") + "%" + (oldMode ? "" : " из " + str.tostring(pkLo, "#") + "-" + str.tostring(pkHi, "#")) + " · тело " + str.tostring(bodP, "#") + "%" + (oldMode ? "" : " из " + str.tostring(tsTelo, "#") + "%") : "—"
+        table.cell(TBL, 0, SVf, "форма", text_color = cTx, text_size = tSz)
+        table.cell(TBL, 1, SVf, fmTx, text_color = not oldMode and pkOk and tlOk ? chart.fg_color : cTx, text_size = tSz)
 
-        table.cell(TBL, 0, 23, "тело", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 23, rng > 0 ? str.tostring(bodP, "#") + "%" + (oldMode ? "" : " из " + str.tostring(tsTelo, "#") + "%") : "—", text_color = not oldMode and tlOk ? chart.fg_color : color.gray, text_size = tSz)
+        string ksTx = (otn > 0 ? str.tostring(otn, "#.##") + "x из " + str.tostring(porog, "#.#") + "x" : "—") + " · обычная " + (na(sredPred) ? "—" : str.tostring(sredPred, "#.###") + "%")
+        table.cell(TBL, 0, SVf + 1, "к соседям", text_color = cTx, text_size = tSz)
+        table.cell(TBL, 1, SVf + 1, ksTx, text_color = razmOk ? chart.fg_color : cTx, text_size = tSz)
 
-        table.cell(TBL, 0, 24, "размер к обычному", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 24, otn > 0 ? str.tostring(otn, "#.##") + "x из " + str.tostring(porog, "#.#") + "x" : "—", text_color = razmOk ? chart.fg_color : color.gray, text_size = tSz)
-
-        table.cell(TBL, 0, 25, "обычная высота", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 25, na(sredPred) ? "—" : str.tostring(sredPred, "#.###") + "%", text_color = color.gray, text_size = tSz)
-
-        table.cell(TBL, 0, 26, "эта свеча", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 26, str.tostring(shk, "#.###") + "% из " + str.tostring(capMax, "#.##") + "%  тело " + str.tostring(bodP, "#") + "%", text_color = capOk ? chart.fg_color : color.gray, text_size = tSz)
-
-        table.cell(TBL, 0, 27, "средняя за " + str.tostring(srOkn), text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 27, na(sredPok) ? "—" : str.tostring(sredPok, "#.###") + "%  потолок " + str.tostring(capMax / sredPok, "#.##") + "x", text_color = color.gray, text_size = tSz)
+        string vsTx = str.tostring(shk, "#.###") + "% из " + str.tostring(capMax, "#.##") + "% · средняя за " + str.tostring(srOkn) + ": " + (na(sredPok) ? "—" : str.tostring(sredPok, "#.###") + "% · потолок " + str.tostring(capMax / sredPok, "#.##") + "x")
+        table.cell(TBL, 0, SVf + 2, "высота", text_color = cTx, text_size = tSz)
+        table.cell(TBL, 1, SVf + 2, vsTx, text_color = capOk ? chart.fg_color : cTx, text_size = tSz)
 
 if barstate.islast
     if tbOn
-        table.cell(TBL, 0, 28, "НАЙДЕНО", text_color = chart.fg_color, text_size = tSz, bgcolor = cZag)
-        table.cell(TBL, 1, 28, str.tostring(nTrig) + (nVsego > 0 ? "  " + str.tostring(100.0 * nTrig / nVsego, "#.#") + "%" : ""), text_color = chart.fg_color, text_size = tSz, bgcolor = cZag)
+        string ndTx = str.tostring(nTrig) + (nVsego > 0 ? " " + str.tostring(100.0 * nTrig / nVsego, "#.#") + "%" : "") + " · по форме " + str.tostring(nForma) + (nVsego > 0 ? " " + str.tostring(100.0 * nForma / nVsego, "#.#") + "%" : "") + " · серых " + str.tostring(nSrez) + (nForma > 0 ? " " + str.tostring(100.0 * nSrez / nForma, "#.#") + "% формы" : "")
+        table.cell(TBL, 0, SVf + 3, "НАЙДЕНО", text_color = chart.fg_color, text_size = tSz, bgcolor = cZag)
+        table.cell(TBL, 1, SVf + 3, ndTx, text_color = chart.fg_color, text_size = tSz, bgcolor = cZag)
 
-        table.cell(TBL, 0, 29, "подошло по форме", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 29, str.tostring(nForma) + (nVsego > 0 ? "  " + str.tostring(100.0 * nForma / nVsego, "#.#") + "%" : ""), text_color = color.gray, text_size = tSz)
-
-        table.cell(TBL, 0, 30, "срезано размером", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 30, str.tostring(nSrez) + (nForma > 0 ? "  " + str.tostring(100.0 * nSrez / nForma, "#.#") + "% формы" : ""), text_color = color.gray, text_size = tSz)
-
-        table.cell(TBL, 0, 31, "последняя была", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 31, na(lastTB) ? "—" : str.tostring(bar_index - lastTB) + " баров назад", text_color = color.gray, text_size = tSz)
+        table.cell(TBL, 0, SVl, "последняя была", text_color = cTx, text_size = tSz)
+        table.cell(TBL, 1, SVl, na(lastTB) ? "—" : str.tostring(bar_index - lastTB) + " баров назад", text_color = cTx, text_size = tSz)
 
 // ══════════════════════════════════════════════════════════════════
 //                    ФИБОНАЧЧИ · ПОКАЗ
@@ -4958,6 +5566,15 @@ if barstate.islast
                     fiOwn := 0
                 else
                     fiOwn := fn0 <= fn1 ? 0 : 1
+            // ── v3.45 · Ф6.6 · З79: ОТМЕНЁННАЯ СЕТКА ПЕРЕХОДИТ К ДРУГОМУ ──
+            // Его слово 21.11.2026 «да, так передаём сетку»: свою погасил
+            // выход за 0,79, а другой жив, колено торгуемое и не мелкое.
+            // Возврат — сам собой: у первого новое колено снимает отмену
+            if array.get(tFKill, fiOwn)
+                int fiOth = 1 - fiOwn
+                if not array.get(tFKill, fiOth)
+                    if f_fiBig(fiOth)
+                        fiOwn := fiOth
 
     // ── ДВА СТОРОЖА, И ОБА СМОТРЯТ ТОЛЬКО НА ВЛАДЕЛЬЦА. Ф6.3, Ф9.1 ──
     //
@@ -5044,7 +5661,7 @@ if barstate.islast
         string fiLgT = "—"
         if not na(fiLg)
             if not na(fiAv)
-                fiLgT := str.tostring(fiLg, format.mintick) + "  средн. " + str.tostring(fiAv, format.mintick) + "  нужно " + str.tostring(fiMin * fiAv, format.mintick)
+                fiLgT := str.tostring(fiLg, format.mintick) + " · средн. " + str.tostring(fiAv, format.mintick) + " · нужно " + str.tostring(fiMin * fiAv, format.mintick)
         // цены уровней и зоны — считаются у ВЛАДЕЛЬЦА, а не у
         // нарисованной сетки: когда её срезало, числа тем и нужнее
         string fiLvT = "—"
@@ -5071,20 +5688,19 @@ if barstate.islast
         string fiCnT = str.tostring(fiNo)
         if fiNo > 0
             fiCnT := str.tostring(fiNo) + " сеток  ·  коленом срезано " + str.tostring(fiCut) + "  " + str.tostring(100.0 * fiCut / fiNo, "#.#") + "%"
-        table.cell(TBL, 0, 32, "фибоначчи", text_color = color.gray, text_size = tSz, bgcolor = cBlkS)
-        table.cell(TBL, 1, 32, fiWho, text_color = color.gray, text_size = tSz, bgcolor = cBlkS)
-        table.cell(TBL, 0, 33, "на колене", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 33, fiNa, text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 34, "колено", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 34, fiLgT, text_color = fiIdx < 0 ? color.gray : chart.fg_color, text_size = tSz)
-        table.cell(TBL, 0, 35, "уровни", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 35, fiLvT, text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 36, "зона 0,75-0,79", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 36, fiZnT, text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 0, 37, "цена в сетке", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 37, fiTx, text_color = fiIdx < 0 ? color.gray : chart.fg_color, text_size = tSz)
-        table.cell(TBL, 0, 38, "сеток", text_color = color.gray, text_size = tSz)
-        table.cell(TBL, 1, 38, fiCnT, text_color = color.gray, text_size = tSz)
+        // v3.45 · З82: «на колене» + «колено» и «уровни» + «зона» — по строке
+        string fiKnT = fiNa == "—" and fiLgT == "—" ? "—" : fiNa + " · колено " + fiLgT
+        string fiUrT = fiLvT == "—" ? "—" : fiLvT + " · зона " + fiZnT
+        table.cell(TBL, 0, FI0, "фибоначчи", text_color = cTx, text_size = tSz, bgcolor = cBlkS)
+        table.cell(TBL, 1, FI0, fiWho, text_color = cTx, text_size = tSz, bgcolor = cBlkS)
+        table.cell(TBL, 0, FI0 + 1, "на колене", text_color = cTx, text_size = tSz)
+        table.cell(TBL, 1, FI0 + 1, fiKnT, text_color = fiIdx < 0 ? cTx : chart.fg_color, text_size = tSz)
+        table.cell(TBL, 0, FI0 + 2, "уровни", text_color = cTx, text_size = tSz)
+        table.cell(TBL, 1, FI0 + 2, fiUrT, text_color = cTx, text_size = tSz)
+        table.cell(TBL, 0, FI0 + 3, "цена в сетке", text_color = cTx, text_size = tSz)
+        table.cell(TBL, 1, FI0 + 3, fiTx, text_color = fiIdx < 0 ? cTx : chart.fg_color, text_size = tSz)
+        table.cell(TBL, 0, FI0 + 4, "сеток", text_color = cTx, text_size = tSz)
+        table.cell(TBL, 1, FI0 + 4, fiCnT, text_color = cTx, text_size = tSz)
 
 // ══════════════════════════════════════════════════════════════════
 //      З62 · СЛИЯНИЕ. ПОСЛЕДНЕЕ В ФАЙЛЕ И НЕ СДВИГАЕТСЯ С МЕСТА
@@ -5116,14 +5732,180 @@ if barstate.islast
     // Свеча не принадлежит ни восходящему, ни нисходящему: делить её
     // строки пополам нечего, правая колонка там была бы пустой
     if tbOn and not mrgSv
-        for r = 19 to 31
+        for r = SV0 to SVl
             table.cell(TBL, 2, r, "", text_size = tSz)
             table.merge_cells(TBL, 1, r, 2, r)
         mrgSv := true
     // Сетка ОДНА на оба направления — делить её строки пополам нечего
     if fiTbl and not mrgFi
-        for r = 32 to 38
+        for r = FI0 to FI0 + 4
             table.cell(TBL, 2, r, "", text_size = tSz)
             table.merge_cells(TBL, 1, r, 2, r)
         mrgFi := true
 
+// ══════════════ v3.45 · ВХОД · РИСК · СТАТИСТИКА — ПОКАЗ ══════════════
+// Отдельная таблица, РИ7.2. Три блока по утверждённому макету РИ7.8:
+// сделка · за и против · риск и статистика. Каждый в СВОЁМ блоке
+// `if barstate.islast` — предел длины одного блока, З46.
+var table TBL2 = table.new(vxPos == "справа вверху" ? position.top_right : vxPos == "справа внизу" ? position.bottom_right : vxPos == "слева вверху" ? position.top_left : position.bottom_left, 4, 30, bgcolor = tbBg, border_width = 1, frame_width = 1, frame_color = color.new(color.gray, 60), border_color = color.new(color.gray, 80))
+var bool mrgVx = false
+
+f_trTxt(_k) =>
+    string r = ""
+    if _k >= 0
+        if _k < array.size(TRst)
+            int s = array.get(TRst, _k)
+            r := s == 0 ? "открыта" : s == 1 ? "ТП +" + str.tostring(array.get(TRr, _k), "#.##") + "R" : s == 2 ? "СЛ −1R" : "СЛ −1R (оба в одной свече)"
+    r
+
+f_cut(_s) =>
+    string r = _s
+    if str.endswith(_s, " · ")
+        r := str.substring(_s, 0, str.length(_s) - 3)
+    r
+
+f_vBg(_v) =>
+    _v > 0 ? cOk : _v < 0 ? color.new(color.red, 70) : cNet
+
+if barstate.islast and vxOn and vxB1
+    string tzS = "UTC" + (tzH >= 0 ? "+" : "") + str.tostring(tzH)
+    string lyTx = na(lyT) ? "жёлтой ещё не было" : "жёлтая " + str.format_time(lyT, "dd.MM HH:mm", tzS) + " · " + str.tostring(bar_index - lyB) + " св. назад"
+    table.cell(TBL2, 0, 0, "СДЕЛКА", text_color = chart.fg_color, text_size = tSz, bgcolor = cZag)
+    table.cell(TBL2, 1, 0, "ЛОНГ", text_color = cTrUp, text_size = tSz, bgcolor = cZag)
+    table.cell(TBL2, 2, 0, "ШОРТ", text_color = cTrDn, text_size = tSz, bgcolor = cZag)
+    table.cell(TBL2, 3, 0, lyTx, text_color = cTx, text_size = tSz, bgcolor = cZag)
+    table.cell(TBL2, 0, 1, "вход", text_color = cTx, text_size = tSz)
+    table.cell(TBL2, 0, 2, "стоп", text_color = cTx, text_size = tSz)
+    table.cell(TBL2, 0, 3, "тейк", text_color = cTx, text_size = tSz)
+    table.cell(TBL2, 0, 4, "РР", text_color = cTx, text_size = tSz)
+    table.cell(TBL2, 0, 5, "1:3 · наблюдение, НЕ для входа", text_color = cTx, text_size = tSz)
+    table.cell(TBL2, 0, 6, "итог", text_color = cTx, text_size = tSz)
+    for sd = 0 to 1
+        int col = 1 + sd
+        bool has = not na(lyT)
+        string why = f_cut(array.get(vR, sd))
+        bool shut = has and why != ""
+        float p3 = array.get(vP3, sd)
+        string sE = has and not shut ? str.tostring(array.get(vE, sd), format.mintick) : ""
+        string sS = has and not shut ? str.tostring(array.get(vS, sd), format.mintick) : ""
+        string sT = has and not shut ? str.tostring(array.get(vP, sd), format.mintick) : ""
+        string sR = has and not shut ? "1:" + str.tostring(array.get(vRR, sd), "#.##") : ""
+        string s3 = has and not na(p3) ? "тейк " + str.tostring(p3, format.mintick) + " · " + f_trTxt(array.get(vId3, sd)) : "—"
+        string sI = not has ? "—" : shut ? "⛔ " + why : "✅ дошла · " + f_trTxt(array.get(vId, sd))
+        table.cell(TBL2, col, 1, sE, text_color = chart.fg_color, text_size = tSz)
+        table.cell(TBL2, col, 2, sS, text_color = chart.fg_color, text_size = tSz)
+        table.cell(TBL2, col, 3, sT, text_color = chart.fg_color, text_size = tSz)
+        table.cell(TBL2, col, 4, sR, text_color = chart.fg_color, text_size = tSz)
+        table.cell(TBL2, col, 5, s3, text_color = cTx, text_size = tSz)
+        table.cell(TBL2, col, 6, sI, text_color = chart.fg_color, text_size = tSz, bgcolor = not has ? cNet : shut ? cNet : cOk)
+
+if barstate.islast and vxOn and vxB2
+    table.cell(TBL2, 0, 7, "ЗА И ПРОТИВ", text_color = chart.fg_color, text_size = tSz, bgcolor = cZag)
+    table.cell(TBL2, 1, 7, "ЛОНГ", text_color = cTrUp, text_size = tSz, bgcolor = cZag)
+    table.cell(TBL2, 2, 7, "ШОРТ", text_color = cTrDn, text_size = tSz, bgcolor = cZag)
+    string[] vxNm = array.from("1 сторона", "2 встречный", "3 колено", "4 РР", "5 сетка", "6 колено / среднее", "7 запас", "8а чистота · справочник", "8б сломы", "9 слои")
+    bool has2 = not na(lyT)
+    for it = 0 to 9
+        table.cell(TBL2, 0, 8 + it, array.get(vxNm, it), text_color = cTx, text_size = tSz)
+        for sd = 0 to 1
+            int v = array.get(vV, sd * 10 + it)
+            string t = array.get(vT, sd * 10 + it)
+            if v == 2 or v == -2
+                t := t + " *"
+            table.cell(TBL2, 1 + sd, 8 + it, has2 ? t : "—", text_color = chart.fg_color, text_size = tSz, bgcolor = has2 ? f_vBg(v) : cNet)
+    table.cell(TBL2, 0, 18, "счёт", text_color = cTx, text_size = tSz)
+    for sd = 0 to 1
+        int nZa = 0
+        int nPr = 0
+        int nSe = 0
+        for it = 0 to 9
+            int v = array.get(vV, sd * 10 + it)
+            if v > 0
+                nZa := nZa + 1
+            else if v < 0
+                nPr := nPr + 1
+            else
+                nSe := nSe + 1
+        table.cell(TBL2, 1 + sd, 18, has2 ? "за " + str.tostring(nZa) + " · против " + str.tostring(nPr) + " · серых " + str.tostring(nSe) : "—", text_color = chart.fg_color, text_size = tSz)
+
+if barstate.islast and vxOn and vxB3
+    int dK0 = f_dKey(time)
+    int wK0 = f_wKey(dK0)
+    int mK0 = f_mKey(time)
+    int tL  = time + tzH * 3600000
+    int dom = dayofmonth(tL, "UTC")
+    int wom = wK0 - f_wKey(dK0 - (dom - 1)) + 1
+    string[] mNm = array.from("январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь")
+    table.cell(TBL2, 0, 19, "РИСК И СТАТИСТИКА", text_color = chart.fg_color, text_size = tSz, bgcolor = cZag)
+    table.cell(TBL2, 1, 19, "день " + str.format_time(time, "dd.MM", "UTC" + (tzH >= 0 ? "+" : "") + str.tostring(tzH)), text_color = chart.fg_color, text_size = tSz, bgcolor = cZag)
+    table.cell(TBL2, 2, 19, "неделя " + str.tostring(wom), text_color = chart.fg_color, text_size = tSz, bgcolor = cZag)
+    table.cell(TBL2, 3, 19, array.get(mNm, month(tL, "UTC") - 1), text_color = chart.fg_color, text_size = tSz, bgcolor = cZag)
+    int[] pN  = array.new_int(3, 0)
+    int[] pTP = array.new_int(3, 0)
+    int[] pSL = array.new_int(3, 0)
+    int[] pOp = array.new_int(3, 0)
+    float[] pR = array.new_float(3, 0.0)
+    int[] qN  = array.new_int(3, 0)
+    int[] qTP = array.new_int(3, 0)
+    int[] qSL = array.new_int(3, 0)
+    float[] qR = array.new_float(3, 0.0)
+    int nTr = array.size(TRd)
+    if nTr > 0
+        for k = 0 to nTr - 1
+            bool[] inP = array.from(array.get(TRdk, k) == dK0, array.get(TRwk, k) == wK0, array.get(TRmk, k) == mK0)
+            int st = array.get(TRst, k)
+            bool vr = array.get(TRv, k)
+            for pp = 0 to 2
+                if array.get(inP, pp)
+                    if not vr
+                        array.set(pN, pp, array.get(pN, pp) + 1)
+                        if st == 0
+                            array.set(pOp, pp, array.get(pOp, pp) + 1)
+                        else if st == 1
+                            array.set(pTP, pp, array.get(pTP, pp) + 1)
+                            array.set(pR, pp, array.get(pR, pp) + array.get(TRr, k))
+                        else
+                            array.set(pSL, pp, array.get(pSL, pp) + 1)
+                            array.set(pR, pp, array.get(pR, pp) - 1.0)
+                    else
+                        array.set(qN, pp, array.get(qN, pp) + 1)
+                        if st == 1
+                            array.set(qTP, pp, array.get(qTP, pp) + 1)
+                            array.set(qR, pp, array.get(qR, pp) + 3.0)
+                        else if st >= 2
+                            array.set(qSL, pp, array.get(qSL, pp) + 1)
+                            array.set(qR, pp, array.get(qR, pp) - 1.0)
+    bool[] cOkP = array.from(kD == dK0, kW == wK0, kM == mK0)
+    string[] rNm = array.from("жёлтых", "серых", "дошли до входа", "сделок · ТП · СЛ", "итог R", "открыто", "1:3 · ТП · СЛ · R")
+    for rr = 0 to 6
+        table.cell(TBL2, 0, 20 + rr, array.get(rNm, rr), text_color = cTx, text_size = tSz)
+    for pp = 0 to 2
+        int[] cs = pp == 0 ? kntD : pp == 1 ? kntW : kntM
+        bool okc = array.get(cOkP, pp)
+        int col = 1 + pp
+        table.cell(TBL2, col, 20, str.tostring(okc ? array.get(cs, 0) : 0), text_color = chart.fg_color, text_size = tSz)
+        table.cell(TBL2, col, 21, str.tostring(okc ? array.get(cs, 1) : 0), text_color = chart.fg_color, text_size = tSz)
+        table.cell(TBL2, col, 22, str.tostring(okc ? array.get(cs, 2) : 0), text_color = chart.fg_color, text_size = tSz)
+        table.cell(TBL2, col, 23, str.tostring(array.get(pN, pp)) + " · " + str.tostring(array.get(pTP, pp)) + " · " + str.tostring(array.get(pSL, pp)), text_color = chart.fg_color, text_size = tSz)
+        float rv = array.get(pR, pp)
+        table.cell(TBL2, col, 24, (rv > 0 ? "+" : "") + str.tostring(rv, "#.##") + "R", text_color = rv > 0 ? cTrUp : rv < 0 ? cTrDie : chart.fg_color, text_size = tSz)
+        table.cell(TBL2, col, 25, str.tostring(array.get(pOp, pp)), text_color = chart.fg_color, text_size = tSz)
+        float qv = array.get(qR, pp)
+        table.cell(TBL2, col, 26, str.tostring(array.get(qTP, pp)) + " · " + str.tostring(array.get(qSL, pp)) + " · " + (qv > 0 ? "+" : "") + str.tostring(qv, "#.##") + "R", text_color = cTx, text_size = tSz)
+    table.cell(TBL2, 0, 27, "всего с просадкой", text_color = cTx, text_size = tSz)
+    table.cell(TBL2, 1, 27, str.tostring(totN) + " сд · ТП " + str.tostring(totTP) + " · СЛ " + str.tostring(totSL) + " · " + (eqR > 0 ? "+" : "") + str.tostring(eqR, "#.##") + "R · просадка " + str.tostring(pkR - eqR, "#.##") + "R", text_color = chart.fg_color, text_size = tSz)
+    table.cell(TBL2, 0, 28, "серия стопов", text_color = cTx, text_size = tSz)
+    table.cell(TBL2, 1, 28, str.tostring(stkSL) + " подряд", text_color = chart.fg_color, text_size = tSz)
+    table.cell(TBL2, 0, 29, "R — оценка свечей, дошедших до входа, а не ваш счёт", text_color = cTx, text_size = tSz)
+    if not mrgVx
+        table.cell(TBL2, 2, 27, "", text_size = tSz)
+        table.cell(TBL2, 3, 27, "", text_size = tSz)
+        table.merge_cells(TBL2, 1, 27, 3, 27)
+        table.cell(TBL2, 2, 28, "", text_size = tSz)
+        table.cell(TBL2, 3, 28, "", text_size = tSz)
+        table.merge_cells(TBL2, 1, 28, 3, 28)
+        table.cell(TBL2, 1, 29, "", text_size = tSz)
+        table.cell(TBL2, 2, 29, "", text_size = tSz)
+        table.cell(TBL2, 3, 29, "", text_size = tSz)
+        table.merge_cells(TBL2, 0, 29, 3, 29)
+        mrgVx := true
