@@ -3310,28 +3310,17 @@ v03 = f_purgeL(V2P, V2B, V2H, V2L)
 // у сетки новая вершина — досматриваем бары после неё.
 var int[] tFBchk = array.new_int(2, -1)
 for fz = 0 to 1
-    int fzB = array.get(tFB, fz)
-    if array.get(tFBp, fz) >= 0 and fzB >= 0
-        if fzB != array.get(tFBchk, fz)
-            array.set(tFBchk, fz, fzB)
-            float fzN = array.get(tFP, fz)
-            float fzP = array.get(tFPp, fz)
-            if not array.get(tFKill, fz)
-                if not na(fzN)
-                    if not na(fzP)
-                        float fzSg = fz >= 1 ? -1.0 : 1.0
-                        float fzNr = fzN * fzSg
-                        float fzPr = fzP * fzSg
-                        float fz79 = fzNr + 0.79 * (fzPr - fzNr)
-                        int fzK = math.min(bar_index - fzB - 1, 60)
-                        if fzK >= 0
-                            for q = 0 to fzK
-                                if fzNr > fzPr
-                                    if low[q] < fz79
-                                        array.set(tFKill, fz, true)
-                                else
-                                    if high[q] > fz79
-                                        array.set(tFKill, fz, true)
+    int   fzB  = array.get(tFB, fz)
+    float fzSg = fz >= 1 ? -1.0 : 1.0
+    float fzNr = array.get(tFP, fz) * fzSg
+    float fzPr = array.get(tFPp, fz) * fzSg
+    float fz79 = fzNr + 0.79 * (fzPr - fzNr)
+    if array.get(tFBp, fz) >= 0 and fzB >= 0 and fzB != array.get(tFBchk, fz) and not array.get(tFKill, fz) and not na(fz79)
+        array.set(tFBchk, fz, fzB)
+        bool kz = false
+        for q = 0 to math.max(math.min(bar_index - fzB - 1, 60), 0)
+            kz := kz or (fzNr > fzPr ? low[q] < fz79 : high[q] > fz79)
+        array.set(tFKill, fz, kz)
 
 for fw = 0 to 1
     int    fwB = array.get(tFBp, fw)
@@ -4018,6 +4007,11 @@ if barstate.islast and trPale
 // Таблица СЧИТАЕТ И ПОКАЗЫВАЕТ, решение — его (РИ7.9). Движок 2/2 этот
 // раздел НЕ ТРОГАЕТ: только читает массивы тренда, сломов и сетки и
 // пишет в СВОИ массивы. Считается только на ЗАКРЫТОЙ свече.
+//
+// ⚠️ ПРЕДЕЛ ЛОКАЛЬНЫХ БЛОКОВ: 550 на файл. Первая сборка v3.45 дала 637
+// и не собралась. Поэтому здесь проверки слиты в одно условие, а выбор
+// значений сделан тернарником, а не цепочкой if: каждый if, else, for и
+// функция — отдельный блок.
 
 // ── ряды табло свечи и сетки после З82: шесть пар сведены в шесть строк ──
 int SV0   = 19
@@ -4026,16 +4020,21 @@ int SVf   = oldMode ? 22 : 21
 int SVl   = SVf + 4
 int FI0   = SVl + 1
 
+// ── периоды по ЕГО часам, РИ7.19: неделя с понедельника ──
+int tLoc = time + tzH * 3600000
+int dKey = int(math.floor(tLoc / 86400000))
+int wKey = int(math.floor((dKey + 3) / 7))
+int mKey = year(tLoc, "UTC") * 12 + month(tLoc, "UTC")
+
 // ── кто кого застал при рождении: пункт 2 листа, А15 ──
 var int[] tBrC = array.new_int(2, -9)
 var int[] tBrS = array.new_int(2, 0)
 var int[] tBrB = array.new_int(2, -1)
 for bi = 0 to 1
-    if array.get(tBB, bi) == bar_index
-        if array.get(tBrB, bi) != bar_index
-            array.set(tBrB, bi, bar_index)
-            array.set(tBrC, bi, array.get(tCNT, 1 - bi))
-            array.set(tBrS, bi, array.get(tTR, 1 - bi))
+    if array.get(tBB, bi) == bar_index and array.get(tBrB, bi) != bar_index
+        array.set(tBrB, bi, bar_index)
+        array.set(tBrC, bi, array.get(tCNT, 1 - bi))
+        array.set(tBrS, bi, array.get(tTR, 1 - bi))
 
 // ── вершины счёта для тейка: ТС8.10, А11. Сплошные, (0) тоже, вершина
 // умершего тренда тоже; держатся, пока цена их не тронула ──
@@ -4043,20 +4042,9 @@ var float[] CPP = array.new_float()
 var bool[]  CPH = array.new_bool()
 
 f_cpAdd(_p, _h) =>
-    bool have = false
-    int n = array.size(CPP)
-    if n > 0
-        for k = 0 to n - 1
-            if array.get(CPH, k) == _h
-                if math.abs(array.get(CPP, k) - _p) <= syminfo.mintick
-                    have := true
-    if not have
-        if f_alive(V2P, _p)
-            array.push(CPP, _p)
-            array.push(CPH, _h)
-            if array.size(CPP) > 400
-                array.shift(CPP)
-                array.shift(CPH)
+    if array.indexof(CPP, _p) < 0 and f_alive(V2P, _p)
+        array.push(CPP, _p)
+        array.push(CPH, _h)
     0
 
 f_cpTail(_P, _B, _H, _i) =>
@@ -4065,14 +4053,10 @@ f_cpTail(_P, _B, _H, _i) =>
     int n  = array.size(_P)
     if (s == ST_MAY or s == ST_LIVE) and zb >= 0 and n > 0
         int zi = -1
-        int kLo = math.max(0, n - 12)
-        for k = n - 1 to kLo
-            if array.get(_B, k) >= zb
-                if not array.get(_H, k)
-                    zi := k
+        for k = n - 1 to math.max(0, n - 12)
+            zi := array.get(_B, k) >= zb and not array.get(_H, k) ? k : zi
         if zi >= 0
-            int kHi = math.min(zi + 5, n - 1)
-            for k = zi to kHi
+            for k = zi to math.min(zi + 5, n - 1)
                 float pr = array.get(_P, k)
                 bool  hi = array.get(_H, k)
                 cpa = f_cpAdd(_i >= 1 ? -pr : pr, _i >= 1 ? not hi : hi)
@@ -4081,17 +4065,13 @@ f_cpTail(_P, _B, _H, _i) =>
 if barstate.isconfirmed
     int cpi = 0
     while cpi < array.size(CPP)
-        float cpv = array.get(CPP, cpi)
-        bool cpDead = array.get(CPH, cpi) ? high >= cpv : low <= cpv
+        bool cpDead = array.get(CPH, cpi) ? high >= array.get(CPP, cpi) : low <= array.get(CPP, cpi)
         if cpDead
             array.remove(CPP, cpi)
             array.remove(CPH, cpi)
-        else
-            cpi := cpi + 1
-    if trOn
-        cpq1 = f_cpTail(P2, B2, H2, 0)
-    if trDn
-        cpq2 = f_cpTail(P2n, B2n, H2n, 1)
+        cpi := cpDead ? cpi : cpi + 1
+    cpq1 = f_cpTail(P2, B2, H2, 0)
+    cpq2 = f_cpTail(P2n, B2n, H2n, 1)
 
 f_tpFind(_long, _e) =>
     float best = na
@@ -4099,19 +4079,8 @@ f_tpFind(_long, _e) =>
     if n > 0
         for k = 0 to n - 1
             float p = array.get(CPP, k)
-            bool  h = array.get(CPH, k)
-            if _long and h
-                if p - tpOff > _e
-                    if na(best)
-                        best := p
-                    else if p < best
-                        best := p
-            if not _long and not h
-                if p + tpOff < _e
-                    if na(best)
-                        best := p
-                    else if p > best
-                        best := p
+            bool ok = array.get(CPH, k) == _long and (_long ? p - tpOff > _e : p + tpOff < _e)
+            best := ok and (na(best) or (_long ? p < best : p > best)) ? p : best
     best
 
 // ── перевес уровней по ЗАКРЫТОЙ свече: СЛ6.3, Н64 ──
@@ -4119,66 +4088,31 @@ var string perCls = ""
 var int    perSd  = 0
 if barstate.isconfirmed
     [pcU, pcD] = f_nearest(V2P, V2H)
-    perCls := ""
-    perSd  := 0
-    if not na(pcU)
-        if not na(pcD)
-            float pdu = pcU - close
-            float pdd = close - pcD
-            if pdu > 0 and pdd > 0
-                perSd := pdu < pdd ? 1 : -1
-                float prr = math.min(pdu, pdd) / math.max(pdu, pdd)
-                perCls := prr < perYav ? "явный" : prr >= perRov ? "поровну" : "слабый"
+    float pdu = pcU - close
+    float pdd = close - pcD
+    bool  pok = not na(pdu) and not na(pdd) and pdu > 0 and pdd > 0
+    float prr = pok ? math.min(pdu, pdd) / math.max(pdu, pdd) : na
+    perSd  := pok ? (pdu < pdd ? 1 : -1) : 0
+    perCls := not pok ? "" : prr < perYav ? "явный" : prr >= perRov ? "поровну" : "слабый"
 
 // ── сетка: чья она на этом баре, Ф6.3 + Ф6.6 (передача при отмене) ──
 f_fiG(_i) =>
-    bool r = false
-    if array.get(tFBp, _i) >= 0
-        int fs = array.get(tTR, _i)
-        if fs == ST_MAY or fs == ST_LIVE
-            r := true
-    r
+    array.get(tFBp, _i) >= 0 and (array.get(tTR, _i) == ST_MAY or array.get(tTR, _i) == ST_LIVE)
 
 f_fiBig(_i) =>
-    bool r = true
-    float a = array.get(tFP, _i)
-    float b = array.get(tFPp, _i)
-    if not na(a)
-        if not na(b)
-            float av = array.get(tLEG, _i)
-            if av > 0
-                if math.abs(a - b) < fiMin * av
-                    r := false
-    r
+    float fa = math.abs(array.get(tFP, _i) - array.get(tFPp, _i))
+    float av = array.get(tLEG, _i)
+    na(fa) or av <= 0 or fa >= fiMin * av
 
 f_fiPick(_s0, _s1) =>
-    bool c0 = false
-    bool c1 = false
-    if _s0
-        c0 := f_fiG(0)
-    if _s1
-        c1 := f_fiG(1)
-    int own = -1
-    if c0 and not c1
-        own := 0
-    if c1 and not c0
-        own := 1
-    if c0 and c1
-        int b0 = array.get(tBB, 0)
-        int b1 = array.get(tBB, 1)
-        if b0 < 0
-            own := 1
-        else
-            if b1 < 0
-                own := 0
-            else
-                own := b0 <= b1 ? 0 : 1
-        if array.get(tFKill, own)
-            int oth = 1 - own
-            if not array.get(tFKill, oth)
-                if f_fiBig(oth)
-                    own := oth
-    own
+    bool c0 = _s0 and f_fiG(0)
+    bool c1 = _s1 and f_fiG(1)
+    int  b0 = array.get(tBB, 0)
+    int  b1 = array.get(tBB, 1)
+    int own = c0 and c1 ? (b0 < 0 ? 1 : b1 < 0 ? 0 : b0 <= b1 ? 0 : 1) : c0 ? 0 : c1 ? 1 : -1
+    int oth = own >= 0 ? 1 - own : 0
+    bool kil = array.get(tFKill, math.max(own, 0))
+    c0 and c1 and kil and not array.get(tFKill, oth) and f_fiBig(oth) ? oth : own
 
 // ── закрытия с вершины сетки: Ф1.5, линия пробита закрытием навсегда ──
 var float[] fMnC = array.new_float(2, na)
@@ -4187,28 +4121,12 @@ if barstate.isconfirmed
     for fm = 0 to 1
         int   fmB  = array.get(tFB, fm)
         float fmSg = fm >= 1 ? -1.0 : 1.0
-        if fmB >= 0
-            if fmB != array.get(fMnB, fm)
-                array.set(fMnB, fm, fmB)
-                float mn = na
-                int fmK = math.min(bar_index - fmB - 1, 300)
-                if fmK >= 0
-                    for q = 0 to fmK
-                        float cq = close[q] * fmSg
-                        mn := na(mn) ? cq : math.min(mn, cq)
-                array.set(fMnC, fm, mn)
-            else
-                float cn  = close * fmSg
-                float old = array.get(fMnC, fm)
-                array.set(fMnC, fm, na(old) ? cn : math.min(old, cn))
-
-// ── периоды по ЕГО часам: РИ7.19 ──
-f_dKey(_t) =>
-    int(math.floor((_t + tzH * 3600000) / 86400000))
-f_wKey(_d) =>
-    int(math.floor((_d + 3) / 7))
-f_mKey(_t) =>
-    year(_t + tzH * 3600000, "UTC") * 12 + month(_t + tzH * 3600000, "UTC")
+        bool  nw   = fmB >= 0 and fmB != array.get(fMnB, fm)
+        float mn   = nw ? na : array.get(fMnC, fm)
+        for q = 0 to (nw ? math.max(math.min(bar_index - fmB - 1, 300), 0) : 0)
+            mn := na(mn) ? close[q] * fmSg : math.min(mn, close[q] * fmSg)
+        array.set(fMnB, fm, fmB)
+        array.set(fMnC, fm, mn)
 
 // ── условные сделки: РИ7.16, РИ7.18. Каждая свеча — своя сделка ──
 var int[]   TRd  = array.new_int()     // +1 лонг, -1 шорт
@@ -4220,7 +4138,7 @@ var int[]   TRdk = array.new_int()
 var int[]   TRwk = array.new_int()
 var int[]   TRmk = array.new_int()
 var bool[]  TRv  = array.new_bool()    // вариант 1:3 — наблюдение
-var int oFirst = 0
+var int   oFirst = 0
 var float eqR  = 0.0
 var float pkR  = 0.0
 var int   stkSL = 0
@@ -4228,34 +4146,29 @@ var int   totN  = 0
 var int   totTP = 0
 var int   totSL = 0
 
-if barstate.isconfirmed
+if barstate.isconfirmed and oFirst < array.size(TRd)
     int nT = array.size(TRd)
-    if oFirst < nT
-        for k = oFirst to nT - 1
-            if array.get(TRst, k) == 0
-                int   tdr = array.get(TRd, k)
-                float tst = array.get(TRs, k)
-                float ttp = array.get(TRt, k)
-                bool hs = tdr > 0 ? low <= tst : high >= tst
-                bool ht = tdr > 0 ? high >= ttp : low <= ttp
-                if hs or ht
-                    int res = hs and ht ? 3 : hs ? 2 : 1
-                    array.set(TRst, k, res)
-                    if not array.get(TRv, k)
-                        float rv = res == 1 ? array.get(TRr, k) : -1.0
-                        eqR := eqR + rv
-                        pkR := math.max(pkR, eqR)
-                        stkSL := res == 1 ? 0 : stkSL + 1
-                        totN := totN + 1
-                        totTP := totTP + (res == 1 ? 1 : 0)
-                        totSL := totSL + (res == 1 ? 0 : 1)
-    bool adv = true
-    while adv
-        adv := false
-        if oFirst < array.size(TRst)
-            if array.get(TRst, oFirst) != 0
-                oFirst := oFirst + 1
-                adv := true
+    for k = oFirst to nT - 1
+        int  tdr = array.get(TRd, k)
+        bool hs  = tdr > 0 ? low <= array.get(TRs, k) : high >= array.get(TRs, k)
+        bool ht  = tdr > 0 ? high >= array.get(TRt, k) : low <= array.get(TRt, k)
+        if array.get(TRst, k) == 0 and (hs or ht)
+            int   res = hs and ht ? 3 : hs ? 2 : 1
+            bool  rel = not array.get(TRv, k)
+            float rv  = res == 1 ? array.get(TRr, k) : -1.0
+            array.set(TRst, k, res)
+            eqR   := rel ? eqR + rv : eqR
+            pkR   := math.max(pkR, eqR)
+            stkSL := rel ? (res == 1 ? 0 : stkSL + 1) : stkSL
+            totN  := rel ? totN + 1 : totN
+            totTP := rel and res == 1 ? totTP + 1 : totTP
+            totSL := rel and res != 1 ? totSL + 1 : totSL
+    bool held = false
+    int  nf   = oFirst
+    for k = oFirst to nT - 1
+        held := held or array.get(TRst, k) == 0
+        nf   := held ? nf : k + 1
+    oFirst := nf
 
 // ── снимок последней жёлтой: РИ7.14 ──
 var int lyT = na
@@ -4270,299 +4183,179 @@ var float[]  vRR  = array.new_float(2, na)
 var float[]  vP3  = array.new_float(2, na)
 var int[]    vId  = array.new_int(2, -1)
 var int[]    vId3 = array.new_int(2, -1)
+var float[]  fxL  = array.from(0.382, 0.5, 0.618, 0.75)
+var string[] fxN  = array.from("на 0,382", "на 0,5", "на 0,618", "в зоне")
 
 // ── счётчики периода: жёлтых · серых · дошли до входа ──
 var int kD = -1
 var int kW = -1
 var int kM = -1
-var int[] kntD = array.new_int(3, 0)
-var int[] kntW = array.new_int(3, 0)
-var int[] kntM = array.new_int(3, 0)
+var int dY = 0
+var int dG = 0
+var int dR = 0
+var int wY = 0
+var int wG = 0
+var int wR = 0
+var int mY = 0
+var int mG = 0
+var int mR = 0
 
 bool zelB = false
 
 if barstate.isconfirmed
-    int dK = f_dKey(time)
-    int wK = f_wKey(dK)
-    int mK = f_mKey(time)
-    if dK != kD
-        kD := dK
-        array.fill(kntD, 0)
-    if wK != kW
-        kW := wK
-        array.fill(kntW, 0)
-    if mK != kM
-        kM := mK
-        array.fill(kntM, 0)
-    if srez
-        array.set(kntD, 1, array.get(kntD, 1) + 1)
-        array.set(kntW, 1, array.get(kntW, 1) + 1)
-        array.set(kntM, 1, array.get(kntM, 1) + 1)
-    if trig
-        array.set(kntD, 0, array.get(kntD, 0) + 1)
-        array.set(kntW, 0, array.get(kntW, 0) + 1)
-        array.set(kntM, 0, array.get(kntM, 0) + 1)
-        lyT := time
-        lyB := bar_index
-        int gOwn = f_fiPick(trWho != "только нисходящий", trWho != "только восходящий")
-        bool anyOk = false
-        for sd = 0 to 1
-            int  e    = 1 - sd
-            int  dir  = sd == 0 ? 1 : -1
-            bool sOn  = sd == 0 ? trOn : trDn
-            bool eOn  = sd == 0 ? trDn : trOn
-            int  sO   = sOn ? array.get(tTR, sd) : ST_NO
-            int  sE   = eOn ? array.get(tTR, e) : ST_NO
-            int  cO   = array.get(tCNT, sd)
-            int  cE   = array.get(tCNT, e)
-            bool aliveO = sO == ST_MAY or sO == ST_LIVE
-            string hard = ""
-            int b0 = sd * 10
+    bool nd = dKey != kD
+    bool nw = wKey != kW
+    bool nm = mKey != kM
+    dY := (nd ? 0 : dY) + (trig ? 1 : 0)
+    wY := (nw ? 0 : wY) + (trig ? 1 : 0)
+    mY := (nm ? 0 : mY) + (trig ? 1 : 0)
+    dG := (nd ? 0 : dG) + (srez ? 1 : 0)
+    wG := (nw ? 0 : wG) + (srez ? 1 : 0)
+    mG := (nm ? 0 : mG) + (srez ? 1 : 0)
+    dR := nd ? 0 : dR
+    wR := nw ? 0 : wR
+    mR := nm ? 0 : mR
+    kD := dKey
+    kW := wKey
+    kM := mKey
 
-            // бледная точка своего тренда — как в табло (v3.44)
-            int pk = -1
-            if aliveO
-                int pkL = -1
-                int pkH = -1
-                if not na(pl21)
-                    pkL := f_paleK(P2, B2, H2, array.get(tZB, sd), sd == 1, low[1], false, ph21)
-                if not na(ph21)
-                    pkH := f_paleK(P2, B2, H2, array.get(tZB, sd), sd == 1, high[1], true, float(na))
-                pk := pkL >= 0 ? pkL : pkH
+if barstate.isconfirmed and trig
+    lyT := time
+    lyB := bar_index
+    int gOwn = f_fiPick(trWho != "только нисходящий", trWho != "только восходящий")
+    [zlA, tlA, npA] = f_seqNow(P2, B2, H2, L2, 0)
+    [zlB, tlB, npB] = f_seqNow(P2n, B2n, H2n, L2n, 1)
+    [mcA, miA, mnA] = f_match(tlA)
+    [mcB, miB, mnB] = f_matchS(tlB)
+    int sdr = array.get(sDIR, 0)
+    int srn = array.get(sRUN, 0)
+    bool anyOk = false
+    for sd = 0 to 1
+        int  e    = 1 - sd
+        int  dir  = sd == 0 ? 1 : -1
+        int  b0   = sd * 10
+        int  sO   = (sd == 0 ? trOn : trDn) ? array.get(tTR, sd) : ST_NO
+        int  sE   = (sd == 0 ? trDn : trOn) ? array.get(tTR, e) : ST_NO
+        int  cO   = array.get(tCNT, sd)
+        int  cE   = array.get(tCNT, e)
+        bool aliveO = sO == ST_MAY or sO == ST_LIVE
+        string hard = ""
 
-            // 1 · сторона
-            array.set(vV, b0 + 0, sO == ST_LIVE ? 1 : -1)
-            array.set(vT, b0 + 0, sO == ST_LIVE ? "подтверждён" : sO == ST_MAY ? "возможен" : "нет тренда")
+        // бледная точка своего тренда — как в табло (v3.44)
+        int pkL = aliveO and not na(pl21) ? f_paleK(P2, B2, H2, array.get(tZB, sd), sd == 1, low[1], false, ph21) : -1
+        int pkH = aliveO and not na(ph21) ? f_paleK(P2, B2, H2, array.get(tZB, sd), sd == 1, high[1], true, float(na)) : -1
+        int pk  = pkL >= 0 ? pkL : pkH
 
-            // 2 · встречный (РИ7.15, РИ7.20)
-            int v2 = 0
-            string t2 = ""
-            if sE == ST_MAY
-                int bcE = array.get(tBrC, e)
-                int bsE = array.get(tBrS, e)
-                bool bAl = bsE == ST_MAY or bsE == ST_LIVE
-                if bAl and (bcE == 1 or bcE == 3)
-                    v2 := 1
-                    t2 := "возможен на коррекции — шум"
-                else if bAl and bcE == 5
-                    v2 := -1
-                    t2 := "возможен после (5) — кандидат"
-                else
-                    t2 := "возможен"
-            else if sE == ST_LIVE
-                if cE == 5
-                    v2 := 1
-                    t2 := "подтверждён, (5) — в конце"
-                else
-                    v2 := -1
-                    t2 := "подтверждён (" + str.tostring(cE) + ")/5"
-            else
-                v2 := 1
-                t2 := sE == ST_DEAD ? "умер" : sE == ST_ARC ? "архив" : "нет"
-            // жёстко: свой «возможен» родился на коррекции другого (А15)
-            int bcO = array.get(tBrC, sd)
-            int bsO = array.get(tBrS, sd)
-            if sO == ST_MAY
-                if bsO == ST_MAY or bsO == ST_LIVE
-                    if bcO == 1 or bcO == 3
-                        hard := hard + "возможен на коррекции · "
-                        v2 := -1
-                        t2 := "⛔ свой возможен родился на коррекции"
-            array.set(vV, b0 + 1, v2)
-            array.set(vT, b0 + 1, t2)
+        // 1 · сторона
+        array.set(vV, b0 + 0, sO == ST_LIVE ? 1 : -1)
+        array.set(vT, b0 + 0, sO == ST_LIVE ? "подтверждён" : sO == ST_MAY ? "возможен" : "нет тренда")
 
-            // 3 · колено (жёстко: (5), бледная (5), коррекция — ТС8.12, ТС8.13, А3)
-            int v3 = 0
-            string t3 = "—"
-            if aliveO and cO >= 0
-                string kn = "(" + str.tostring(cO) + ")→(" + str.tostring(cO + 1) + ")"
-                if cO == 5
-                    hard := hard + "(5) — сделок нет · "
-                    v3 := -1
-                    t3 := "(5) — сделок нет"
-                else if cO % 2 == 0
-                    if pk == cO + 1
-                        if pk == 5
-                            hard := hard + "(5) предв. · "
-                            v3 := -1
-                            t3 := "(5) предв. — не входим"
-                        else
-                            v3 := -2
-                            t3 := kn + ", (" + str.tostring(pk) + ") предв. — могло кончиться"
-                    else
-                        v3 := 1
-                        t3 := kn + (cO == 2 ? " — самое сильное" : "")
-                else
-                    if pk == cO + 1
-                        v3 := 2
-                        t3 := "(" + str.tostring(pk) + ") предв. — с оговоркой"
-                    else
-                        hard := hard + "коррекция " + kn + " · "
-                        v3 := -1
-                        t3 := "коррекция " + kn
-            array.set(vV, b0 + 2, v3)
-            array.set(vT, b0 + 2, t3)
+        // 2 · встречный (РИ7.15, РИ7.20); жёстко — свой «возможен» на коррекции другого (А15)
+        int  bcE = array.get(tBrC, e)
+        bool bAl = array.get(tBrS, e) == ST_MAY or array.get(tBrS, e) == ST_LIVE
+        bool onC = bAl and (bcE == 1 or bcE == 3)
+        bool af5 = bAl and bcE == 5
+        int  bcO = array.get(tBrC, sd)
+        bool h2  = sO == ST_MAY and (array.get(tBrS, sd) == ST_MAY or array.get(tBrS, sd) == ST_LIVE) and (bcO == 1 or bcO == 3)
+        int  v2  = h2 ? -1 : sE == ST_MAY ? (onC ? 1 : af5 ? -1 : 0) : sE == ST_LIVE ? (cE == 5 ? 1 : -1) : 1
+        string t2 = h2 ? "⛔ свой возможен родился на коррекции" : sE == ST_MAY ? (onC ? "возможен на коррекции — шум" : af5 ? "возможен после (5) — кандидат" : "возможен") : sE == ST_LIVE ? (cE == 5 ? "подтверждён, (5) — в конце" : "подтверждён (" + str.tostring(cE) + ")/5") : sE == ST_DEAD ? "умер" : sE == ST_ARC ? "архив" : "нет"
+        hard := hard + (h2 ? "возможен на коррекции · " : "")
+        array.set(vV, b0 + 1, v2)
+        array.set(vT, b0 + 1, t2)
 
-            // 4 · РР (жёстко): вход по закрытию, стоп за круглым уровнем, тейк до вершины счёта
-            float eN  = close
-            float stp = sd == 0 ? math.floor(low / stepL) * stepL - offS : math.ceil(high / stepL) * stepL + offS
-            float rk  = sd == 0 ? eN - stp : stp - eN
-            float vx  = f_tpFind(sd == 0, eN)
-            float tp  = na
-            float rr  = na
-            if not na(vx)
-                tp := sd == 0 ? vx - tpOff : vx + tpOff
-                if rk > 0
-                    rr := (sd == 0 ? tp - eN : eN - tp) / rk
-            bool rrBad = false
-            if na(rr)
-                hard := hard + "нет вершины для тейка · "
-                array.set(vV, b0 + 3, -1)
-                array.set(vT, b0 + 3, "нет вершины счёта")
-            else if rr < 3.0
-                rrBad := true
-                array.set(vV, b0 + 3, -1)
-                array.set(vT, b0 + 3, "1:" + str.tostring(rr, "#.##"))
-            else
-                array.set(vV, b0 + 3, 1)
-                array.set(vT, b0 + 3, "1:" + str.tostring(rr, "#.##"))
+        // 3 · колено (жёстко: (5), бледная (5), коррекция — ТС8.12, ТС8.13, А3)
+        bool   ev = cO % 2 == 0
+        bool   pn = pk == cO + 1
+        bool   k3 = aliveO and cO >= 0
+        string kn = "(" + str.tostring(cO) + ")→(" + str.tostring(cO + 1) + ")"
+        int    v3 = not k3 ? 0 : cO == 5 ? -1 : ev ? (pn ? (pk == 5 ? -1 : -2) : 1) : (pn ? 2 : -1)
+        bool   h3 = k3 and (cO == 5 or (ev and pn and pk == 5) or (not ev and not pn))
+        string t3 = not k3 ? "—" : cO == 5 ? "(5) — сделок нет" : ev ? (pn ? (pk == 5 ? "(5) предв. — не входим" : kn + ", (" + str.tostring(pk) + ") предв. — могло кончиться") : kn + (cO == 2 ? " — самое сильное" : "")) : (pn ? "(" + str.tostring(pk) + ") предв. — с оговоркой" : "коррекция " + kn)
+        hard := hard + (h3 ? t3 + " · " : "")
+        array.set(vV, b0 + 2, v3)
+        array.set(vT, b0 + 2, t3)
 
-            // 5 · сетка: на линии или в зоне, между нельзя (Ф1.4, Ф1.5, Ф1.6)
-            int v5 = -1
-            string t5 = "нет"
-            bool mine = false
-            if gOwn == sd
-                if not array.get(tFKill, sd)
-                    if f_fiBig(sd)
-                        mine := true
-            if mine
-                float fnr = array.get(tFP, sd)
-                float fpr = array.get(tFPp, sd)
-                float frn = fpr - fnr
-                float nlo = sd == 0 ? low : -high
-                float ncl = sd == 0 ? close : -close
-                float mnc = array.get(fMnC, sd)
-                string onL = ""
-                float[]  fxL = array.from(0.382, 0.5, 0.618, 0.75)
-                string[] fxN = array.from("на 0,382", "на 0,5", "на 0,618", "в зоне")
-                for xi = 0 to 3
-                    float lx = fnr + array.get(fxL, xi) * frn
-                    bool brk = false
-                    if not na(mnc)
-                        if mnc < lx
-                            brk := true
-                    if not brk
-                        if nlo <= lx and ncl > lx
-                            onL := array.get(fxN, xi)
-                if onL != ""
-                    v5 := 1
-                    t5 := onL
-                else
-                    hard := hard + "сетка: между · "
-                    t5 := "⛔ между"
-            else
-                if gOwn < 0
-                    t5 := "нет"
-                else if gOwn != sd
-                    t5 := "своей нет — сетка у другого"
-                else if array.get(tFKill, sd)
-                    t5 := "отменена"
-                else
-                    t5 := "колено мелкое"
-            array.set(vV, b0 + 4, v5)
-            array.set(vT, b0 + 4, t5)
+        // 4 · РР (жёстко): вход по закрытию, стоп за круглым уровнем, тейк до вершины счёта
+        float eN  = close
+        float stp = sd == 0 ? math.floor(low / stepL) * stepL - offS : math.ceil(high / stepL) * stepL + offS
+        float rk  = sd == 0 ? eN - stp : stp - eN
+        float vx  = f_tpFind(sd == 0, eN)
+        float tp  = na(vx) ? na : sd == 0 ? vx - tpOff : vx + tpOff
+        float rr  = na(tp) or rk <= 0 ? na : (sd == 0 ? tp - eN : eN - tp) / rk
+        bool rrBad = not na(rr) and rr < 3.0
+        hard := hard + (na(rr) ? "нет вершины для тейка · " : "")
+        array.set(vV, b0 + 3, na(rr) or rrBad ? -1 : 1)
+        array.set(vT, b0 + 3, na(rr) ? "нет вершины счёта" : "1:" + str.tostring(rr, "#.##"))
 
-            // 6 · колено против среднего — число, серым, без голоса (РИ7.15)
-            string t6 = "—"
-            if array.get(tFBp, sd) >= 0
-                float a6  = array.get(tFP, sd)
-                float b6  = array.get(tFPp, sd)
-                float av6 = array.get(tLEG, sd)
-                if not na(a6)
-                    if not na(b6)
-                        if av6 > 0
-                            t6 := str.tostring(math.abs(a6 - b6), format.mintick) + " / " + str.tostring(av6, format.mintick) + " = " + str.tostring(math.abs(a6 - b6) / av6, "#.#") + "×"
-            array.set(vV, b0 + 5, 0)
-            array.set(vT, b0 + 5, t6)
+        // 5 · сетка: на линии или в зоне, между нельзя (Ф1.4, Ф1.5, Ф1.6)
+        bool   mine = gOwn == sd and not array.get(tFKill, sd) and f_fiBig(sd)
+        float  fnr  = array.get(tFP, sd)
+        float  frn  = array.get(tFPp, sd) - fnr
+        float  nlo  = sd == 0 ? low : -high
+        float  ncl  = sd == 0 ? close : -close
+        float  mnc  = array.get(fMnC, sd)
+        string onL  = ""
+        for xi = 0 to 3
+            float lx = fnr + array.get(fxL, xi) * frn
+            onL := (na(mnc) or mnc >= lx) and nlo <= lx and ncl > lx ? array.get(fxN, xi) : onL
+        bool bet = mine and onL == ""
+        hard := hard + (bet ? "сетка: между · " : "")
+        array.set(vV, b0 + 4, mine and onL != "" ? 1 : -1)
+        array.set(vT, b0 + 4, mine ? (bet ? "⛔ между" : onL) : gOwn < 0 ? "нет" : gOwn != sd ? "своей нет — сетка у другого" : array.get(tFKill, sd) ? "отменена" : "колено мелкое")
 
-            // 7 · запас своей стороны — число, серым, без голоса
-            string t7 = "—"
-            if aliveO
-                float lv = array.get(tLVL, sd)
-                if not na(lv)
-                    float lg  = array.get(tLEG, sd)
-                    float dp  = sd == 0 ? depthU : depthD
-                    bool  zo  = array.get(tONZ, sd) or (contTch and array.get(tCZ, sd))
-                    float nl2 = sd == 0 ? low : -high
-                    float nbo = sd == 0 ? math.min(open, close) : math.min(-open, -close)
-                    float zp  = zo ? nl2 - lv : nbo - (lv - dp * lg)
-                    t7 := str.tostring(100 * zp / close, "#.##") + "%"
-            array.set(vV, b0 + 6, 0)
-            array.set(vT, b0 + 6, t7)
+        // 6 · колено против среднего — число, серым, без голоса (РИ7.15)
+        float a6  = math.abs(array.get(tFP, sd) - array.get(tFPp, sd))
+        float av6 = array.get(tLEG, sd)
+        array.set(vV, b0 + 5, 0)
+        array.set(vT, b0 + 5, array.get(tFBp, sd) < 0 or na(a6) or av6 <= 0 ? "—" : str.tostring(a6, format.mintick) + " / " + str.tostring(av6, format.mintick) + " = " + str.tostring(a6 / av6, "#.#") + "×")
 
-            // 8а · чистота · справочник (слиты, Н59)
-            int mcS = 1
-            if aliveO
-                if sd == 0
-                    [zlA, tlA, npA] = f_seqNow(P2, B2, H2, L2, 0)
-                    [mcA, miA, mnA] = f_match(tlA)
-                    mcS := mcA
-                else
-                    [zlB, tlB, npB] = f_seqNow(P2n, B2n, H2n, L2n, 1)
-                    [mcB, miB, mnB] = f_matchS(tlB)
-                    mcS := mcB
-            array.set(vV, b0 + 7, aliveO ? (mcS == 0 ? -1 : 1) : 0)
-            array.set(vT, b0 + 7, aliveO ? (mcS == 0 ? "манипуляция · вне справ." : "чистый") : "—")
+        // 7 · запас своей стороны — число, серым, без голоса
+        float lv  = array.get(tLVL, sd)
+        bool  zo  = array.get(tONZ, sd) or (contTch and array.get(tCZ, sd))
+        float nbo = sd == 0 ? math.min(open, close) : math.min(-open, -close)
+        float zp  = zo ? nlo - lv : nbo - (lv - (sd == 0 ? depthU : depthD) * array.get(tLEG, sd))
+        array.set(vV, b0 + 6, 0)
+        array.set(vT, b0 + 6, not aliveO or na(lv) ? "—" : str.tostring(100 * zp / close, "#.##") + "%")
 
-            // 8б · сломы за / против
-            int sdr = array.get(sDIR, 0)
-            int srn = array.get(sRUN, 0)
-            array.set(vV, b0 + 8, sdr == 0 ? 0 : sdr == dir ? 1 : -1)
-            array.set(vT, b0 + 8, sdr == 0 ? "—" : (sdr > 0 ? "↑" : "↓") + str.tostring(srn) + (sdr == dir ? " за" : " ПРОТИВ"))
+        // 8а · чистота · справочник (слиты, Н59)
+        int mcS = sd == 0 ? mcA : mcB
+        array.set(vV, b0 + 7, aliveO ? (mcS == 0 ? -1 : 1) : 0)
+        array.set(vT, b0 + 7, aliveO ? (mcS == 0 ? "манипуляция · вне справ." : "чистый") : "—")
 
-            // 9 · слои — по перевесу уровней (СЛ6.3, Н65)
-            array.set(vV, b0 + 9, perCls == "явный" ? (perSd == dir ? 1 : -1) : 0)
-            array.set(vT, b0 + 9, perCls == "" ? "—" : perCls + (perSd > 0 ? " · ближний сверху" : " · ближний снизу"))
+        // 8б · сломы за / против
+        array.set(vV, b0 + 8, sdr == 0 ? 0 : sdr == dir ? 1 : -1)
+        array.set(vT, b0 + 8, sdr == 0 ? "—" : (sdr > 0 ? "↑" : "↓") + str.tostring(srn) + (sdr == dir ? " за" : " ПРОТИВ"))
 
-            // итог стороны
-            bool okS = aliveO and hard == "" and not rrBad
-            bool v13 = aliveO and hard == "" and rrBad
-            array.set(vR, sd, not aliveO ? "своего тренда нет" : hard != "" ? hard : rrBad ? "РР 1:" + str.tostring(rr, "#.##") : "")
-            array.set(vE, sd, eN)
-            array.set(vS, sd, stp)
-            array.set(vP, sd, tp)
-            array.set(vRR, sd, rr)
-            array.set(vP3, sd, v13 ? eN + dir * 3.0 * rk : na)
-            array.set(vId, sd, -1)
-            array.set(vId3, sd, -1)
-            if okS
-                anyOk := true
-                array.push(TRd, dir)
-                array.push(TRs, stp)
-                array.push(TRt, tp)
-                array.push(TRr, rr)
-                array.push(TRst, 0)
-                array.push(TRdk, dK)
-                array.push(TRwk, wK)
-                array.push(TRmk, mK)
-                array.push(TRv, false)
-                array.set(vId, sd, array.size(TRd) - 1)
-            if v13
-                array.push(TRd, dir)
-                array.push(TRs, stp)
-                array.push(TRt, eN + dir * 3.0 * rk)
-                array.push(TRr, 3.0)
-                array.push(TRst, 0)
-                array.push(TRdk, dK)
-                array.push(TRwk, wK)
-                array.push(TRmk, mK)
-                array.push(TRv, true)
-                array.set(vId3, sd, array.size(TRd) - 1)
-        if anyOk
-            zelB := true
-            array.set(kntD, 2, array.get(kntD, 2) + 1)
-            array.set(kntW, 2, array.get(kntW, 2) + 1)
-            array.set(kntM, 2, array.get(kntM, 2) + 1)
+        // 9 · слои — по перевесу уровней (СЛ6.3, Н65)
+        array.set(vV, b0 + 9, perCls == "явный" ? (perSd == dir ? 1 : -1) : 0)
+        array.set(vT, b0 + 9, perCls == "" ? "—" : perCls + (perSd > 0 ? " · ближний сверху" : " · ближний снизу"))
+
+        // итог стороны
+        bool okS = aliveO and hard == "" and not rrBad
+        bool v13 = aliveO and hard == "" and rrBad
+        array.set(vR, sd, not aliveO ? "своего тренда нет" : hard != "" ? hard : rrBad ? "РР 1:" + str.tostring(rr, "#.##") : "")
+        array.set(vE, sd, eN)
+        array.set(vS, sd, stp)
+        array.set(vP, sd, tp)
+        array.set(vRR, sd, rr)
+        array.set(vP3, sd, v13 ? eN + dir * 3.0 * rk : na)
+        array.set(vId, sd, okS ? array.size(TRd) : -1)
+        array.set(vId3, sd, v13 ? array.size(TRd) : -1)
+        anyOk := anyOk or okS
+        if okS or v13
+            array.push(TRd, dir)
+            array.push(TRs, stp)
+            array.push(TRt, okS ? tp : eN + dir * 3.0 * rk)
+            array.push(TRr, okS ? rr : 3.0)
+            array.push(TRst, 0)
+            array.push(TRdk, dKey)
+            array.push(TRwk, wKey)
+            array.push(TRmk, mKey)
+            array.push(TRv, v13)
+    zelB := anyOk
+    dR := dR + (anyOk ? 1 : 0)
+    wR := wR + (anyOk ? 1 : 0)
+    mR := mR + (anyOk ? 1 : 0)
 
 // ── подсветки: жёлтая и серая — как были; ЗЕЛЁНАЯ вместо жёлтой, З73 ──
 bgcolor(trig and svOn and not (zelOn and zelB) ? color.new(svCol, svPrz) : na, title = "Подсветка триггерной свечи")
@@ -5751,21 +5544,9 @@ var table TBL2 = table.new(vxPos == "справа вверху" ? position.top_r
 var bool mrgVx = false
 
 f_trTxt(_k) =>
-    string r = ""
-    if _k >= 0
-        if _k < array.size(TRst)
-            int s = array.get(TRst, _k)
-            r := s == 0 ? "открыта" : s == 1 ? "ТП +" + str.tostring(array.get(TRr, _k), "#.##") + "R" : s == 2 ? "СЛ −1R" : "СЛ −1R (оба в одной свече)"
-    r
-
-f_cut(_s) =>
-    string r = _s
-    if str.endswith(_s, " · ")
-        r := str.substring(_s, 0, str.length(_s) - 3)
-    r
-
-f_vBg(_v) =>
-    _v > 0 ? cOk : _v < 0 ? color.new(color.red, 70) : cNet
+    int ks = math.max(math.min(_k, array.size(TRst) - 1), 0)
+    int s  = array.size(TRst) > 0 ? array.get(TRst, ks) : -1
+    _k < 0 or _k >= array.size(TRst) ? "" : s == 0 ? "открыта" : s == 1 ? "ТП +" + str.tostring(array.get(TRr, ks), "#.##") + "R" : s == 2 ? "СЛ −1R" : "СЛ −1R (оба в одной свече)"
 
 if barstate.islast and vxOn and vxB1
     string tzS = "UTC" + (tzH >= 0 ? "+" : "") + str.tostring(tzH)
@@ -5783,7 +5564,8 @@ if barstate.islast and vxOn and vxB1
     for sd = 0 to 1
         int col = 1 + sd
         bool has = not na(lyT)
-        string why = f_cut(array.get(vR, sd))
+        string why0 = array.get(vR, sd)
+        string why = str.endswith(why0, " · ") ? str.substring(why0, 0, math.max(str.length(why0) - 3, 0)) : why0
         bool shut = has and why != ""
         float p3 = array.get(vP3, sd)
         string sE = has and not shut ? str.tostring(array.get(vE, sd), format.mintick) : ""
@@ -5810,9 +5592,8 @@ if barstate.islast and vxOn and vxB2
         for sd = 0 to 1
             int v = array.get(vV, sd * 10 + it)
             string t = array.get(vT, sd * 10 + it)
-            if v == 2 or v == -2
-                t := t + " *"
-            table.cell(TBL2, 1 + sd, 8 + it, has2 ? t : "—", text_color = chart.fg_color, text_size = tSz, bgcolor = has2 ? f_vBg(v) : cNet)
+            t := v == 2 or v == -2 ? t + " *" : t
+            table.cell(TBL2, 1 + sd, 8 + it, has2 ? t : "—", text_color = chart.fg_color, text_size = tSz, bgcolor = not has2 ? cNet : v > 0 ? cOk : v < 0 ? color.new(color.red, 70) : cNet)
     table.cell(TBL2, 0, 18, "счёт", text_color = cTx, text_size = tSz)
     for sd = 0 to 1
         int nZa = 0
@@ -5820,21 +5601,18 @@ if barstate.islast and vxOn and vxB2
         int nSe = 0
         for it = 0 to 9
             int v = array.get(vV, sd * 10 + it)
-            if v > 0
-                nZa := nZa + 1
-            else if v < 0
-                nPr := nPr + 1
-            else
-                nSe := nSe + 1
+            nZa := nZa + (v > 0 ? 1 : 0)
+            nPr := nPr + (v < 0 ? 1 : 0)
+            nSe := nSe + (v == 0 ? 1 : 0)
         table.cell(TBL2, 1 + sd, 18, has2 ? "за " + str.tostring(nZa) + " · против " + str.tostring(nPr) + " · серых " + str.tostring(nSe) : "—", text_color = chart.fg_color, text_size = tSz)
 
 if barstate.islast and vxOn and vxB3
-    int dK0 = f_dKey(time)
-    int wK0 = f_wKey(dK0)
-    int mK0 = f_mKey(time)
-    int tL  = time + tzH * 3600000
+    int dK0 = dKey
+    int wK0 = wKey
+    int mK0 = mKey
+    int tL  = tLoc
     int dom = dayofmonth(tL, "UTC")
-    int wom = wK0 - f_wKey(dK0 - (dom - 1)) + 1
+    int wom = wK0 - int(math.floor((dK0 - (dom - 1) + 3) / 7)) + 1
     string[] mNm = array.from("январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь")
     table.cell(TBL2, 0, 19, "РИСК И СТАТИСТИКА", text_color = chart.fg_color, text_size = tSz, bgcolor = cZag)
     table.cell(TBL2, 1, 19, "день " + str.format_time(time, "dd.MM", "UTC" + (tzH >= 0 ? "+" : "") + str.tostring(tzH)), text_color = chart.fg_color, text_size = tSz, bgcolor = cZag)
@@ -5852,40 +5630,33 @@ if barstate.islast and vxOn and vxB3
     int nTr = array.size(TRd)
     if nTr > 0
         for k = 0 to nTr - 1
-            bool[] inP = array.from(array.get(TRdk, k) == dK0, array.get(TRwk, k) == wK0, array.get(TRmk, k) == mK0)
-            int st = array.get(TRst, k)
-            bool vr = array.get(TRv, k)
+            int   st = array.get(TRst, k)
+            bool  vr = array.get(TRv, k)
+            float rk = st == 1 ? array.get(TRr, k) : st >= 2 ? -1.0 : 0.0
             for pp = 0 to 2
-                if array.get(inP, pp)
-                    if not vr
-                        array.set(pN, pp, array.get(pN, pp) + 1)
-                        if st == 0
-                            array.set(pOp, pp, array.get(pOp, pp) + 1)
-                        else if st == 1
-                            array.set(pTP, pp, array.get(pTP, pp) + 1)
-                            array.set(pR, pp, array.get(pR, pp) + array.get(TRr, k))
-                        else
-                            array.set(pSL, pp, array.get(pSL, pp) + 1)
-                            array.set(pR, pp, array.get(pR, pp) - 1.0)
-                    else
-                        array.set(qN, pp, array.get(qN, pp) + 1)
-                        if st == 1
-                            array.set(qTP, pp, array.get(qTP, pp) + 1)
-                            array.set(qR, pp, array.get(qR, pp) + 3.0)
-                        else if st >= 2
-                            array.set(qSL, pp, array.get(qSL, pp) + 1)
-                            array.set(qR, pp, array.get(qR, pp) - 1.0)
-    bool[] cOkP = array.from(kD == dK0, kW == wK0, kM == mK0)
+                bool inP = pp == 0 ? array.get(TRdk, k) == dK0 : pp == 1 ? array.get(TRwk, k) == wK0 : array.get(TRmk, k) == mK0
+                bool aP  = inP and not vr
+                bool aQ  = inP and vr
+                array.set(pN,  pp, array.get(pN, pp)  + (aP ? 1 : 0))
+                array.set(pOp, pp, array.get(pOp, pp) + (aP and st == 0 ? 1 : 0))
+                array.set(pTP, pp, array.get(pTP, pp) + (aP and st == 1 ? 1 : 0))
+                array.set(pSL, pp, array.get(pSL, pp) + (aP and st >= 2 ? 1 : 0))
+                array.set(pR,  pp, array.get(pR, pp)  + (aP ? rk : 0.0))
+                array.set(qN,  pp, array.get(qN, pp)  + (aQ ? 1 : 0))
+                array.set(qTP, pp, array.get(qTP, pp) + (aQ and st == 1 ? 1 : 0))
+                array.set(qSL, pp, array.get(qSL, pp) + (aQ and st >= 2 ? 1 : 0))
+                array.set(qR,  pp, array.get(qR, pp)  + (aQ ? rk : 0.0))
+    int[] cYl = array.from(kD == dK0 ? dY : 0, kW == wK0 ? wY : 0, kM == mK0 ? mY : 0)
+    int[] cGr = array.from(kD == dK0 ? dG : 0, kW == wK0 ? wG : 0, kM == mK0 ? mG : 0)
+    int[] cRc = array.from(kD == dK0 ? dR : 0, kW == wK0 ? wR : 0, kM == mK0 ? mR : 0)
     string[] rNm = array.from("жёлтых", "серых", "дошли до входа", "сделок · ТП · СЛ", "итог R", "открыто", "1:3 · ТП · СЛ · R")
     for rr = 0 to 6
         table.cell(TBL2, 0, 20 + rr, array.get(rNm, rr), text_color = cTx, text_size = tSz)
     for pp = 0 to 2
-        int[] cs = pp == 0 ? kntD : pp == 1 ? kntW : kntM
-        bool okc = array.get(cOkP, pp)
         int col = 1 + pp
-        table.cell(TBL2, col, 20, str.tostring(okc ? array.get(cs, 0) : 0), text_color = chart.fg_color, text_size = tSz)
-        table.cell(TBL2, col, 21, str.tostring(okc ? array.get(cs, 1) : 0), text_color = chart.fg_color, text_size = tSz)
-        table.cell(TBL2, col, 22, str.tostring(okc ? array.get(cs, 2) : 0), text_color = chart.fg_color, text_size = tSz)
+        table.cell(TBL2, col, 20, str.tostring(array.get(cYl, pp)), text_color = chart.fg_color, text_size = tSz)
+        table.cell(TBL2, col, 21, str.tostring(array.get(cGr, pp)), text_color = chart.fg_color, text_size = tSz)
+        table.cell(TBL2, col, 22, str.tostring(array.get(cRc, pp)), text_color = chart.fg_color, text_size = tSz)
         table.cell(TBL2, col, 23, str.tostring(array.get(pN, pp)) + " · " + str.tostring(array.get(pTP, pp)) + " · " + str.tostring(array.get(pSL, pp)), text_color = chart.fg_color, text_size = tSz)
         float rv = array.get(pR, pp)
         table.cell(TBL2, col, 24, (rv > 0 ? "+" : "") + str.tostring(rv, "#.##") + "R", text_color = rv > 0 ? cTrUp : rv < 0 ? cTrDie : chart.fg_color, text_size = tSz)
