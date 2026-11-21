@@ -4070,8 +4070,8 @@ if barstate.isconfirmed
             array.remove(CPP, cpi)
             array.remove(CPH, cpi)
         cpi := cpDead ? cpi : cpi + 1
-    cpq1 = f_cpTail(P2, B2, H2, 0)
-    cpq2 = f_cpTail(P2n, B2n, H2n, 1)
+    for ci = 0 to 1
+        cpq = f_cpTail(ci == 0 ? P2 : P2n, ci == 0 ? B2 : B2n, ci == 0 ? H2 : H2n, ci)
 
 f_tpFind(_long, _e) =>
     float best = na
@@ -4096,17 +4096,14 @@ if barstate.isconfirmed
     perCls := not pok ? "" : prr < perYav ? "явный" : prr >= perRov ? "поровну" : "слабый"
 
 // ── сетка: чья она на этом баре, Ф6.3 + Ф6.6 (передача при отмене) ──
-f_fiG(_i) =>
-    array.get(tFBp, _i) >= 0 and (array.get(tTR, _i) == ST_MAY or array.get(tTR, _i) == ST_LIVE)
-
 f_fiBig(_i) =>
     float fa = math.abs(array.get(tFP, _i) - array.get(tFPp, _i))
     float av = array.get(tLEG, _i)
     na(fa) or av <= 0 or fa >= fiMin * av
 
 f_fiPick(_s0, _s1) =>
-    bool c0 = _s0 and f_fiG(0)
-    bool c1 = _s1 and f_fiG(1)
+    bool c0 = _s0 and array.get(tFBp, 0) >= 0 and (array.get(tTR, 0) == ST_MAY or array.get(tTR, 0) == ST_LIVE)
+    bool c1 = _s1 and array.get(tFBp, 1) >= 0 and (array.get(tTR, 1) == ST_MAY or array.get(tTR, 1) == ST_LIVE)
     int  b0 = array.get(tBB, 0)
     int  b1 = array.get(tBB, 1)
     int own = c0 and c1 ? (b0 < 0 ? 1 : b1 < 0 ? 0 : b0 <= b1 ? 0 : 1) : c0 ? 0 : c1 ? 1 : -1
@@ -4223,10 +4220,6 @@ if barstate.isconfirmed and trig
     lyT := time
     lyB := bar_index
     int gOwn = f_fiPick(trWho != "только нисходящий", trWho != "только восходящий")
-    [zlA, tlA, npA] = f_seqNow(P2, B2, H2, L2, 0)
-    [zlB, tlB, npB] = f_seqNow(P2n, B2n, H2n, L2n, 1)
-    [mcA, miA, mnA] = f_match(tlA)
-    [mcB, miB, mnB] = f_matchS(tlB)
     int sdr = array.get(sDIR, 0)
     int srn = array.get(sRUN, 0)
     bool anyOk = false
@@ -4242,9 +4235,11 @@ if barstate.isconfirmed and trig
         string hard = ""
 
         // бледная точка своего тренда — как в табло (v3.44)
-        int pkL = aliveO and not na(pl21) ? f_paleK(P2, B2, H2, array.get(tZB, sd), sd == 1, low[1], false, ph21) : -1
-        int pkH = aliveO and not na(ph21) ? f_paleK(P2, B2, H2, array.get(tZB, sd), sd == 1, high[1], true, float(na)) : -1
-        int pk  = pkL >= 0 ? pkL : pkH
+        int pk = -1
+        for hv = 0 to 1
+            bool hiV = hv == 1
+            int pq = aliveO and not na(hiV ? ph21 : pl21) ? f_paleK(P2, B2, H2, array.get(tZB, sd), sd == 1, hiV ? high[1] : low[1], hiV, hiV ? float(na) : ph21) : -1
+            pk := pk >= 0 ? pk : pq
 
         // 1 · сторона
         array.set(vV, b0 + 0, sO == ST_LIVE ? 1 : -1)
@@ -4318,7 +4313,8 @@ if barstate.isconfirmed and trig
         array.set(vT, b0 + 6, not aliveO or na(lv) ? "—" : str.tostring(100 * zp / close, "#.##") + "%")
 
         // 8а · чистота · справочник (слиты, Н59)
-        int mcS = sd == 0 ? mcA : mcB
+        [zlX, tlX, npX] = f_seqNow(sd == 0 ? P2 : P2n, sd == 0 ? B2 : B2n, sd == 0 ? H2 : H2n, sd == 0 ? L2 : L2n, sd)
+        [mcS, miX, mnX] = f_match(tlX)
         array.set(vV, b0 + 7, aliveO ? (mcS == 0 ? -1 : 1) : 0)
         array.set(vT, b0 + 7, aliveO ? (mcS == 0 ? "манипуляция · вне справ." : "чистый") : "—")
 
@@ -5555,12 +5551,9 @@ if barstate.islast and vxOn and vxB1
     table.cell(TBL2, 1, 0, "ЛОНГ", text_color = cTrUp, text_size = tSz, bgcolor = cZag)
     table.cell(TBL2, 2, 0, "ШОРТ", text_color = cTrDn, text_size = tSz, bgcolor = cZag)
     table.cell(TBL2, 3, 0, lyTx, text_color = cTx, text_size = tSz, bgcolor = cZag)
-    table.cell(TBL2, 0, 1, "вход", text_color = cTx, text_size = tSz)
-    table.cell(TBL2, 0, 2, "стоп", text_color = cTx, text_size = tSz)
-    table.cell(TBL2, 0, 3, "тейк", text_color = cTx, text_size = tSz)
-    table.cell(TBL2, 0, 4, "РР", text_color = cTx, text_size = tSz)
-    table.cell(TBL2, 0, 5, "1:3 · наблюдение, НЕ для входа", text_color = cTx, text_size = tSz)
-    table.cell(TBL2, 0, 6, "итог", text_color = cTx, text_size = tSz)
+    string[] b1N = array.from("вход", "стоп", "тейк", "РР", "1:3 · наблюдение, НЕ для входа", "итог")
+    for rw = 0 to 5
+        table.cell(TBL2, 0, 1 + rw, array.get(b1N, rw), text_color = cTx, text_size = tSz)
     for sd = 0 to 1
         int col = 1 + sd
         bool has = not na(lyT)
@@ -5572,8 +5565,9 @@ if barstate.islast and vxOn and vxB1
         string sS = has and not shut ? str.tostring(array.get(vS, sd), format.mintick) : ""
         string sT = has and not shut ? str.tostring(array.get(vP, sd), format.mintick) : ""
         string sR = has and not shut ? "1:" + str.tostring(array.get(vRR, sd), "#.##") : ""
-        string s3 = has and not na(p3) ? "тейк " + str.tostring(p3, format.mintick) + " · " + f_trTxt(array.get(vId3, sd)) : "—"
-        string sI = not has ? "—" : shut ? "⛔ " + why : "✅ дошла · " + f_trTxt(array.get(vId, sd))
+        string stx = f_trTxt(math.max(array.get(vId, sd), array.get(vId3, sd)))
+        string s3 = has and not na(p3) ? "тейк " + str.tostring(p3, format.mintick) + " · " + stx : "—"
+        string sI = not has ? "—" : shut ? "⛔ " + why : "✅ дошла · " + stx
         table.cell(TBL2, col, 1, sE, text_color = chart.fg_color, text_size = tSz)
         table.cell(TBL2, col, 2, sS, text_color = chart.fg_color, text_size = tSz)
         table.cell(TBL2, col, 3, sT, text_color = chart.fg_color, text_size = tSz)
